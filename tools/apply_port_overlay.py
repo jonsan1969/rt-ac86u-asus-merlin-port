@@ -25,6 +25,13 @@ def sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
+def git_blob_sha(path: Path) -> str:
+    data = path.read_bytes()
+    h = hashlib.sha1()
+    h.update(f"blob {len(data)}\\0".encode("ascii"))
+    h.update(data)
+    return h.hexdigest()
+
 def safe_child(base: Path, rel: str, label: str) -> Path:
     if Path(rel).is_absolute():
         raise ValueError(f"{label} must be relative: {rel}")
@@ -111,9 +118,10 @@ def main():
                 raise SystemExit(f"entry {idx}: add_only target already exists in ASUS rootfs: {target}")
             source = entry.get("source")
             expected = entry.get("sha256")
+            expected_blob = entry.get("git_blob_sha")
             source_kind = entry.get("source_kind", "merlin")
-            if not source or not expected:
-                raise SystemExit(f"entry {idx}: copy requires source and sha256")
+            if not source or not (expected or expected_blob):
+                raise SystemExit(f"entry {idx}: copy requires source and sha256 or git_blob_sha")
             if source_kind == "merlin":
                 src = safe_child(merlin, source, "Merlin source")
             elif source_kind == "repo":
@@ -122,7 +130,16 @@ def main():
                 raise SystemExit(f"entry {idx}: unsupported source_kind {source_kind!r}")
             if not src.is_file():
                 raise SystemExit(f"entry {idx}: source not found: {source}")
-            actual = verify_hash(src, expected, f"entry {idx}: source {source}")
+            actual = sha256(src)
+            if expected:
+                verify_hash(src, expected, f"entry {idx}: source {source}")
+            if expected_blob:
+                actual_blob = git_blob_sha(src)
+                if actual_blob.lower() != str(expected_blob).lower():
+                    raise SystemExit(
+                        f"entry {idx}: Git blob mismatch for {source}\\n"
+                        f" expected {expected_blob}\\n actual   {actual_blob}"
+                    )
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
             mode = parse_mode(entry.get("mode"))

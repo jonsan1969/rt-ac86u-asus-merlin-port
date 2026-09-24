@@ -37,7 +37,7 @@ def main():
         if etype=="copy":
             assert e.get("policy","add_only")=="add_only", f"entry {i}: copy must be add_only"
             assert e.get("source"), f"entry {i}: copy requires source"
-            assert e.get("sha256"), f"entry {i}: copy requires sha256"
+            assert e.get("sha256") or e.get("git_blob_sha"), f"entry {i}: copy requires sha256 or git_blob_sha"
             assert e.get("source_kind","merlin") in {"merlin","repo"}, f"entry {i}: bad source_kind"
         elif etype=="symlink":
             assert e.get("policy","add_only")=="add_only", f"entry {i}: symlink must be add_only"
