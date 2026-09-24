@@ -1,0 +1,217 @@
+name: DNSFilter backend compatibility probe
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/dnsfilter-compatibility-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils unzip file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download verify and extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/artifacts work/asus work/merlin reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+          done
+
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          MERLIN_ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          test -n "$MERLIN_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+          echo "MERLIN_ROOT=$MERLIN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Compare DNSFilter schema signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          roots = {
+              "ASUS": Path(os.environ["ASUS_ROOT"]),
+              "MERLIN": Path(os.environ["MERLIN_ROOT"]),
+          }
+          targets = ["/sbin/rc", "/usr/sbin/httpd"]
+
+          known_provider_ips = [
+              "208.67.222.222",
+              "77.88.8.88",
+              "77.88.8.7",
+              "208.67.222.123",
+              "8.26.56.26",
+              "9.9.9.9",
+              "185.228.168.9",
+              "185.228.168.10",
+              "185.228.168.168",
+              "1.1.1.2",
+              "1.1.1.3",
+              "94.140.14.14",
+              "94.140.14.15",
+              "2620:fe::fe",
+              "2620:fe::9",
+              "2a0d:2a00:1::2",
+              "2a0d:2a00:2::2",
+              "2606:4700:4700::1112",
+              "2606:4700:4700::1113",
+              "2a10:50c0::ad1:ff",
+              "2a10:50c0::bad1:ff",
+          ]
+
+          def strings(path):
+              if not path.exists():
+                  return []
+              p = subprocess.run(
+                  ["strings", "-a", str(path)],
+                  check=True, text=True, stdout=subprocess.PIPE, errors="replace"
+              )
+              return p.stdout.splitlines()
+
+          corpora = {}
+          for fw, root in roots.items():
+              all_lines = []
+              for target in targets:
+                  all_lines.extend(strings(root / target.lstrip("/")))
+              corpora[fw] = all_lines
+
+          nvram_re = re.compile(r"\bdnsfilter_[A-Za-z0-9_]+\b")
+          chain_re = re.compile(r"\bDNSFILTER[A-Z_]*\b")
+
+          nvram = {}
+          chains = {}
+          for fw, lines in corpora.items():
+              nvram[fw] = sorted({m.group(0) for line in lines for m in nvram_re.finditer(line)})
+              chains[fw] = sorted({m.group(0) for line in lines for m in chain_re.finditer(line)})
+
+          def write_set_diff(name, a, m):
+              a, m = set(a), set(m)
+              with open(f"reports/{name}.tsv", "w", encoding="utf-8") as f:
+                  f.write("class\tvalue\n")
+                  for x in sorted(a & m):
+                      f.write(f"COMMON\t{x}\n")
+                  for x in sorted(a - m):
+                      f.write(f"ASUS_ONLY\t{x}\n")
+                  for x in sorted(m - a):
+                      f.write(f"MERLIN_ONLY\t{x}\n")
+              return len(a & m), len(a - m), len(m - a)
+
+          nv_stats = write_set_diff("dnsfilter-nvram-vars", nvram["ASUS"], nvram["MERLIN"])
+          ch_stats = write_set_diff("dnsfilter-chain-tokens", chains["ASUS"], chains["MERLIN"])
+
+          with open("reports/dnsfilter-provider-addresses.tsv", "w", encoding="utf-8") as f:
+              f.write("address\tasus_present\tmerlin_present\n")
+              for ip in known_provider_ips:
+                  ap = any(ip in line for line in corpora["ASUS"])
+                  mp = any(ip in line for line in corpora["MERLIN"])
+                  f.write(f"{ip}\t{int(ap)}\t{int(mp)}\n")
+
+          json_info = {}
+          for fw, root in roots.items():
+              p = root / "www/ajax/DNS_List.json"
+              info = {"exists": p.exists()}
+              if p.exists():
+                  data = p.read_bytes()
+                  info["sha256"] = hashlib.sha256(data).hexdigest()
+                  info["size"] = len(data)
+                  try:
+                      obj = json.loads(data.decode("utf-8", errors="strict"))
+                      info["json_type"] = type(obj).__name__
+                      if isinstance(obj, dict):
+                          info["top_keys"] = sorted(obj.keys())
+                      elif isinstance(obj, list):
+                          info["entry_count"] = len(obj)
+                          # Do not reproduce full vendor data; summarize schema and names.
+                          names = []
+                          keys = set()
+                          for entry in obj:
+                              if isinstance(entry, dict):
+                                  keys.update(entry.keys())
+                                  for k in ("name", "title", "provider", "service"):
+                                      if k in entry and isinstance(entry[k], str):
+                                          names.append(entry[k])
+                                          break
+                          info["entry_keys"] = sorted(keys)
+                          info["names"] = names
+                  except Exception as e:
+                      info["json_error"] = type(e).__name__
+              json_info[fw] = info
+
+          with open("reports/dns-list-json-summary.json", "w", encoding="utf-8") as f:
+              json.dump(json_info, f, indent=2, sort_keys=True)
+              f.write("\n")
+
+          # Capture only directly relevant DNSFilter strings for human inspection.
+          for fw, lines in corpora.items():
+              selected = sorted({
+                  line for line in lines
+                  if "dnsfilter" in line.lower() or "DNSFILTER" in line
+              })
+              with open(f"reports/{fw.lower()}-dnsfilter-strings.txt", "w", encoding="utf-8") as f:
+                  for line in selected:
+                      f.write(line + "\n")
+
+          a_nv, a_only_nv, m_only_nv = nv_stats
+          a_ch, a_only_ch, m_only_ch = ch_stats
+          with open("reports/dnsfilter-compatibility-summary.md", "w", encoding="utf-8") as f:
+              f.write("# DNSFilter backend compatibility probe\n\n")
+              f.write("Runtime string/schema comparison only; source-level equivalence is not claimed.\n\n")
+              f.write(f"- NVRAM vars: common {a_nv}, ASUS-only {a_only_nv}, Merlin-only {m_only_nv}\n")
+              f.write(f"- Chain tokens: common {a_ch}, ASUS-only {a_only_ch}, Merlin-only {m_only_ch}\n")
+              f.write(f"- ASUS DNS_List.json: {json_info['ASUS']}\n")
+              f.write(f"- Merlin DNS_List.json: {json_info['MERLIN']}\n")
+          PY
+
+      - name: Publish compatibility reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnsfilter-backend-compatibility-probe
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
