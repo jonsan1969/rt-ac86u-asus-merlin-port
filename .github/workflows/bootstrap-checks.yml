@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      - asus-52334-analysis
-      - asus-52334-merlin-port
   pull_request:
 
 permissions:
