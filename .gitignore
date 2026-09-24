@@ -1,0 +1,21 @@
+# Downloaded upstream artifacts / proprietary firmware
+artifacts/incoming/
+artifacts/verified/
+*.zip
+*.w
+*.trx
+*.ubi
+*.ubifs
+
+# Checked-out upstream source trees
+source/asuswrt-merlin.ng-386.14_2/
+
+# Local extraction/build work
+work/
+build/
+.extracted/
+
+# Local/editor noise
+__pycache__/
+*.pyc
+.DS_Store

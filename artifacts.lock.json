@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "project": "RT-AC86U ASUS 386_52334 + Merlin 386.14_2 delta",
+  "generated_date": "2026-09-24",
+  "artifacts": [
+    {
+      "id": "asus-rt-ac86u-386_52334-firmware-zip",
+      "kind": "firmware_zip",
+      "vendor": "ASUS",
+      "model": "RT-AC86U",
+      "version": "3.0.0.4.386_52334",
+      "release_date": "2026-05-07",
+      "official_page": "https://www.asus.com/supportonly/rt-ac86u/helpdesk_bios?model2Name=RT-AC86U",
+      "direct_url_candidate": "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U",
+      "direct_url_status": "PATTERN_DERIVED_NOT_INDEPENDENTLY_VERIFIED",
+      "expected_sha256": "e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61",
+      "hash_scope": "ASUS-published download archive checksum",
+      "status": "REFERENCE_VERIFIED_BINARY_NOT_FETCHED"
+    },
+    {
+      "id": "merlin-rt-ac86u-386.14_2-firmware-zip",
+      "kind": "firmware_zip",
+      "vendor": "Asuswrt-Merlin",
+      "model": "RT-AC86U",
+      "version": "386.14_2",
+      "release_date": "2024-11-17",
+      "official_page": "https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download",
+      "expected_sha256": "1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a",
+      "hash_scope": "SourceForge-published ZIP checksum",
+      "status": "REFERENCE_VERIFIED_BINARY_NOT_FETCHED"
+    },
+    {
+      "id": "merlin-source-386.14_2",
+      "kind": "git_source",
+      "vendor": "Asuswrt-Merlin",
+      "repository": "https://github.com/RMerl/asuswrt-merlin.ng.git",
+      "ref": "386.14_2",
+      "expected_commit": "6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b",
+      "commit_message": "Bumped revision to 386.14_2",
+      "commit_date": "2024-11-17T18:47:39Z",
+      "status": "REFERENCE_VERIFIED_NOT_CLONED"
+    },
+    {
+      "id": "asus-public-gpl-source",
+      "kind": "gpl_source",
+      "vendor": "ASUS",
+      "model": "RT-AC86U",
+      "version": null,
+      "status": "NOT_FOUND_IN_REASONABLE_PUBLIC_SEARCH",
+      "notes": "Do not substitute a community mirror as an official source artifact. Merlin 386.14 reports a merge with ASUS GPL snapshot 386_52805, but RMerlin stated ASUS GPL archives supplied to him could be generated specifically for Merlin and need not correspond to a public stock firmware release."
+    }
+  ]
+}
