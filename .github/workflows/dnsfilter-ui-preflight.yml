@@ -1,0 +1,96 @@
+name: DNSFilter UI patch preflight
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/dnsfilter-ui-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download, verify and extract ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Record exact WebUI patch bases
+        shell: bash
+        run: |
+          set -euo pipefail
+          MENU="$ASUS_ROOT/www/require/modules/menuTree.js"
+          STATE="$ASUS_ROOT/www/state.js"
+          test -f "$MENU"
+          test -f "$STATE"
+
+          {
+            sha256sum "$MENU"
+            sha256sum "$STATE"
+            echo
+            echo '--- menu DNSFilter contexts ---'
+            grep -n -C 5 'dnsfilter_support\|DNSFilter.asp' "$MENU"
+            echo
+            echo '--- state DNSFilter context ---'
+            grep -n -C 5 'dnsfilter_support' "$STATE"
+          } | tee reports/dnsfilter-ui-patch-preflight.txt
+
+          python3 - <<'PY'
+          import os, hashlib
+          from pathlib import Path
+
+          root=Path(os.environ["ASUS_ROOT"])
+          menu=root/"www/require/modules/menuTree.js"
+          state=root/"www/state.js"
+          def h(p):
+              return hashlib.sha256(p.read_bytes()).hexdigest()
+          m=menu.read_text(encoding="utf-8")
+          s=state.read_text(encoding="utf-8")
+          data=[
+              ("menuTree.js",h(menu),m.count('if(!dnsfilter_support)'),m.count('retArray.push("DNSFilter.asp")')),
+              ("state.js",h(state),s.count('var dnsfilter_support = isSupport("dnsfilter");'),s.count('dnsfilter_support = false;')),
+          ]
+          with open("reports/dnsfilter-ui-patch-bases.tsv","w",encoding="utf-8") as f:
+              f.write("file\tsha256\tprobe1_count\tprobe2_count\n")
+              for row in data:
+                  f.write("\t".join(map(str,row))+"\n")
+          PY
+
+      - name: Publish preflight report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnsfilter-ui-patch-preflight
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
