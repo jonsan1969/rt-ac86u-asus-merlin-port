@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
           mkdir -p work/artifacts work/asus51955 work/asus52334 work/merlin reports
 
-          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438651955.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438651955.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438651955.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438651955.zip?model=RT-AC86U'
 
           curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438652334.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
 
