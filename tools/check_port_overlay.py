@@ -32,15 +32,21 @@ def main():
         assert t.startswith("/"), f"entry {i}: target must be absolute"
         assert t not in seen, f"entry {i}: duplicate target {t}"
         assert not protected(t), f"entry {i}: protected target {t}"
-        assert e.get("policy","add_only")=="add_only", f"entry {i}: only add_only allowed"
         etype=e.get("type","copy")
-        assert etype in {"copy","symlink"}, f"entry {i}: unsupported type"
+        assert etype in {"copy","symlink","patch_text"}, f"entry {i}: unsupported type"
         if etype=="copy":
+            assert e.get("policy","add_only")=="add_only", f"entry {i}: copy must be add_only"
             assert e.get("source"), f"entry {i}: copy requires source"
             assert e.get("sha256"), f"entry {i}: copy requires sha256"
             assert e.get("source_kind","merlin") in {"merlin","repo"}, f"entry {i}: bad source_kind"
-        else:
+        elif etype=="symlink":
+            assert e.get("policy","add_only")=="add_only", f"entry {i}: symlink must be add_only"
             assert e.get("link_target"), f"entry {i}: symlink requires link_target"
+        else:
+            assert e.get("policy","exact_patch")=="exact_patch", f"entry {i}: patch_text must be exact_patch"
+            assert e.get("base_sha256"), f"entry {i}: patch_text requires base_sha256"
+            assert "find" in e and "replace" in e, f"entry {i}: patch_text requires find/replace"
+            assert int(e.get("expected_count",1)) > 0, f"entry {i}: expected_count must be positive"
         seen.add(t)
     print(f"SUCCESS: manifest valid; {len(seen)} entries")
 

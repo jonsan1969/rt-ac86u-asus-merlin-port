@@ -55,8 +55,16 @@ def parse_mode(value):
         return value
     return int(str(value), 8)
 
+def verify_hash(path: Path, expected: str, label: str):
+    actual = sha256(path)
+    if actual.lower() != str(expected).lower():
+        raise SystemExit(
+            f"{label} checksum mismatch\n expected {expected}\n actual   {actual}"
+        )
+    return actual
+
 def main():
-    ap = argparse.ArgumentParser(description="Apply hash-pinned additions to an extracted ASUS 52334 rootfs")
+    ap = argparse.ArgumentParser(description="Apply hash-pinned additions/patches to an extracted ASUS 52334 rootfs")
     ap.add_argument("--rootfs", required=True)
     ap.add_argument("--merlin-src", required=True)
     ap.add_argument("--repo-root", default=".")
@@ -88,22 +96,19 @@ def main():
     for idx, entry in enumerate(manifest.get("entries", []), 1):
         etype = entry.get("type", "copy")
         target = entry.get("target")
-        policy = entry.get("policy", "add_only")
+        policy = entry.get("policy", "add_only" if etype in {"copy", "symlink"} else "exact_patch")
         if not target:
             raise SystemExit(f"entry {idx}: missing target")
         if is_protected(target):
             raise SystemExit(f"entry {idx}: protected target rejected: {target}")
         dst = safe_target(root, target)
-
         exists = dst.exists() or dst.is_symlink()
-        if policy == "add_only" and exists:
-            raise SystemExit(f"entry {idx}: add_only target already exists in ASUS rootfs: {target}")
-        if policy != "add_only":
-            raise SystemExit(f"entry {idx}: unsupported policy {policy!r}; only add_only is permitted")
-
-        dst.parent.mkdir(parents=True, exist_ok=True)
 
         if etype == "copy":
+            if policy != "add_only":
+                raise SystemExit(f"entry {idx}: copy only supports add_only")
+            if exists:
+                raise SystemExit(f"entry {idx}: add_only target already exists in ASUS rootfs: {target}")
             source = entry.get("source")
             expected = entry.get("sha256")
             source_kind = entry.get("source_kind", "merlin")
@@ -117,30 +122,63 @@ def main():
                 raise SystemExit(f"entry {idx}: unsupported source_kind {source_kind!r}")
             if not src.is_file():
                 raise SystemExit(f"entry {idx}: source not found: {source}")
-            actual = sha256(src)
-            if actual.lower() != str(expected).lower():
-                raise SystemExit(
-                    f"entry {idx}: source checksum mismatch for {source}\n"
-                    f" expected {expected}\n actual   {actual}"
-                )
+            actual = verify_hash(src, expected, f"entry {idx}: source {source}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
             mode = parse_mode(entry.get("mode"))
             if mode is not None:
                 os.chmod(dst, mode)
-            rows.append((target, etype, source_kind, source, actual, policy))
+            rows.append((target, etype, source_kind, source, "-", actual, policy))
+
         elif etype == "symlink":
+            if policy != "add_only":
+                raise SystemExit(f"entry {idx}: symlink only supports add_only")
+            if exists:
+                raise SystemExit(f"entry {idx}: add_only target already exists in ASUS rootfs: {target}")
             link_target = entry.get("link_target")
             if not link_target:
                 raise SystemExit(f"entry {idx}: symlink requires link_target")
+            dst.parent.mkdir(parents=True, exist_ok=True)
             os.symlink(link_target, dst)
-            rows.append((target, etype, "symlink", link_target, "-", policy))
+            rows.append((target, etype, "symlink", link_target, "-", "-", policy))
+
+        elif etype == "patch_text":
+            if policy != "exact_patch":
+                raise SystemExit(f"entry {idx}: patch_text requires exact_patch policy")
+            if not dst.is_file() or dst.is_symlink():
+                raise SystemExit(f"entry {idx}: patch target must be an existing regular file: {target}")
+            expected_base = entry.get("base_sha256")
+            find = entry.get("find")
+            replace = entry.get("replace")
+            expected_count = entry.get("expected_count", 1)
+            if not expected_base or find is None or replace is None:
+                raise SystemExit(f"entry {idx}: patch_text requires base_sha256, find and replace")
+            before = verify_hash(dst, expected_base, f"entry {idx}: ASUS base {target}")
+            text = dst.read_text(encoding=entry.get("encoding", "utf-8"))
+            count = text.count(find)
+            if count != expected_count:
+                raise SystemExit(
+                    f"entry {idx}: patch context count mismatch for {target}: "
+                    f"expected {expected_count}, found {count}"
+                )
+            patched = text.replace(find, replace, expected_count)
+            dst.write_text(patched, encoding=entry.get("encoding", "utf-8"))
+            after = sha256(dst)
+            expected_result = entry.get("result_sha256")
+            if expected_result and after.lower() != expected_result.lower():
+                raise SystemExit(
+                    f"entry {idx}: patched checksum mismatch for {target}\n"
+                    f" expected {expected_result}\n actual   {after}"
+                )
+            rows.append((target, etype, "asus52334", "inline exact text patch", before, after, policy))
+
         else:
             raise SystemExit(f"entry {idx}: unsupported type {etype!r}")
 
     report = Path(args.report)
     report.parent.mkdir(parents=True, exist_ok=True)
     with report.open("w", encoding="utf-8") as f:
-        f.write("target\ttype\tsource_kind\tsource_or_link\tsha256\tpolicy\n")
+        f.write("target\ttype\tsource_kind\tsource_or_patch\tbase_sha256\tresult_sha256\tpolicy\n")
         for row in rows:
             f.write("\t".join(row) + "\n")
 
