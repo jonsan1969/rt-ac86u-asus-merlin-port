@@ -1,0 +1,132 @@
+name: Firmware filesystem extraction and diff
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/firmware-extraction-diff.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binwalk mtd-utils squashfs-tools p7zip-full file unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify firmware archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/artifacts work/asus work/merlin reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Identify firmware containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASUS_FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          MERLIN_FW="$(find work/merlin -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$ASUS_FW"
+          test -n "$MERLIN_FW"
+
+          {
+            echo "ASUS_FW=$ASUS_FW"
+            echo "MERLIN_FW=$MERLIN_FW"
+          } | tee reports/firmware-image-paths.txt
+
+          file "$ASUS_FW" "$MERLIN_FW" | tee reports/firmware-file-types.txt
+          sha256sum "$ASUS_FW" "$MERLIN_FW" | tee reports/firmware-image-sha256.txt
+          stat -c '%n\t%s bytes' "$ASUS_FW" "$MERLIN_FW" | tee reports/firmware-image-sizes.txt
+
+      - name: Extract ASUS UBI filesystem
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" | tee ../../reports/binwalk-asus.txt
+
+      - name: Extract Merlin UBI filesystem
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" | tee ../../reports/binwalk-merlin.txt
+
+      - name: Locate extracted root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          MERLIN_ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+
+          if [[ -z "$ASUS_ROOT" || -z "$MERLIN_ROOT" ]]; then
+            echo 'FAILURE: expected rootfs_ubifs directory not found' >&2
+            echo 'ASUS candidates:' >&2
+            find work/asus -maxdepth 8 -type d | sort >&2
+            echo 'Merlin candidates:' >&2
+            find work/merlin -maxdepth 8 -type d | sort >&2
+            exit 1
+          fi
+
+          {
+            echo "ASUS_ROOT=$ASUS_ROOT"
+            echo "MERLIN_ROOT=$MERLIN_ROOT"
+          } | tee reports/rootfs-paths.txt
+
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+          echo "MERLIN_ROOT=$MERLIN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Build deterministic inventories and diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tree_inventory.py "$ASUS_ROOT" -o reports/asus-rootfs-inventory.tsv
+          python3 tools/tree_inventory.py "$MERLIN_ROOT" -o reports/merlin-rootfs-inventory.tsv
+          python3 tools/compare_trees.py "$ASUS_ROOT" "$MERLIN_ROOT" -o reports/firmware-tree-diff.tsv | tee reports/diff-summary.txt
+
+          {
+            echo
+            echo "ASUS regular files: $(find "$ASUS_ROOT" -type f | wc -l)"
+            echo "Merlin regular files: $(find "$MERLIN_ROOT" -type f | wc -l)"
+            echo "ASUS rootfs bytes: $(du -sb "$ASUS_ROOT" | cut -f1)"
+            echo "Merlin rootfs bytes: $(du -sb "$MERLIN_ROOT" | cut -f1)"
+          } >> reports/diff-summary.txt
+
+      - name: Publish analysis reports only
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-filesystem-diff-reports
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
