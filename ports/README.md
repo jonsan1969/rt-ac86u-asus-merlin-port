@@ -65,3 +65,7 @@ The tool rejects both replacement and patching of sensitive paths. Examples incl
 - all `/lib/modules/`
 
 Core changes require a separate source-level build path. This keeps the project aligned with the ASUS-first architecture.
+
+## Exact text patches
+
+Existing non-core text files may be modified only with `type: "text_replace"` and `policy: "patch_exact"`. The complete ASUS 52334 preimage SHA-256 and exact replacement count are mandatory. Any unexpected stock-file drift fails closed.

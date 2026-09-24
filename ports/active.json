@@ -8,29 +8,21 @@
     {
       "type": "copy",
       "source_kind": "repo",
-      "source": "ports/files/www/DNSFilter.asp",
-      "git_blob_sha": "34e1e9afb2efbd1cc93d5d2beaf98a8894920619",
+      "source": "ports/files/DNSFilter.asp",
       "target": "/www/DNSFilter.asp",
+      "sha256": "bb032b3cbe8a7e197a710213e8bf440564b03b82c79358a7fd253b79bb05b545",
       "mode": "0644",
       "policy": "add_only"
     },
     {
-      "type": "patch_text",
-      "target": "/www/require/modules/menuTree.js",
-      "base_sha256": "73163bdf1b9f20c056a3c2b90629521b0a0f2007ea4967b73c1b3d6d8d9583e2",
-      "patches": [
-        {
-          "find": "{url: \"Advanced_DHCP_Content.asp\", tabName: \"<#496#>\"},",
-          "replace": "{url: \"Advanced_DHCP_Content.asp\", tabName: \"<#496#>\"},\n{url: \"DNSFilter.asp\", tabName: \"DNS Director\"},",
-          "expected_count": 1
-        },
-        {
-          "find": "if(!dnsfilter_support)",
-          "replace": "if(false /* DNS Director compatibility port */)",
-          "expected_count": 1
-        }
-      ],
-      "policy": "exact_patch"
+      "type": "text_replace",
+      "target": "/www/state.js",
+      "target_sha256": "bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61",
+      "find": "var dnsfilter_support = isSupport(\"dnsfilter\");\\ndnsfilter_support = false;",
+      "replace": "var dnsfilter_support = isSupport(\"dnsfilter\");",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
     }
   ]
 }
