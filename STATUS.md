@@ -15,7 +15,8 @@
 | Three-way delta classification | **SUCCESS** | 1513 Merlin-delta/ASUS-unchanged, 266 pure Merlin additions, 460 divergent shared changes |
 | Merlin feature compatibility probe | **SUCCESS** | run 35989225935 separates missing features from ASUS-backend overlap |
 | Merlin feature-level inventory | **SUCCESS** | README + 386 changelog + runtime/source/three-way/probe evidence consolidated in master inventory |
-| Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries still being reduced per required feature |
+| JFFS/custom-script port specification | **IN PROGRESS** | behavioral/helper/hook patch series defined; source-history Action 35990042520 still validating GPL intersections |
+| Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries being reduced per required feature |
 | Merlin feature port | **IN PROGRESS** | branch reserved; no unsafe core binary replacement started |
 
 ## Status vocabulary
