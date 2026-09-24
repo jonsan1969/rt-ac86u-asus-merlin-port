@@ -1,0 +1,184 @@
+name: Merlin feature compatibility probe
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/merlin-feature-compatibility-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full file unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify ASUS 52334 and Merlin 386.14_2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              binwalk -Me "$FW" >/dev/null
+            )
+          done
+
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          MERLIN_ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          test -n "$MERLIN_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+          echo "MERLIN_ROOT=$MERLIN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe feature signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          a = Path(os.environ["ASUS_ROOT"])
+          m = Path(os.environ["MERLIN_ROOT"])
+          rows = []
+
+          def exists(root, p):
+              q = root / p.lstrip("/")
+              return q.exists() or q.is_symlink()
+
+          def count(root, p, token):
+              q = root / p.lstrip("/")
+              if not exists(root, p) or q.is_dir():
+                  return 0
+              try:
+                  data = q.read_bytes()
+              except OSError:
+                  return 0
+              return data.count(token.encode())
+
+          probes = [
+              ("JFFS custom scripts", "/sbin/rc", "/jffs/scripts"),
+              ("service-event hook", "/sbin/rc", "service-event"),
+              ("postconf framework", "/sbin/rc", "postconf"),
+              ("SMB simpler naming UI", "/www/Advanced_AiDisk_samba.asp", "smbd_simpler_naming"),
+              ("SMB Master Browser UI", "/www/Advanced_AiDisk_samba.asp", "smbd_master"),
+              ("WINS server UI", "/www/Advanced_AiDisk_samba.asp", "smbd_wins"),
+              ("SMB simpler naming backend", "/sbin/write_smb_conf", "smbd_simpler_naming"),
+              ("SMB Master Browser backend", "/sbin/write_smb_conf", "smbd_master"),
+              ("WINS server backend", "/sbin/write_smb_conf", "smbd_wins"),
+              ("Conntrack TCP timeout backend", "/sbin/rc", "ct_tcp_timeout"),
+              ("Conntrack UDP timeout backend", "/sbin/rc", "ct_udp_timeout"),
+              ("Traffic stats path backend", "/bin/rstats", "rstats_path"),
+              ("Per-IP traffic stats backend", "/bin/rstats", "cstats_enable"),
+              ("NTP daemon enable backend", "/sbin/rc", "ntpd_enable"),
+              ("NTP redirect backend", "/sbin/rc", "ntpd_server_redir"),
+              ("NTP daemon enable UI", "/www/Advanced_System_Content.asp", "ntpd_enable"),
+              ("NTP redirect UI", "/www/Advanced_System_Content.asp", "ntpd_server_redir"),
+              ("DHCP reservation hostname UI", "/www/Advanced_DHCP_Content.asp", "dhcp_hostname_x_0"),
+              ("Wireless list auto-refresh", "/www/Main_WStatus_Content.asp", "ajax_wificlients.asp"),
+              ("Wireless list refresh preference", "/www/Main_WStatus_Content.asp", "awrtm_wlrefresh"),
+              ("VPN Director backend", "/usr/sbin/httpd", "vpndirector_rulelist"),
+              ("DNS Director mode backend", "/usr/sbin/httpd", "dnsfilter_modes_list"),
+              ("SSH authorized keys backend", "/sbin/rc", "authorized_keys"),
+          ]
+
+          for feature, path, token in probes:
+              rows.append((feature, path, token, count(a,path,token), count(m,path,token)))
+
+          presence = [
+              ("AMTM", "/usr/sbin/amtm"),
+              ("Addon helper API", "/usr/sbin/helper.sh"),
+              ("Custom WebUI user slots", "/www/user1.asp"),
+              ("VPN Director page", "/www/Advanced_VPNDirector.asp"),
+              ("DNS Director page", "/www/DNSDirector.asp"),
+              ("Advanced OpenVPN client page", "/www/Advanced_OpenVPNClient_Content.asp"),
+              ("Advanced VPN status page", "/www/Advanced_VPNStatus.asp"),
+              ("NFS WebUI", "/www/Advanced_AiDisk_NFS.asp"),
+              ("TOR WebUI", "/www/Advanced_TOR_Content.asp"),
+              ("Wireless Site Survey", "/www/Advanced_Wireless_Survey.asp"),
+              ("WiFi Insight", "/www/WiFi_Insight.asp"),
+              ("System Info page", "/www/Tools_Sysinfo.asp"),
+              ("Other Settings page", "/www/Tools_OtherSettings.asp"),
+              ("Performance Tuning page", "/www/Advanced_PerformanceTuning_Content.asp"),
+              ("QoS Stats page", "/www/QoS_Stats.asp"),
+              ("JFFS upload/restore page", "/www/UploadingJFFS.asp"),
+              ("Monthly traffic page", "/www/Main_TrafficMonitor_monthly.asp"),
+              ("Custom DDNS callback", "/sbin/ddns_custom_updated"),
+              ("Nano editor", "/usr/bin/nano"),
+              ("NTP daemon binary", "/usr/sbin/ntp"),
+              ("ipset userspace", "/usr/sbin/ipset"),
+              ("TOR daemon", "/usr/sbin/Tor"),
+              ("NFS daemon", "/usr/sbin/nfsd"),
+              ("WireGuard userspace", "/usr/sbin/wg"),
+              ("Cake module", "/lib/modules/4.1.27/kernel/net/sched/sch_cake/sch_cake.ko"),
+              ("CIFS module", "/lib/modules/4.1.27/kernel/fs/cifs/cifs.ko"),
+              ("WireGuard module", "/lib/modules/4.1.27/kernel/net/wireguard/wireguard.ko"),
+              ("scp client", "/usr/bin/scp"),
+              ("crontab utility", "/usr/bin/crontab"),
+          ]
+
+          with open("reports/feature-signatures.tsv","w",encoding="utf-8") as f:
+              f.write("feature\tpath\ttoken\tasus_52334_count\tmerlin_386_14_2_count\n")
+              for row in rows:
+                  f.write("\t".join(map(str,row))+"\n")
+
+          with open("reports/feature-presence.tsv","w",encoding="utf-8") as f:
+              f.write("feature\tpath\tasus_52334\tmerlin_386_14_2\n")
+              for feature,path in presence:
+                  f.write(f"{feature}\t{path}\t{int(exists(a,path))}\t{int(exists(m,path))}\n")
+
+          with open("reports/feature-probe-summary.txt","w",encoding="utf-8") as f:
+              f.write("SIGNATURES\n")
+              for feature,path,token,ac,mc in rows:
+                  f.write(f"{feature}: ASUS={ac} Merlin={mc} [{path} :: {token}]\n")
+              f.write("\nPRESENCE\n")
+              for feature,path in presence:
+                  f.write(f"{feature}: ASUS={int(exists(a,path))} Merlin={int(exists(m,path))} [{path}]\n")
+          PY
+
+          cat reports/feature-probe-summary.txt
+
+      - name: Publish text reports only
+        uses: actions/upload-artifact@v4
+        with:
+          name: merlin-feature-compatibility-probe
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
