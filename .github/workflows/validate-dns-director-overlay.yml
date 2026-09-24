@@ -1,0 +1,261 @@
+name: Validate DNS Director overlay
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - ports/**
+      - tools/apply_port_overlay.py
+      - tools/check_port_overlay.py
+      - .github/workflows/validate-dns-director-overlay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout port branch
+        uses: actions/checkout@v4
+
+      - name: Validate overlay manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_port_overlay.py ports/active.json
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and pinned Merlin source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts work/merlin-src reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+
+          rm -rf work/merlin-src
+          git clone --depth 1 --branch 386.14_2 --single-branch \
+            https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          test "$(git -C work/merlin-src rev-parse HEAD)" = '6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+
+      - name: Extract ASUS rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Inventory rootfs before overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root=Path(os.environ["ASUS_ROOT"])
+
+          def digest(p):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for c in iter(lambda:f.read(1024*1024),b""):
+                      h.update(c)
+              return h.hexdigest()
+
+          inv={}
+          for p in sorted(root.rglob("*")):
+              rel=p.relative_to(root).as_posix()
+              if p.is_symlink():
+                  inv[rel]=["L",os.readlink(p)]
+              elif p.is_file():
+                  inv[rel]=["F",digest(p),p.stat().st_mode & 0o7777]
+              elif p.is_dir():
+                  inv[rel]=["D",p.stat().st_mode & 0o7777]
+
+          Path("reports/rootfs-before.json").write_text(
+              json.dumps(inv,sort_keys=True,separators=(",",":")),encoding="utf-8")
+
+          sensitive=[
+              "sbin/rc",
+              "usr/sbin/httpd",
+              "usr/sbin/dnsmasq",
+              "bin/busybox",
+              "www/state.js",
+              "www/require/modules/menuTree.js",
+          ]
+          for optional in ["usr/sbin/openvpn","usr/bin/dropbearmulti"]:
+              if (root/optional).is_file():
+                  sensitive.append(optional)
+
+          with open("reports/sensitive-before.tsv","w",encoding="utf-8") as f:
+              f.write("path\tsha256\n")
+              for rel in sensitive:
+                  p=root/rel
+                  if p.is_file():
+                      f.write(f"{rel}\t{digest(p)}\n")
+
+          (Path("reports/menuTree.before.js")).write_bytes(
+              (root/"www/require/modules/menuTree.js").read_bytes())
+          PY
+
+      - name: Apply guarded overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/apply_port_overlay.py \
+            --rootfs "$ASUS_ROOT" \
+            --merlin-src work/merlin-src \
+            --repo-root . \
+            --manifest ports/active.json \
+            --report reports/port-overlay-provenance.tsv
+
+      - name: Verify exact change set and backend compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root=Path(os.environ["ASUS_ROOT"])
+          before=json.loads(Path("reports/rootfs-before.json").read_text(encoding="utf-8"))
+
+          def digest(p):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for c in iter(lambda:f.read(1024*1024),b""):
+                      h.update(c)
+              return h.hexdigest()
+
+          after={}
+          for p in sorted(root.rglob("*")):
+              rel=p.relative_to(root).as_posix()
+              if p.is_symlink():
+                  after[rel]=["L",os.readlink(p)]
+              elif p.is_file():
+                  after[rel]=["F",digest(p),p.stat().st_mode & 0o7777]
+              elif p.is_dir():
+                  after[rel]=["D",p.stat().st_mode & 0o7777]
+
+          changed=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k))
+          expected=[
+              "www/DNSFilter.asp",
+              "www/require/modules/menuTree.js",
+          ]
+          Path("reports/changed-paths.txt").write_text("\n".join(changed)+"\n",encoding="utf-8")
+          if changed != expected:
+              raise SystemExit(f"unexpected rootfs changes: {changed!r}")
+
+          sensitive_before={}
+          for line in Path("reports/sensitive-before.tsv").read_text(encoding="utf-8").splitlines()[1:]:
+              p,h=line.split("\t",1)
+              sensitive_before[p]=h
+
+          protected=[
+              "sbin/rc",
+              "usr/sbin/httpd",
+              "usr/sbin/dnsmasq",
+              "bin/busybox",
+              "www/state.js",
+          ]
+          for optional in ["usr/sbin/openvpn","usr/bin/dropbearmulti"]:
+              if optional in sensitive_before:
+                  protected.append(optional)
+
+          with open("reports/sensitive-after.tsv","w",encoding="utf-8") as f:
+              f.write("path\tsha256\n")
+              for rel in protected:
+                  h=digest(root/rel)
+                  f.write(f"{rel}\t{h}\n")
+                  if h != sensitive_before[rel]:
+                      raise SystemExit(f"protected ASUS file changed: {rel}")
+
+          page=(root/"www/DNSFilter.asp").read_text(encoding="utf-8")
+          required=[
+              'dnsfilter_enable_x',
+              'dnsfilter_mode',
+              'dnsfilter_rulelist',
+              'dnsfilter_custom1',
+              'dnsfilter_custom2',
+              'dnsfilter_custom3',
+              'dnsfilter_modes_list();',
+              'restart_dnsfilter',
+          ]
+          forbidden=[
+              'dnsfilter_rulelist1',
+              'dnsfilter_rulelist2',
+              'dnsfilter_rulelist3',
+              'dnsfilter_rulelist4',
+              'dnsfilter_rulelist5',
+              'dnsfilter_custom61',
+              'dnsfilter_custom62',
+              'dnsfilter_custom63',
+          ]
+          missing=[x for x in required if x not in page]
+          present_forbidden=[x for x in forbidden if x in page]
+          if missing:
+              raise SystemExit(f"adapter missing required ASUS-backend identifiers: {missing}")
+          if present_forbidden:
+              raise SystemExit(f"adapter references unsupported Merlin-only identifiers: {present_forbidden}")
+
+          menu=(root/"www/require/modules/menuTree.js").read_text(encoding="utf-8")
+          if menu.count('{url: "DNSFilter.asp", tabName: "DNS Director"},') != 1:
+              raise SystemExit("DNS Director LAN tab not inserted exactly once")
+          if menu.count('if(false /* DNS Director compatibility port */)') != 1:
+              raise SystemExit("DNSFilter router-mode exclusion was not neutralized exactly once")
+
+          state_hash=digest(root/"www/state.js")
+          if state_hash != "bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61":
+              raise SystemExit("ASUS 52334 state.js changed unexpectedly")
+          PY
+
+          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter' >/dev/null
+          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_rulelist' >/dev/null
+          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_custom1' >/dev/null
+          strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Fx 'dnsfilter_modes_list' >/dev/null
+
+          diff -u \
+            --label ASUS-52334/menuTree.js \
+            --label overlay/menuTree.js \
+            reports/menuTree.before.js \
+            "$ASUS_ROOT/www/require/modules/menuTree.js" \
+            > reports/menuTree.patch.diff || test $? -eq 1
+
+          cat reports/changed-paths.txt
+          cat reports/port-overlay-provenance.tsv
+          cat reports/menuTree.patch.diff
+
+      - name: Publish text reports only
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-director-overlay-validation
+          path: |
+            reports/changed-paths.txt
+            reports/port-overlay-provenance.tsv
+            reports/sensitive-before.tsv
+            reports/sensitive-after.tsv
+            reports/menuTree.patch.diff
+          if-no-files-found: error
+          retention-days: 14
