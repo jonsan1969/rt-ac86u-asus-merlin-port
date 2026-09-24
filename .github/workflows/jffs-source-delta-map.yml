@@ -1,0 +1,182 @@
+name: JFFS custom-script source delta map
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/jffs-source-delta-map.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout analysis repo
+        uses: actions/checkout@v4
+
+      - name: Clone pinned Merlin history with blob filtering
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git clone --filter=blob:none --single-branch --branch 386.14_2 \
+            https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          ACTUAL="$(git -C work/merlin-src rev-parse HEAD)"
+          EXPECTED='6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+          test "$ACTUAL" = "$EXPECTED"
+          printf 'expected=%s\nactual=%s\n' "$EXPECTED" "$ACTUAL" > reports/source-pin.txt
+
+      - name: Map current helper and hook surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+
+          {
+            echo '=== CORE HELPER DEFINITIONS ==='
+            git grep -n -E 'void (run_custom_script|run_postconf|use_custom_config|append_custom_config)' 386.14_2 --               release/src/router/shared/scripts.c
+            echo
+            echo '=== ALL CUSTOM SCRIPT CALL SITES ==='
+            git grep -n -E 'run_custom_script\(' 386.14_2 -- release/src/router/rc release/src/router/shared || true
+            echo
+            echo '=== ALL CUSTOM CONFIG/POSTCONF CALL SITES ==='
+            git grep -n -E '(run_postconf|use_custom_config|append_custom_config)\(' 386.14_2 --               release/src/router/rc release/src/router/shared || true
+          } > ../../reports/jffs-current-source-map.txt
+
+          {
+            git grep -l -E 'run_custom_script\(|run_postconf\(|use_custom_config\(|append_custom_config\(' 386.14_2 --               release/src/router/rc release/src/router/shared || true
+          } | sort -u > ../../reports/jffs-source-files.txt
+
+      - name: Trace feature history
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+
+          history() {
+            local title="$1"
+            local needle="$2"
+            shift 2
+            {
+              echo
+              echo "================================================================================"
+              echo "$title"
+              echo "needle: $needle"
+              echo "================================================================================"
+              git log --date=short --format='%h %ad %s' -S"$needle" -- "$@" | head -n 80 || true
+            } >> ../../reports/jffs-feature-history.txt
+          }
+
+          : > ../../reports/jffs-feature-history.txt
+
+          history 'run_custom_script helper' 'run_custom_script' release/src/router/shared/scripts.c
+          history 'postconf helper' 'run_postconf' release/src/router/shared/scripts.c
+          history 'custom config replacement helper' 'use_custom_config' release/src/router/shared/scripts.c
+          history 'custom config append helper' 'append_custom_config' release/src/router/shared/scripts.c
+          history 'service-event hook' 'service-event' release/src/router/rc/services.c
+          history 'service-event-end hook' 'service-event-end' release/src/router/rc/services.c
+          history 'init-start hook' 'init-start' release/src/router/rc/init.c
+          history 'firewall-start hook' 'firewall-start' release/src/router/rc/firewall.c
+          history 'wan-event hook' 'wan-event' release/src/router/rc/wan.c
+          history 'wan-start hook' 'wan-start' release/src/router/rc/wan.c
+          history 'qos-start hook' 'qos-start' release/src/router/rc/qos.c
+          history 'dhcpc-event hook' 'dhcpc-event' release/src/router/rc/udhcpc.c
+          history 'pre-mount hook' 'pre-mount' release/src/router/rc/usb.c
+          history 'post-mount hook' 'post-mount' release/src/router/rc/usb.c
+          history 'unmount hook' 'unmount' release/src/router/rc/usb.c
+          history 'update-notification hook' 'update-notification' release/src/router/rc/watchdog.c
+
+      - name: Check ASUS GPL merge intersections
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+
+          FILES=(
+            release/src/router/shared/scripts.c
+            release/src/router/shared/shared.h
+            release/src/router/shared/defaults.c
+            release/src/router/rc/init.c
+            release/src/router/rc/services.c
+            release/src/router/rc/firewall.c
+            release/src/router/rc/wan.c
+            release/src/router/rc/usb.c
+            release/src/router/rc/udhcpc.c
+            release/src/router/rc/qos.c
+            release/src/router/rc/watchdog.c
+            release/src/router/rc/jffs2.c
+            release/src/router/rc/ubifs.c
+          )
+
+          {
+            echo '=== GPL 386_52796 import intersection ==='
+            echo 'commit e9e6035c85c673701646f2cf15de09b01a997ab9'
+            git diff --stat 3a61e53e9ca478934f15fd896039ba820027b109 e9e6035c85c673701646f2cf15de09b01a997ab9 -- "${FILES[@]}" || true
+            echo
+            git diff --name-status 3a61e53e9ca478934f15fd896039ba820027b109 e9e6035c85c673701646f2cf15de09b01a997ab9 -- "${FILES[@]}" || true
+
+            echo
+            echo '=== GPL 386_52805 import intersection ==='
+            echo 'commit 75c9d789179e169de5b2da2c02031358d5d03566'
+            git diff --stat f184cad85e13e20a670b9a8ba7e0c8a3da577d56 75c9d789179e169de5b2da2c02031358d5d03566 -- "${FILES[@]}" || true
+            echo
+            git diff --name-status f184cad85e13e20a670b9a8ba7e0c8a3da577d56 75c9d789179e169de5b2da2c02031358d5d03566 -- "${FILES[@]}" || true
+          } > ../../reports/jffs-gpl-merge-intersections.txt
+
+      - name: Record selected function bodies and hook contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          out = Path('../../reports/jffs-selected-context.txt')
+          specs = {
+              'release/src/router/shared/scripts.c': [
+                  'void run_custom_script', 'void run_postconf',
+                  'void use_custom_config', 'void append_custom_config'
+              ],
+              'release/src/router/rc/services.c': [
+                  'run_custom_script("service-event"', 'run_custom_script("service-event-end"',
+                  'run_custom_script("services-start"', 'run_custom_script("services-stop"',
+                  'run_custom_script("nat-start"'
+              ],
+              'release/src/router/rc/init.c': ['run_custom_script("init-start"'],
+              'release/src/router/rc/firewall.c': ['run_custom_script("firewall-start"'],
+              'release/src/router/rc/wan.c': ['run_custom_script("wan-event"', 'run_custom_script("wan-start"'],
+              'release/src/router/rc/usb.c': [
+                  'run_custom_script("pre-mount"', 'run_custom_script("post-mount"',
+                  'run_custom_script("unmount"'
+              ],
+              'release/src/router/rc/udhcpc.c': ['run_custom_script("dhcpc-event"'],
+              'release/src/router/rc/qos.c': ['run_custom_script("qos-start"'],
+              'release/src/router/rc/watchdog.c': ['run_custom_script("update-notification"'],
+          }
+
+          with out.open('w', encoding='utf-8') as f:
+              for path, needles in specs.items():
+                  lines = Path(path).read_text(errors='replace').splitlines()
+                  f.write(f'\n===== {path} =====\n')
+                  for needle in needles:
+                      for i,line in enumerate(lines):
+                          if needle in line:
+                              lo=max(0,i-5); hi=min(len(lines),i+12)
+                              f.write(f'\n--- {needle} @ line {i+1} ---\n')
+                              for n in range(lo,hi):
+                                  f.write(f'{n+1:6d} {lines[n]}\n')
+          PY
+
+      - name: Publish source reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: jffs-custom-script-source-delta-map
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
