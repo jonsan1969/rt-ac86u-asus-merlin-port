@@ -13,8 +13,10 @@
 | ASUS 51955 vs Merlin diff | **SUCCESS** | 2017 identical, 59 ASUS-only, 267 Merlin-only, 1914 different |
 | ASUS 51955 vs ASUS 52334 diff | **SUCCESS** | 3505 identical, 1 51955-only, 2 52334-only, 484 different |
 | Three-way delta classification | **SUCCESS** | 1513 Merlin-delta/ASUS-unchanged, 266 pure Merlin additions, 460 divergent shared changes |
-| Merlin A/B/C/D feature classification | **IN PROGRESS** | three-way classification now defines the reduced candidate/conflict sets |
-| Merlin feature port | **IN PROGRESS** | branch reserved; no unsafe binary replacement work started |
+| Merlin feature compatibility probe | **SUCCESS** | run 35989225935 separates missing features from ASUS-backend overlap |
+| Merlin feature-level inventory | **SUCCESS** | README + 386 changelog + runtime/source/three-way/probe evidence consolidated in master inventory |
+| Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries still being reduced per required feature |
+| Merlin feature port | **IN PROGRESS** | branch reserved; no unsafe core binary replacement started |
 
 ## Status vocabulary
 
