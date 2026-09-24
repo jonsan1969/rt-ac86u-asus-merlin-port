@@ -33,7 +33,14 @@ def main():
         assert t not in seen, f"entry {i}: duplicate target {t}"
         assert not protected(t), f"entry {i}: protected target {t}"
         assert e.get("policy","add_only")=="add_only", f"entry {i}: only add_only allowed"
-        assert e.get("type","copy") in {"copy","symlink"}, f"entry {i}: unsupported type"
+        etype=e.get("type","copy")
+        assert etype in {"copy","symlink"}, f"entry {i}: unsupported type"
+        if etype=="copy":
+            assert e.get("source"), f"entry {i}: copy requires source"
+            assert e.get("sha256"), f"entry {i}: copy requires sha256"
+            assert e.get("source_kind","merlin") in {"merlin","repo"}, f"entry {i}: bad source_kind"
+        else:
+            assert e.get("link_target"), f"entry {i}: symlink requires link_target"
         seen.add(t)
     print(f"SUCCESS: manifest valid; {len(seen)} entries")
 
