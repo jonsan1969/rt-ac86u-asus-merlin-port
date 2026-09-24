@@ -1,0 +1,118 @@
+name: ASUS 52334 DNSFilter runtime map
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/asus-dnsfilter-runtime-map.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full file unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+
+      - name: Extract rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Map DNSFilter runtime behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo '=== rc strings: dnsfilter / service actions ==='
+            strings -a "$ASUS_ROOT/sbin/rc" | grep -Ei 'dnsfilter|restart_dns|restart_firewall|dnsmasq' || true
+            echo
+            echo '=== httpd strings: dnsfilter / apply handlers ==='
+            strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Ei 'dnsfilter|restart_dns|restart_firewall|dnsmasq' || true
+            echo
+            echo '=== dnsmasq strings: dnsfilter ==='
+            strings -a "$ASUS_ROOT/usr/sbin/dnsmasq" | grep -Ei 'dnsfilter' || true
+          } > reports/dnsfilter-binary-strings.txt
+
+          {
+            echo '=== WebUI files containing dnsfilter ==='
+            grep -RIl --binary-files=without-match -E 'dnsfilter(_|\b)|DNSFilter|DNS Director' "$ASUS_ROOT/www" 2>/dev/null | sort || true
+            echo
+            echo '=== Matching WebUI excerpts ==='
+            grep -RIn --binary-files=without-match -E 'dnsfilter(_|\b)|DNSFilter|DNS Director' "$ASUS_ROOT/www" 2>/dev/null | head -n 1500 || true
+          } > reports/dnsfilter-webui-map.txt
+
+          {
+            echo '=== Filesystem-wide candidate identifiers ==='
+            grep -RIn --binary-files=without-match -E 'dnsfilter_(custom|rulelist|enable|mode)|restart_dnsfilter|restart_dnsmasq|restart_firewall' \
+              "$ASUS_ROOT/etc" "$ASUS_ROOT/usr" "$ASUS_ROOT/www" 2>/dev/null | head -n 2000 || true
+          } > reports/dnsfilter-text-identifiers.txt
+
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          root=Path(os.environ["ASUS_ROOT"])
+          files=[
+              root/"sbin/rc",
+              root/"usr/sbin/httpd",
+          ]
+          tokens=set()
+          for p in files:
+              data=p.read_bytes()
+              # Pull printable substrings that look DNSFilter/service related.
+              for m in re.finditer(rb'[ -~]{4,}', data):
+                  s=m.group().decode('ascii','ignore')
+                  if ('dnsfilter' in s.lower() or
+                      'restart_dns' in s.lower() or
+                      'restart_firewall' in s.lower()):
+                      tokens.add(s)
+          Path("reports/dnsfilter-token-candidates.txt").write_text(
+              "\n".join(sorted(tokens))+"\n", encoding="utf-8")
+          PY
+
+          cat reports/dnsfilter-binary-strings.txt
+          echo
+          head -n 220 reports/dnsfilter-webui-map.txt
+
+      - name: Publish map
+        uses: actions/upload-artifact@v4
+        with:
+          name: asus-52334-dnsfilter-runtime-map
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
