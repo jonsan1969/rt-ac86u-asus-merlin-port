@@ -45,8 +45,13 @@ def main():
         else:
             assert e.get("policy","exact_patch")=="exact_patch", f"entry {i}: patch_text must be exact_patch"
             assert e.get("base_sha256"), f"entry {i}: patch_text requires base_sha256"
-            assert "find" in e and "replace" in e, f"entry {i}: patch_text requires find/replace"
-            assert int(e.get("expected_count",1)) > 0, f"entry {i}: expected_count must be positive"
+            patches=e.get("patches")
+            if patches is None:
+                patches=[e]
+            assert isinstance(patches,list) and patches, f"entry {i}: patches must be non-empty"
+            for j,p in enumerate(patches,1):
+                assert "find" in p and "replace" in p, f"entry {i} patch {j}: requires find/replace"
+                assert int(p.get("expected_count",1)) > 0, f"entry {i} patch {j}: expected_count must be positive"
         seen.add(t)
     print(f"SUCCESS: manifest valid; {len(seen)} entries")
 

@@ -165,21 +165,40 @@ def main():
             if not dst.is_file() or dst.is_symlink():
                 raise SystemExit(f"entry {idx}: patch target must be an existing regular file: {target}")
             expected_base = entry.get("base_sha256")
-            find = entry.get("find")
-            replace = entry.get("replace")
-            expected_count = entry.get("expected_count", 1)
-            if not expected_base or find is None or replace is None:
-                raise SystemExit(f"entry {idx}: patch_text requires base_sha256, find and replace")
+            if not expected_base:
+                raise SystemExit(f"entry {idx}: patch_text requires base_sha256")
             before = verify_hash(dst, expected_base, f"entry {idx}: ASUS base {target}")
-            text = dst.read_text(encoding=entry.get("encoding", "utf-8"))
-            count = text.count(find)
-            if count != expected_count:
-                raise SystemExit(
-                    f"entry {idx}: patch context count mismatch for {target}: "
-                    f"expected {expected_count}, found {count}"
-                )
-            patched = text.replace(find, replace, expected_count)
-            dst.write_text(patched, encoding=entry.get("encoding", "utf-8"))
+            encoding = entry.get("encoding", "utf-8")
+            patched = dst.read_text(encoding=encoding)
+
+            patch_ops = entry.get("patches")
+            if patch_ops is None:
+                if "find" not in entry or "replace" not in entry:
+                    raise SystemExit(f"entry {idx}: patch_text requires find/replace or patches[]")
+                patch_ops = [{
+                    "find": entry["find"],
+                    "replace": entry["replace"],
+                    "expected_count": entry.get("expected_count", 1),
+                }]
+
+            if not isinstance(patch_ops, list) or not patch_ops:
+                raise SystemExit(f"entry {idx}: patches must be a non-empty list")
+
+            for pidx, patch in enumerate(patch_ops, 1):
+                if "find" not in patch or "replace" not in patch:
+                    raise SystemExit(f"entry {idx} patch {pidx}: missing find/replace")
+                find = patch["find"]
+                replace = patch["replace"]
+                expected_count = int(patch.get("expected_count", 1))
+                count = patched.count(find)
+                if count != expected_count:
+                    raise SystemExit(
+                        f"entry {idx} patch {pidx}: context count mismatch for {target}: "
+                        f"expected {expected_count}, found {count}"
+                    )
+                patched = patched.replace(find, replace, expected_count)
+
+            dst.write_text(patched, encoding=encoding)
             after = sha256(dst)
             expected_result = entry.get("result_sha256")
             if expected_result and after.lower() != expected_result.lower():
