@@ -1,0 +1,191 @@
+name: DNS Director ASUS 52334 compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/dns-director-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout analysis repo
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full file unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and pinned Merlin source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+
+          git clone --depth 1 --branch 386.14_2 --single-branch \
+            https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          test "$(git -C work/merlin-src rev-parse HEAD)" = '6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+
+      - name: Extract ASUS rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Analyze Merlin DNS Director dependencies against ASUS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          root = Path(os.environ["ASUS_ROOT"])
+          page = Path("work/merlin-src/release/src/router/www/DNSDirector.asp").read_text(encoding="utf-8-sig")
+
+          nvram = sorted(set(re.findall(r'nvram_get\("([^"]+)"\)', page)))
+          fixed = [
+              "restart_dnsfilter",
+              "dnsfilter_modes_list",
+              "dnsfilter_enable_x",
+              "dnsfilter_mode",
+              "dnsfilter_rulelist",
+              "dnsfilter_rulelist1",
+              "dnsfilter_rulelist2",
+              "dnsfilter_rulelist3",
+              "dnsfilter_rulelist4",
+              "dnsfilter_rulelist5",
+              "dnsfilter_custom1",
+              "dnsfilter_custom2",
+              "dnsfilter_custom3",
+              "dnsfilter_custom61",
+              "dnsfilter_custom62",
+              "dnsfilter_custom63",
+          ]
+          tokens = sorted(set(nvram + fixed))
+
+          scan_paths = [
+              "/sbin/rc",
+              "/usr/sbin/httpd",
+              "/usr/sbin/dnsmasq",
+              "/www/state.js",
+              "/www/general.js",
+              "/www/client_function.js",
+              "/www/validator.js",
+          ]
+
+          def hits(token):
+              found=[]
+              b=token.encode()
+              for rel in scan_paths:
+                  p=root/rel.lstrip("/")
+                  if p.exists() and p.is_file():
+                      try:
+                          data=p.read_bytes()
+                      except OSError:
+                          continue
+                      c=data.count(b)
+                      if c:
+                          found.append((rel,c))
+              return found
+
+          support_files = [
+              "/www/ParentalControl.css",
+              "/www/index_style.css",
+              "/www/form_style.css",
+              "/www/usp_style.css",
+              "/www/device-map/device-map.css",
+              "/www/state.js",
+              "/www/popup.js",
+              "/www/help.js",
+              "/www/general.js",
+              "/www/client_function.js",
+              "/www/js/jquery.js",
+              "/www/validator.js",
+              "/www/switcherplugin/jquery.iphone-switch.js",
+          ]
+
+          with open("reports/dns-director-token-map.tsv","w",encoding="utf-8") as f:
+              f.write("token\tstock_hits\n")
+              for token in tokens:
+                  h=hits(token)
+                  f.write(f"{token}\t" + ",".join(f"{p}:{c}" for p,c in h) + "\n")
+
+          with open("reports/dns-director-support-files.tsv","w",encoding="utf-8") as f:
+              f.write("path\tpresent\n")
+              for rel in support_files:
+                  p=root/rel.lstrip("/")
+                  f.write(f"{rel}\t{int(p.exists() or p.is_symlink())}\n")
+
+          critical = {
+              "restart_dnsfilter",
+              "dnsfilter_enable_x",
+              "dnsfilter_mode",
+              "dnsfilter_rulelist",
+              "dnsfilter_rulelist1",
+              "dnsfilter_rulelist2",
+              "dnsfilter_rulelist3",
+              "dnsfilter_rulelist4",
+              "dnsfilter_rulelist5",
+              "dnsfilter_custom1",
+              "dnsfilter_custom2",
+              "dnsfilter_custom3",
+              "dnsfilter_custom61",
+              "dnsfilter_custom62",
+              "dnsfilter_custom63",
+          }
+
+          missing=[]
+          with open("reports/dns-director-compatibility-summary.txt","w",encoding="utf-8") as f:
+              f.write("DNS Director dependency check against ASUS RT-AC86U 386_52334\n\n")
+              for token in tokens:
+                  h=hits(token)
+                  f.write(f"{token}: {h or 'NO DIRECT SIGNATURE'}\n")
+                  if token in critical and not h:
+                      missing.append(token)
+              f.write("\nSupport files:\n")
+              for rel in support_files:
+                  p=root/rel.lstrip("/")
+                  present=p.exists() or p.is_symlink()
+                  f.write(f"{rel}: {'YES' if present else 'NO'}\n")
+                  if not present:
+                      missing.append(rel)
+              f.write("\nCritical missing: " + (", ".join(missing) if missing else "NONE") + "\n")
+
+          print(Path("reports/dns-director-compatibility-summary.txt").read_text())
+          if missing:
+              raise SystemExit("Critical DNS Director dependencies are missing; do not port page unchanged.")
+          PY
+
+      - name: Publish compatibility report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-director-compatibility
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
