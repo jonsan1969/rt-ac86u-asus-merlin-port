@@ -9,7 +9,7 @@
 | Firmware archives materialized and locally verified | **SUCCESS** | GitHub Actions run 35982703376; both locked SHA-256 values matched |
 | Firmware filesystem extraction | **SUCCESS** | GitHub Actions run 35982848587; both UBI/UBIFS root filesystems extracted |
 | ASUS vs Merlin tree/hash diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
-| Merlin A/B/C/D delta classification | **IN PROGRESS** | image classification, feature source map and ASUS-GPL provenance documented |
+| Merlin A/B/C/D delta classification | **IN PROGRESS** | image/source classification refined by core binary feature-signature probe; DNSFilter backend confirmed in ASUS 52334 |
 | Merlin feature port | **IN PROGRESS** | branch reserved; no unsafe binary replacement work started |
 
 ## Status vocabulary
