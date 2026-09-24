@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "RT-AC86U ASUS 52334 Merlin overlay",
+  "asus_baseline": "3.0.0.4.386_52334",
+  "merlin_ref": "386.14_2",
+  "merlin_commit": "6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b",
+  "entries": []
+}
