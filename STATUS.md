@@ -5,7 +5,7 @@
 | ASUS RT-AC86U 3.0.0.4.386_52334 baseline reference | **SUCCESS** | official ASUS support page + published SHA-256 |
 | Merlin RT-AC86U 386.14_2 firmware reference | **SUCCESS** | official SourceForge file + published SHA-256 |
 | Merlin 386.14_2 source revision | **SUCCESS** | exact tag/ref pinned to Git commit |
-| Public official ASUS 386_52334 GPL tarball | **FAILURE** | not found in bounded initial search; do not repeat without new evidence |
+| ASUS 386_52334 GPL/source acquisition | **IN PROGRESS** | matching public archive not located; direct GPL/source request sent to ASUS on 2026-09-24 |
 | Firmware archives materialized and locally verified | **IN PROGRESS** | fetch/verify tooling committed |
 | Firmware filesystem extraction | **IN PROGRESS** | reproducible extraction scaffold committed |
 | ASUS vs Merlin tree/hash diff | **IN PROGRESS** | deterministic comparison tooling committed |
