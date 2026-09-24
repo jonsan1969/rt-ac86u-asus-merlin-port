@@ -41,7 +41,6 @@ jobs:
 
           curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/RT-AC86U_386.14_2.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
 
-          echo 'af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0  work/artifacts/FW_RT-AC86U_300438651955.zip' | sha256sum -c -
           echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
           echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
 
@@ -62,6 +61,10 @@ jobs:
           test -n "$A51955"
           test -n "$A52334"
           test -n "$MERLIN"
+
+          # ASUS explicitly publishes the 51955 checksum for the unzipped
+          # firmware image rather than the ZIP archive.
+          printf '%s  %s\n' 'af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0' "$A51955" | sha256sum -c -
 
           {
             file "$A51955" "$A52334" "$MERLIN"
