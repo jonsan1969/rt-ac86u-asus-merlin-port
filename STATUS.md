@@ -3,13 +3,17 @@
 | Item | Status | Evidence |
 |---|---|---|
 | ASUS RT-AC86U 3.0.0.4.386_52334 baseline reference | **SUCCESS** | official ASUS support page + published SHA-256 |
+| ASUS RT-AC86U 3.0.0.4.386_51955 comparison reference | **SUCCESS** | official ASUS support page + firmware-image SHA-256 verified in run 35987265109 |
 | Merlin RT-AC86U 386.14_2 firmware reference | **SUCCESS** | official SourceForge file + published SHA-256 |
 | Merlin 386.14_2 source revision | **SUCCESS** | exact tag/ref pinned to Git commit |
 | ASUS 386_52334 GPL/source acquisition | **IN PROGRESS** | no matching public archive located; legacy `gpl@asus.com` request bounced with SMTP 550 #5.1.0; current support route deferred |
-| Firmware archives materialized and locally verified | **SUCCESS** | GitHub Actions run 35982703376; both locked SHA-256 values matched |
-| Firmware filesystem extraction | **SUCCESS** | GitHub Actions run 35982848587; both UBI/UBIFS root filesystems extracted |
-| ASUS vs Merlin tree/hash diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
-| Merlin A/B/C/D delta classification | **IN PROGRESS** | image/source classification refined by core binary feature-signature probe; DNSFilter backend confirmed in ASUS 52334 |
+| Firmware artifact verification | **SUCCESS** | all three comparison images verified in run 35987265109 |
+| Firmware filesystem extraction | **SUCCESS** | ASUS 51955, Merlin 386.14_2 and ASUS 52334 UBI/UBIFS rootfs extracted in run 35987265109 |
+| Direct ASUS 52334 vs Merlin diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
+| ASUS 51955 vs Merlin diff | **SUCCESS** | 2017 identical, 59 ASUS-only, 267 Merlin-only, 1914 different |
+| ASUS 51955 vs ASUS 52334 diff | **SUCCESS** | 3505 identical, 1 51955-only, 2 52334-only, 484 different |
+| Three-way delta classification | **SUCCESS** | 1513 Merlin-delta/ASUS-unchanged, 266 pure Merlin additions, 460 divergent shared changes |
+| Merlin A/B/C/D feature classification | **IN PROGRESS** | three-way classification now defines the reduced candidate/conflict sets |
 | Merlin feature port | **IN PROGRESS** | branch reserved; no unsafe binary replacement work started |
 
 ## Status vocabulary

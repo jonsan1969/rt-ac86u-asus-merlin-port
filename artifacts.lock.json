@@ -19,7 +19,28 @@
       "firmware_image": "RT-AC86U_3.0.0.4_386_52334-gd500e53_ubi.w",
       "firmware_image_size_bytes": 78250004,
       "firmware_image_sha256": "1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f",
-      "verification_run": 35982703376,
+      "verification_run": 35987265109,
+      "status": "VERIFIED"
+    },
+    {
+      "id": "asus-rt-ac86u-386_51955-firmware",
+      "kind": "firmware_zip_with_image_checksum",
+      "vendor": "ASUS",
+      "model": "RT-AC86U",
+      "version": "3.0.0.4.386_51955",
+      "release_date": "2024-11-08",
+      "official_page": "https://www.asus.com/networking-iot-servers/wifi-routers/asus-wifi-routers/rt-ac86u/helpdesk_bios/?model2Name=RT-AC86U",
+      "direct_url": "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438651955.zip?model=RT-AC86U",
+      "direct_url_status": "VERIFIED_BY_GITHUB_ACTIONS",
+      "archive_sha256_observed": "d364820f2b3182be90bfdad987e0d6a9ce7facc3bcdf676d74e6cc9da7234273",
+      "archive_size_bytes": 69878988,
+      "firmware_image": "RT-AC86U_3.0.0.4_386_51955-g1f1ef30_ubi.w",
+      "firmware_image_size_bytes": 78118932,
+      "expected_firmware_image_sha256": "af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0",
+      "verified_firmware_image_sha256": "af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0",
+      "checksum_scope": "ASUS explicitly instructs users to unzip first; published SHA-256 applies to the firmware image, not the ZIP archive",
+      "verification_run": 35987265109,
+      "role": "PRIMARY_MERLIN_DELTA_COMPARISON_REFERENCE",
       "status": "VERIFIED"
     },
     {
@@ -37,7 +58,7 @@
       "firmware_image": "RT-AC86U_386.14_2_ubi.w",
       "firmware_image_size_bytes": 82706452,
       "firmware_image_sha256": "ebe1491f8edb3f81ca4077d482ffca33d34ae7dfe245bbff7843684dbe9b7728",
-      "verification_run": 35982703376,
+      "verification_run": 35987265109,
       "status": "VERIFIED"
     },
     {
