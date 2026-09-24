@@ -11,11 +11,16 @@
       "version": "3.0.0.4.386_52334",
       "release_date": "2026-05-07",
       "official_page": "https://www.asus.com/supportonly/rt-ac86u/helpdesk_bios?model2Name=RT-AC86U",
-      "direct_url_candidate": "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U",
-      "direct_url_status": "PATTERN_DERIVED_NOT_INDEPENDENTLY_VERIFIED",
+      "direct_url": "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U",
+      "direct_url_status": "VERIFIED_BY_GITHUB_ACTIONS",
       "expected_sha256": "e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61",
-      "hash_scope": "ASUS-published download archive checksum",
-      "status": "REFERENCE_VERIFIED_BINARY_NOT_FETCHED"
+      "verified_sha256": "e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61",
+      "archive_size_bytes": 69878840,
+      "firmware_image": "RT-AC86U_3.0.0.4_386_52334-gd500e53_ubi.w",
+      "firmware_image_size_bytes": 78250004,
+      "firmware_image_sha256": "1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f",
+      "verification_run": 35982703376,
+      "status": "VERIFIED"
     },
     {
       "id": "merlin-rt-ac86u-386.14_2-firmware-zip",
@@ -25,9 +30,15 @@
       "version": "386.14_2",
       "release_date": "2024-11-17",
       "official_page": "https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download",
+      "direct_url": "https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download",
       "expected_sha256": "1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a",
-      "hash_scope": "SourceForge-published ZIP checksum",
-      "status": "REFERENCE_VERIFIED_BINARY_NOT_FETCHED"
+      "verified_sha256": "1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a",
+      "archive_size_bytes": 73946144,
+      "firmware_image": "RT-AC86U_386.14_2_ubi.w",
+      "firmware_image_size_bytes": 82706452,
+      "firmware_image_sha256": "ebe1491f8edb3f81ca4077d482ffca33d34ae7dfe245bbff7843684dbe9b7728",
+      "verification_run": 35982703376,
+      "status": "VERIFIED"
     },
     {
       "id": "merlin-source-386.14_2",
@@ -46,8 +57,8 @@
       "vendor": "ASUS",
       "model": "RT-AC86U",
       "version": null,
-      "status": "NOT_FOUND_IN_REASONABLE_PUBLIC_SEARCH",
-      "notes": "Do not substitute a community mirror as an official source artifact. Merlin 386.14 reports a merge with ASUS GPL snapshot 386_52805, but RMerlin stated ASUS GPL archives supplied to him could be generated specifically for Merlin and need not correspond to a public stock firmware release."
+      "status": "IN_PROGRESS_NOT_PUBLICLY_LOCATED",
+      "notes": "No verified public 386_52334 GPL archive located. Legacy gpl@asus.com route rejected mail with SMTP 550 #5.1.0. Do not substitute a community mirror as official ASUS source."
     }
   ]
 }
