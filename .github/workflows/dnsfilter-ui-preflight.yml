@@ -59,6 +59,9 @@ jobs:
             sha256sum "$MENU"
             sha256sum "$STATE"
             echo
+            echo '--- LAN menu context ---'
+            sed -n '185,235p' "$MENU"
+            echo
             echo '--- menu DNSFilter contexts ---'
             grep -n -C 5 'dnsfilter_support\|DNSFilter.asp' "$MENU"
             echo
