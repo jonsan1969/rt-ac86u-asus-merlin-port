@@ -1,0 +1,67 @@
+name: Firmware artifact verification
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/firmware-artifact-verification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download official firmware archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/artifacts reports
+
+          ASUS_URL='https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U'
+          MERLIN_URL='https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT_AC86U_300438652334.zip "$ASUS_URL"
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip "$MERLIN_URL"
+
+      - name: Verify locked SHA-256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/artifacts
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  FW_RT_AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  RT-AC86U_386.14_2.zip' | sha256sum -c -
+          sha256sum *.zip | sort > ../../reports/archive-sha256.txt
+          stat -c '%n\t%s bytes' *.zip | sort > ../../reports/archive-sizes.txt
+
+      - name: Inventory ZIP contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '=== ASUS 386_52334 ==='
+            unzip -l work/artifacts/FW_RT_AC86U_300438652334.zip
+            echo
+            echo '=== Merlin 386.14_2 ==='
+            unzip -l work/artifacts/RT-AC86U_386.14_2.zip
+          } > reports/zip-inventory.txt
+
+          unzip -Z1 work/artifacts/FW_RT_AC86U_300438652334.zip | sort > reports/asus-zip-files.txt
+          unzip -Z1 work/artifacts/RT-AC86U_386.14_2.zip | sort > reports/merlin-zip-files.txt
+
+      - name: Publish text reports only
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-artifact-verification-reports
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
