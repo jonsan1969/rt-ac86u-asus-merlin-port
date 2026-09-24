@@ -4,5 +4,33 @@
   "asus_baseline": "3.0.0.4.386_52334",
   "merlin_ref": "386.14_2",
   "merlin_commit": "6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b",
-  "entries": []
+  "entries": [
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/www/DNSFilter.asp",
+      "git_blob_sha": "34e1e9afb2efbd1cc93d5d2beaf98a8894920619",
+      "target": "/www/DNSFilter.asp",
+      "mode": "0644",
+      "policy": "add_only"
+    },
+    {
+      "type": "patch_text",
+      "target": "/www/require/modules/menuTree.js",
+      "base_sha256": "73163bdf1b9f20c056a3c2b90629521b0a0f2007ea4967b73c1b3d6d8d9583e2",
+      "patches": [
+        {
+          "find": "{url: \"Advanced_DHCP_Content.asp\", tabName: \"<#496#>\"},",
+          "replace": "{url: \"Advanced_DHCP_Content.asp\", tabName: \"<#496#>\"},\n{url: \"DNSFilter.asp\", tabName: \"DNS Director\"},",
+          "expected_count": 1
+        },
+        {
+          "find": "if(!dnsfilter_support)",
+          "replace": "if(false /* DNS Director compatibility port */)",
+          "expected_count": 1
+        }
+      ],
+      "policy": "exact_patch"
+    }
+  ]
 }
