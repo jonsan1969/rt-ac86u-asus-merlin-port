@@ -1,0 +1,162 @@
+name: Core feature signature probe
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/core-feature-signature-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils p7zip-full unzip file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download verify and extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/artifacts work/asus work/merlin reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+          (
+            cd work/asus
+            FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+            binwalk -Me "$FW" >/dev/null
+          )
+          (
+            cd work/merlin
+            FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+            binwalk -Me "$FW" >/dev/null
+          )
+
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          MERLIN_ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          test -n "$MERLIN_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+          echo "MERLIN_ROOT=$MERLIN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe selected core binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv
+          import os
+          import subprocess
+          from pathlib import Path
+
+          asus = Path(os.environ["ASUS_ROOT"])
+          merlin = Path(os.environ["MERLIN_ROOT"])
+
+          targets = [
+              "/sbin/rc",
+              "/usr/sbin/httpd",
+              "/usr/sbin/dnsmasq",
+              "/usr/sbin/openvpn",
+              "/usr/bin/dropbearmulti",
+              "/usr/lib/libvpn.so",
+          ]
+
+          patterns = [
+              "/jffs/scripts",
+              "jffs2_scripts",
+              "service-event",
+              "service-event-end",
+              "firewall-start",
+              "services-start",
+              "services-stop",
+              "nat-start",
+              "wan-start",
+              ".postconf",
+              "vpndirector_rulelist",
+              "openvpn-routing",
+              "dnsfilter_enable_x",
+              "dnsfilter_rulelist",
+              "DNSFILTER",
+              "dnsfilter_modes_list",
+              "/www/user",
+              "amtm",
+              "authorized_keys",
+          ]
+
+          def string_lines(path):
+              if not path.exists() or not path.is_file():
+                  return []
+              p = subprocess.run(["strings", "-a", str(path)], check=True, text=True,
+                                 stdout=subprocess.PIPE, errors="replace")
+              return p.stdout.splitlines()
+
+          cache = {}
+          rows = []
+          evidence = []
+          for target in targets:
+              for label, root in [("ASUS", asus), ("MERLIN", merlin)]:
+                  p = root / target.lstrip("/")
+                  cache[(label, target)] = string_lines(p)
+              for pattern in patterns:
+                  ac = sum(pattern in s for s in cache[("ASUS", target)])
+                  mc = sum(pattern in s for s in cache[("MERLIN", target)])
+                  if ac or mc:
+                      rows.append([target, pattern, ac, mc])
+                      for label in ("ASUS", "MERLIN"):
+                          samples = [s for s in cache[(label, target)] if pattern in s][:5]
+                          for sample in samples:
+                              evidence.append([target, pattern, label, sample])
+
+          Path("reports").mkdir(exist_ok=True)
+          with open("reports/core-feature-signatures.tsv", "w", newline="", encoding="utf-8") as f:
+              w = csv.writer(f, delimiter="\t")
+              w.writerow(["binary", "pattern", "asus_count", "merlin_count"])
+              w.writerows(rows)
+
+          with open("reports/core-feature-signature-evidence.tsv", "w", newline="", encoding="utf-8") as f:
+              w = csv.writer(f, delimiter="\t")
+              w.writerow(["binary", "pattern", "firmware", "sample_string"])
+              w.writerows(evidence)
+
+          with open("reports/core-feature-signature-summary.md", "w", encoding="utf-8") as f:
+              f.write("# Core feature signature probe\n\n")
+              f.write("String presence is evidence only; absence is not proof that a feature is absent.\n\n")
+              f.write("| Binary | Pattern | ASUS 52334 | Merlin 386.14_2 |\n")
+              f.write("|---|---|---:|---:|\n")
+              for target, pattern, ac, mc in rows:
+                  f.write(f"| \`{target}\` | \`{pattern}\` | {ac} | {mc} |\n")
+          PY
+
+      - name: Publish text reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-feature-signature-probe
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
