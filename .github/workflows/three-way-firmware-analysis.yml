@@ -1,0 +1,134 @@
+name: Three-way firmware delta analysis
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/three-way-firmware-analysis.yml
+      - tools/compare_three_trees.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             binwalk mtd-utils squashfs-tools p7zip-full file unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify all three official firmware archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/artifacts work/asus51955 work/asus52334 work/merlin reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438651955.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438651955.zip?model=RT-AC86U'
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438652334.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/RT-AC86U_386.14_2.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+
+          echo 'af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0  work/artifacts/FW_RT-AC86U_300438651955.zip' | sha256sum -c -
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+
+          sha256sum work/artifacts/*.zip | sort > reports/archive-sha256.txt
+          stat -c '%n	%s bytes' work/artifacts/*.zip | sort > reports/archive-sizes.txt
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438651955.zip -d work/asus51955
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus52334
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Identify and hash firmware images
+        shell: bash
+        run: |
+          set -euo pipefail
+          A51955="$(find work/asus51955 -maxdepth 1 -type f -name '*.w' -print -quit)"
+          A52334="$(find work/asus52334 -maxdepth 1 -type f -name '*.w' -print -quit)"
+          MERLIN="$(find work/merlin -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$A51955"
+          test -n "$A52334"
+          test -n "$MERLIN"
+
+          {
+            file "$A51955" "$A52334" "$MERLIN"
+            echo
+            sha256sum "$A51955" "$A52334" "$MERLIN"
+            echo
+            stat -c '%n	%s bytes' "$A51955" "$A52334" "$MERLIN"
+          } | tee reports/firmware-images.txt
+
+      - name: Extract all UBI/UBIFS root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in asus51955 asus52334 merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              echo "=== $d : $FW ==="
+              binwalk -Me "$FW"
+            ) > "reports/binwalk-$d.txt"
+          done
+
+          A51955_ROOT="$(find work/asus51955 -type d -name rootfs_ubifs -print -quit)"
+          A52334_ROOT="$(find work/asus52334 -type d -name rootfs_ubifs -print -quit)"
+          MERLIN_ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+          test -n "$A51955_ROOT"
+          test -n "$A52334_ROOT"
+          test -n "$MERLIN_ROOT"
+
+          echo "A51955_ROOT=$A51955_ROOT" >> "$GITHUB_ENV"
+          echo "A52334_ROOT=$A52334_ROOT" >> "$GITHUB_ENV"
+          echo "MERLIN_ROOT=$MERLIN_ROOT" >> "$GITHUB_ENV"
+
+          {
+            echo "A51955_ROOT=$A51955_ROOT"
+            echo "A52334_ROOT=$A52334_ROOT"
+            echo "MERLIN_ROOT=$MERLIN_ROOT"
+          } > reports/rootfs-paths.txt
+
+      - name: Build pairwise and three-way diffs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 tools/tree_inventory.py "$A51955_ROOT" -o reports/asus-51955-inventory.tsv
+          python3 tools/tree_inventory.py "$A52334_ROOT" -o reports/asus-52334-inventory.tsv
+          python3 tools/tree_inventory.py "$MERLIN_ROOT" -o reports/merlin-386.14_2-inventory.tsv
+
+          python3 tools/compare_trees.py "$A51955_ROOT" "$MERLIN_ROOT"             -o reports/asus-51955-vs-merlin.tsv             | tee reports/asus-51955-vs-merlin-summary.txt
+
+          python3 tools/compare_trees.py "$A51955_ROOT" "$A52334_ROOT"             -o reports/asus-51955-vs-asus-52334.tsv             | tee reports/asus-51955-vs-asus-52334-summary.txt
+
+          python3 tools/compare_three_trees.py             "$A51955_ROOT" "$MERLIN_ROOT" "$A52334_ROOT"             -o reports/three-way-classification.tsv             | tee reports/three-way-summary.txt
+
+          {
+            echo "ASUS 51955 files: $(find "$A51955_ROOT" -type f | wc -l)"
+            echo "Merlin files: $(find "$MERLIN_ROOT" -type f | wc -l)"
+            echo "ASUS 52334 files: $(find "$A52334_ROOT" -type f | wc -l)"
+            echo "ASUS 51955 bytes: $(du -sb "$A51955_ROOT" | cut -f1)"
+            echo "Merlin bytes: $(du -sb "$MERLIN_ROOT" | cut -f1)"
+            echo "ASUS 52334 bytes: $(du -sb "$A52334_ROOT" | cut -f1)"
+          } > reports/rootfs-size-summary.txt
+
+      - name: Publish text reports only
+        uses: actions/upload-artifact@v4
+        with:
+          name: three-way-firmware-analysis-reports
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
