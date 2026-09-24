@@ -1,0 +1,105 @@
+name: Merlin donor feature source map
+
+on:
+  push:
+    branches:
+      - asus-52334-analysis
+    paths:
+      - .github/workflows/merlin-feature-source-map.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout analysis repo
+        uses: actions/checkout@v4
+
+      - name: Clone pinned Merlin donor source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git clone --depth 1 --branch 386.14_2 --single-branch \
+            https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          ACTUAL="$(git -C work/merlin-src rev-parse HEAD)"
+          EXPECTED='6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+          {
+            echo "expected=$EXPECTED"
+            echo "actual=$ACTUAL"
+          } | tee reports/merlin-source-pin.txt
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Map requested Merlin features to source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+
+          report_pattern() {
+            local title="$1"
+            shift
+            {
+              echo
+              echo "================================================================================"
+              echo "FEATURE: $title"
+              echo "================================================================================"
+              for pattern in "$@"; do
+                echo
+                echo "--- pattern: $pattern"
+                git grep -n -I -F -- "$pattern" || true
+              done
+            } >> ../../reports/merlin-feature-grep.txt
+          }
+
+          : > ../../reports/merlin-feature-grep.txt
+
+          report_pattern "JFFS custom scripts" \
+            "/jffs/scripts" "jffs2_scripts" "run_custom_script" "custom_script"
+
+          report_pattern "service-event hooks" \
+            "service-event" "service_event" "service-event-end"
+
+          report_pattern "postconf and custom config" \
+            "postconf" "run_postconf" "custom_config" ".add" ".postconf"
+
+          report_pattern "VPN Director" \
+            "VPNDirector" "vpn_director" "vpndirector" "vpnc_dev_policy"
+
+          report_pattern "DNS Director" \
+            "DNSDirector" "dnsdirector" "dnsfilter" "dns_filter"
+
+          report_pattern "custom user pages" \
+            "user1.asp" "user20.asp" "/www/user" "userpage"
+
+          report_pattern "AMTM/addon integration" \
+            "amtm" "entware" "/opt" "addon"
+
+          report_pattern "OpenVPN Merlin integration" \
+            "Advanced_OpenVPNClient_Content.asp" "openvpn-event" "vpnclient" "ovpn"
+
+          report_pattern "SSH/Dropbear integration" \
+            "dropbear" "authorized_keys" "ssh-rsa"
+
+          # Produce a compact unique file list from all grep hits.
+          awk -F: '/^[^ =].*:[0-9]+:/{print $1}' ../../reports/merlin-feature-grep.txt \
+            | sort -u > ../../reports/merlin-feature-files.txt
+
+          {
+            echo "Pinned donor commit: $(git rev-parse HEAD)"
+            echo "Unique matched tracked files: $(wc -l < ../../reports/merlin-feature-files.txt)"
+            echo
+            sed -n '1,240p' ../../reports/merlin-feature-files.txt
+          } > ../../reports/merlin-feature-source-map-summary.txt
+
+      - name: Publish source mapping reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: merlin-feature-source-map
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
