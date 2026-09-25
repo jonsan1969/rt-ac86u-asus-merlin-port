@@ -193,11 +193,6 @@ jobs:
                       raise SystemExit(f"protected ASUS file changed: {rel}")
 
           page=(root/"www/DNSFilter.asp").read_text(encoding="utf-8")
-          # The adapter deliberately supplies its own static mode table and uses
-          # ASUS's normal apply.cgi/action_script contract.  Therefore the page
-          # must carry the NVRAM/form fields it actually submits; it does not
-          # need to call the optional dnsfilter_modes_list() EJ handler or embed
-          # the backend action name as Javascript.
           required=[
               'dnsfilter_enable_x',
               'dnsfilter_mode',
@@ -238,13 +233,27 @@ jobs:
               raise SystemExit("state.js still forcibly disables DNSFilter support")
           PY
 
-          # Validate the corresponding ASUS backend capabilities independently
-          # from the adapter page.  The adapter uses static mode labels, while
-          # stock httpd still exposes dnsfilter_modes_list for compatibility.
-          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter' >/dev/null
-          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_rulelist' >/dev/null
-          strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_custom1' >/dev/null
-          strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Fx 'dnsfilter_modes_list' >/dev/null
+          check_backend_signature() {
+            local binary="$1"
+            local signature="$2"
+            local label="$3"
+            if strings -a "$binary" | grep -Fxq "$signature"; then
+              echo "PASS backend signature: $label [$binary :: $signature]"
+            else
+              echo "ERROR missing backend signature: $label [$binary :: $signature]" >&2
+              return 1
+            fi
+          }
+
+          backend_failed=0
+          check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter' 'DNSFilter service/action' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_rulelist' 'DNSFilter rule list NVRAM' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_custom1' 'DNSFilter custom resolver NVRAM' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'dnsfilter_modes_list' 'DNSFilter mode-list EJ handler' || backend_failed=1
+          if (( backend_failed )); then
+            echo 'ERROR: one or more required ASUS 52334 backend signatures are missing' >&2
+            exit 1
+          fi
 
           diff -u \
             --label ASUS-52334/menuTree.js \
