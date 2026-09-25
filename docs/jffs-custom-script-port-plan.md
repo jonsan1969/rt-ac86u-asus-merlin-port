@@ -257,6 +257,23 @@ Before calling this feature block **SUCCESS**, a built image must pass at least:
 13. `/opt/etc/profile` works for Entware.
 14. ASUS 52334 networking, DNS/DHCP, firewall and USB behavior remains intact when no custom script is installed.
 
+## ASUS 52334 image-first findings
+
+Targeted runtime probing of the verified ASUS 52334 image established the shell/addon profile layout without assuming source availability:
+
+- `/etc` is a symlink to `tmp/etc`; image overlays must not target `/etc/profile` directly because that resolves into the volatile runtime tree.
+- `/opt` is already a symlink to `tmp/opt`.
+- the persistent HND login profile is `/rom/etc/profile`, stock SHA-256 `4a4ba7e88f619e8dbd12f68c2da4010c7e19d7b9642866764132231e9b87cded`.
+- ASUS 52334 already carries the full `/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin` PATH extension.
+- ASUS 52334 already sources `/jffs/etc/profile` and `/opt/etc/profile`.
+- the only Merlin shell-profile delta required for this block is the gated `/jffs/configs/profile.add` source line controlled by `jffs2_scripts=1`.
+- the guarded overlay therefore patches only `/rom/etc/profile`; it does not replace the ASUS profile.
+- the expected postimage SHA-256 for that one-line patch is `370193e0cc91f7b55e6ad9b77e46b1ea3d03bf7ef79d86bd760fec7098eaab88`.
+
+The overlay engine has also been hardened to reject targets that traverse rootfs symlinks. This makes accidental writes such as `/etc/profile -> /tmp/etc/profile` fail closed and forces manifests to name the persistent canonical target.
+
+The same runtime probe still finds no principal Merlin custom-script engine signatures in ASUS 52334 beyond the unrelated stock `firewall-start` string. Therefore the shell/profile piece can be restored image-first, while the event-hook engine remains a source-level core task.
+
 ## Current status
 
 **IN PROGRESS**
