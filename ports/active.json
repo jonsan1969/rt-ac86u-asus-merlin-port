@@ -34,6 +34,15 @@
       "encoding": "utf-8",
       "result_sha256": "370193e0cc91f7b55e6ad9b77e46b1ea3d03bf7ef79d86bd760fec7098eaab88",
       "policy": "patch_exact"
+    },
+    {
+      "type": "copy",
+      "source_kind": "merlin",
+      "source": "release/src/router/others/helper.sh",
+      "target": "/usr/sbin/helper.sh",
+      "sha256": "f4f19dd4e0437869d476e37d9b74b0bf75690886941bd00c0079eb1425dd0bba",
+      "mode": "0755",
+      "policy": "add_only"
     }
   ]
 }

@@ -162,6 +162,7 @@ jobs:
           changed=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k))
           expected=[
               "rom/etc/profile",
+              "usr/sbin/helper.sh",
               "www/DNSFilter.asp",
               "www/state.js",
           ]
@@ -245,6 +246,24 @@ jobs:
           gated_profile_add='[ "$(nvram get jffs2_scripts)" = "1" ] && [ -f /jffs/configs/profile.add ] && . /jffs/configs/profile.add'
           if profile.count(gated_profile_add) != 1:
               raise SystemExit("shell profile gated profile.add hook not present exactly once")
+
+          helper_path=root/"usr/sbin/helper.sh"
+          helper=helper_path.read_text(encoding="utf-8")
+          helper_required=[
+              'pc_insert()',
+              'pc_replace()',
+              'pc_append()',
+              'pc_delete()',
+              'am_get_webui_page()',
+              '_am_settings_path=/jffs/addons/custom_settings.txt',
+              'am_settings_get()',
+              'am_settings_set()',
+          ]
+          missing_helper=[x for x in helper_required if x not in helper]
+          if missing_helper:
+              raise SystemExit(f"Merlin addon helper missing required API: {missing_helper}")
+          if (helper_path.stat().st_mode & 0o777) != 0o755:
+              raise SystemExit("Merlin addon helper mode is not 0755")
           PY
 
           check_backend_signature() {
