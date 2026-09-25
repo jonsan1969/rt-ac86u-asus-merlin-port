@@ -85,6 +85,16 @@ jobs:
             find "$R/bin" "$R/usr/bin" "$R/sbin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$cmd" -print -exec ls -l {} \; 2>/dev/null >> "$OUT" || true
           done
 
+          section 'JFFS NVRAM / EXEC PRIMITIVES'
+          for rel in sbin/rc usr/sbin/httpd; do
+            [ -f "$R/$rel" ] || continue
+            echo "--- $rel ---" >> "$OUT"
+            strings -a "$R/$rel" | grep -E 'jffs2_(on|format|clean_fs|exec|scripts)|/jffs/|mount.*jffs|jffs.*mount' | sort -u >> "$OUT" || true
+          done
+          if [ -f "$R/www/Advanced_System_Content.asp" ]; then
+            grep -nE 'jffs2_|JFFS|jffs' "$R/www/Advanced_System_Content.asp" >> "$OUT" || true
+          fi
+
           section 'CORE BINARY STRINGS'
           for rel in sbin/rc usr/sbin/httpd bin/busybox; do
             [ -f "$R/$rel" ] || continue
