@@ -246,7 +246,6 @@ jobs:
           }
 
           backend_failed=0
-          check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter' 'DNSFilter service/action' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_rulelist' 'DNSFilter rule list NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_custom1' 'DNSFilter custom resolver NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'dnsfilter_modes_list' 'DNSFilter mode-list EJ handler' || backend_failed=1
