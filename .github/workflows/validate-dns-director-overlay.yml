@@ -162,7 +162,7 @@ jobs:
           changed=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k))
           expected=[
               "www/DNSFilter.asp",
-              "www/require/modules/menuTree.js",
+              "www/state.js",
           ]
           Path("reports/changed-paths.txt").write_text("\n".join(changed)+"\n",encoding="utf-8")
           if changed != expected:
@@ -178,7 +178,7 @@ jobs:
               "usr/sbin/httpd",
               "usr/sbin/dnsmasq",
               "bin/busybox",
-              "www/state.js",
+              "www/require/modules/menuTree.js",
           ]
           for optional in ["usr/sbin/openvpn","usr/bin/dropbearmulti"]:
               if optional in sensitive_before:
@@ -220,15 +220,15 @@ jobs:
           if present_forbidden:
               raise SystemExit(f"adapter references unsupported Merlin-only identifiers: {present_forbidden}")
 
-          menu=(root/"www/require/modules/menuTree.js").read_text(encoding="utf-8")
-          if menu.count('{url: "DNSFilter.asp", tabName: "DNS Director"},') != 1:
-              raise SystemExit("DNS Director LAN tab not inserted exactly once")
-          if menu.count('if(false /* DNS Director compatibility port */)') != 1:
-              raise SystemExit("DNSFilter router-mode exclusion was not neutralized exactly once")
+          menu_hash=digest(root/"www/require/modules/menuTree.js")
+          if menu_hash != sensitive_before["www/require/modules/menuTree.js"]:
+              raise SystemExit("ASUS 52334 menuTree.js changed unexpectedly")
 
-          state_hash=digest(root/"www/state.js")
-          if state_hash != "bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61":
-              raise SystemExit("ASUS 52334 state.js changed unexpectedly")
+          state=(root/"www/state.js").read_text(encoding="utf-8")
+          if state.count('var dnsfilter_support = isSupport("dnsfilter");') != 1:
+              raise SystemExit("state.js DNSFilter support declaration not present exactly once")
+          if 'dnsfilter_support = false;' in state:
+              raise SystemExit("state.js still forcibly disables DNSFilter support")
           PY
 
           strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter' >/dev/null
