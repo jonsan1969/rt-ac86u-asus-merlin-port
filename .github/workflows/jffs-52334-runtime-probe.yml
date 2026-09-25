@@ -72,6 +72,19 @@ jobs:
             'jffs2_scripts|/jffs/(scripts|configs|addons)|profile\.add|/opt/(etc/profile|bin|sbin|usr/bin|usr/sbin)' \
             "$R/rom/etc" "$R/etc" "$R/www" "$R/usr" 2>/dev/null | head -n 500 >> "$OUT" || true
 
+          section 'ADDON HELPER SURFACE'
+          for p in usr/sbin/helper.sh www/user jffs/addons; do
+            if [ -e "$R/$p" ] || [ -L "$R/$p" ]; then
+              ls -ld "$R/$p" >> "$OUT"
+            else
+              echo "MISSING /$p" >> "$OUT"
+            fi
+          done
+          for cmd in sed grep cut md5sum touch; do
+            echo "--- command: $cmd ---" >> "$OUT"
+            find "$R/bin" "$R/usr/bin" "$R/sbin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$cmd" -print -exec ls -l {} \; 2>/dev/null >> "$OUT" || true
+          done
+
           section 'CORE BINARY STRINGS'
           for rel in sbin/rc usr/sbin/httpd bin/busybox; do
             [ -f "$R/$rel" ] || continue
