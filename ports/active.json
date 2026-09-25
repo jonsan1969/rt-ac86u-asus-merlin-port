@@ -23,6 +23,15 @@
       "count": 1,
       "encoding": "utf-8",
       "policy": "patch_exact"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/profile.merlin-additive",
+      "target": "/etc/profile",
+      "sha256": "9fd1403f833043d9bc3fe7b51ef73f01abeaff67494f53aca188f437aaa89cdf",
+      "mode": "0644",
+      "policy": "add_only"
     }
   ]
 }
