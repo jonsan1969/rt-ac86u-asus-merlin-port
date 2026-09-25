@@ -25,13 +25,15 @@
       "policy": "patch_exact"
     },
     {
-      "type": "copy",
-      "source_kind": "repo",
-      "source": "ports/files/profile.merlin-additive",
-      "target": "/etc/profile",
-      "sha256": "9fd1403f833043d9bc3fe7b51ef73f01abeaff67494f53aca188f437aaa89cdf",
-      "mode": "0644",
-      "policy": "add_only"
+      "type": "text_replace",
+      "target": "/rom/etc/profile",
+      "target_sha256": "4a4ba7e88f619e8dbd12f68c2da4010c7e19d7b9642866764132231e9b87cded",
+      "find": "[ -f /jffs/etc/profile ] && . /jffs/etc/profile\n[ -f /opt/etc/profile ] && . /opt/etc/profile",
+      "replace": "[ -f /jffs/etc/profile ] && . /jffs/etc/profile\n[ -f /opt/etc/profile ] && . /opt/etc/profile\n[ \"$(nvram get jffs2_scripts)\" = \"1\" ] && [ -f /jffs/configs/profile.add ] && . /jffs/configs/profile.add",
+      "count": 1,
+      "encoding": "utf-8",
+      "result_sha256": "370193e0cc91f7b55e6ad9b77e46b1ea3d03bf7ef79d86bd760fec7098eaab88",
+      "policy": "patch_exact"
     }
   ]
 }
