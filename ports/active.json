@@ -18,7 +18,7 @@
       "type": "text_replace",
       "target": "/www/state.js",
       "target_sha256": "bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61",
-      "find": "var dnsfilter_support = isSupport(\"dnsfilter\");\\ndnsfilter_support = false;",
+      "find": "var dnsfilter_support = isSupport(\"dnsfilter\");\ndnsfilter_support = false;",
       "replace": "var dnsfilter_support = isSupport(\"dnsfilter\");",
       "count": 1,
       "encoding": "utf-8",
