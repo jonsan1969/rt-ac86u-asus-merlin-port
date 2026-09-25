@@ -161,6 +161,7 @@ jobs:
 
           changed=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k))
           expected=[
+              "tmp/etc/profile",
               "www/DNSFilter.asp",
               "www/state.js",
           ]
@@ -231,6 +232,18 @@ jobs:
               raise SystemExit("state.js DNSFilter support declaration not present exactly once")
           if 'dnsfilter_support = false;' in state:
               raise SystemExit("state.js still forcibly disables DNSFilter support")
+
+          profile=(root/"etc/profile").read_text(encoding="utf-8")
+          profile_required=[
+              '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin',
+              '[ -f /opt/etc/profile ] && . /opt/etc/profile',
+              '[ "$(nvram get jffs2_scripts)" = "1" ] && [ -f /jffs/configs/profile.add ] && . /jffs/configs/profile.add',
+          ]
+          missing_profile=[x for x in profile_required if x not in profile]
+          if missing_profile:
+              raise SystemExit(f"shell profile missing required additive Merlin contract: {missing_profile}")
+          if profile.count('/jffs/configs/profile.add') != 1:
+              raise SystemExit("shell profile has unexpected profile.add hook count")
           PY
 
           check_backend_signature() {
