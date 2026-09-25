@@ -274,6 +274,9 @@ The overlay engine has also been hardened to reject targets that traverse rootfs
 
 The same runtime probe still finds no principal Merlin custom-script engine signatures in ASUS 52334 beyond the unrelated stock `firewall-start` string. Therefore the shell/profile piece can be restored image-first, while the event-hook engine remains a source-level core task.
 
+
+A follow-up addon-helper probe also verified that ASUS 52334 lacks `/usr/sbin/helper.sh` and `/jffs/addons`, while all commands used by Merlin's helper implementation are already present through the stock BusyBox surface: `sed`, `grep`, `cut`, `md5sum`, and `touch`. This makes M05's helper script itself a safe additive candidate. Its custom-settings functions remain dependent on the later creation of `/jffs/addons`, and its WebUI-slot helper remains dependent on M07.
+
 ## Current status
 
 **IN PROGRESS**
