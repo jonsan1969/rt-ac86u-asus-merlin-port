@@ -1,0 +1,105 @@
+name: Probe ASUS 52334 JFFS runtime surface
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/jffs-52334-runtime-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and verify ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+
+      - name: Extract ASUS rootfs
+        run: |
+          set -euo pipefail
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe runtime surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/jffs-52334-runtime-probe.txt
+          : > "$OUT"
+
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'ROOTFS PATHS'
+          for p in jffs opt etc/profile root/.profile home/root/.profile www/Advanced_System_Content.asp; do
+            if [ -e "$R/$p" ] || [ -L "$R/$p" ]; then
+              ls -ld "$R/$p" >> "$OUT"
+            else
+              echo "MISSING /$p" >> "$OUT"
+            fi
+          done
+
+          section 'TEXT REFERENCES: JFFS CUSTOM SCRIPT/CONFIG CONTRACT'
+          grep -RInaE --binary-files=without-match \
+            'jffs2_scripts|/jffs/(scripts|configs|addons)|profile\.add|/opt/(etc/profile|bin|sbin|usr/bin|usr/sbin)' \
+            "$R/etc" "$R/www" "$R/usr" 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'CORE BINARY STRINGS'
+          for rel in sbin/rc usr/sbin/httpd bin/busybox; do
+            [ -f "$R/$rel" ] || continue
+            echo "--- $rel ---" >> "$OUT"
+            strings -a "$R/$rel" | grep -E \
+              'jffs2_scripts|/jffs/(scripts|configs|addons)|service-event|services-start|services-stop|nat-start|wan-start|firewall-start|init-start|profile\.add|/opt/etc/profile' \
+              | sort -u >> "$OUT" || true
+          done
+
+          section 'SYSTEM WEBUI CONTEXT'
+          if [ -f "$R/www/Advanced_System_Content.asp" ]; then
+            grep -nEi 'jffs|script|custom|format.*jffs' "$R/www/Advanced_System_Content.asp" >> "$OUT" || true
+          fi
+
+          section 'PROFILE CONTENT'
+          for rel in etc/profile root/.profile home/root/.profile; do
+            if [ -f "$R/$rel" ]; then
+              echo "--- /$rel ---" >> "$OUT"
+              cat "$R/$rel" >> "$OUT"
+            fi
+          done
+
+          cat "$OUT"
+
+      - name: Publish probe report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jffs-52334-runtime-probe
+          path: reports/jffs-52334-runtime-probe.txt
+          if-no-files-found: error
+          retention-days: 14
