@@ -242,8 +242,9 @@ jobs:
           missing_profile=[x for x in profile_required if x not in profile]
           if missing_profile:
               raise SystemExit(f"shell profile missing required additive Merlin contract: {missing_profile}")
-          if profile.count('/jffs/configs/profile.add') != 1:
-              raise SystemExit("shell profile has unexpected profile.add hook count")
+          gated_profile_add='[ "$(nvram get jffs2_scripts)" = "1" ] && [ -f /jffs/configs/profile.add ] && . /jffs/configs/profile.add'
+          if profile.count(gated_profile_add) != 1:
+              raise SystemExit("shell profile gated profile.add hook not present exactly once")
           PY
 
           check_backend_signature() {
