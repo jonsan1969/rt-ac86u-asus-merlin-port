@@ -193,6 +193,11 @@ jobs:
                       raise SystemExit(f"protected ASUS file changed: {rel}")
 
           page=(root/"www/DNSFilter.asp").read_text(encoding="utf-8")
+          # The adapter deliberately supplies its own static mode table and uses
+          # ASUS's normal apply.cgi/action_script contract.  Therefore the page
+          # must carry the NVRAM/form fields it actually submits; it does not
+          # need to call the optional dnsfilter_modes_list() EJ handler or embed
+          # the backend action name as Javascript.
           required=[
               'dnsfilter_enable_x',
               'dnsfilter_mode',
@@ -200,8 +205,10 @@ jobs:
               'dnsfilter_custom1',
               'dnsfilter_custom2',
               'dnsfilter_custom3',
-              'dnsfilter_modes_list();',
-              'restart_dnsfilter',
+              'action_mode',
+              'action_script',
+              '/start_apply.htm',
+              'document.form.submit()',
           ]
           forbidden=[
               'dnsfilter_rulelist1',
@@ -216,7 +223,7 @@ jobs:
           missing=[x for x in required if x not in page]
           present_forbidden=[x for x in forbidden if x in page]
           if missing:
-              raise SystemExit(f"adapter missing required ASUS-backend identifiers: {missing}")
+              raise SystemExit(f"adapter missing required ASUS apply/NVRAM contract identifiers: {missing}")
           if present_forbidden:
               raise SystemExit(f"adapter references unsupported Merlin-only identifiers: {present_forbidden}")
 
@@ -231,6 +238,9 @@ jobs:
               raise SystemExit("state.js still forcibly disables DNSFilter support")
           PY
 
+          # Validate the corresponding ASUS backend capabilities independently
+          # from the adapter page.  The adapter uses static mode labels, while
+          # stock httpd still exposes dnsfilter_modes_list for compatibility.
           strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter' >/dev/null
           strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_rulelist' >/dev/null
           strings -a "$ASUS_ROOT/sbin/rc" | grep -Fx 'dnsfilter_custom1' >/dev/null
