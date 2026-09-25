@@ -161,7 +161,7 @@ jobs:
 
           changed=sorted(k for k in set(before)|set(after) if before.get(k)!=after.get(k))
           expected=[
-              "tmp/etc/profile",
+              "rom/etc/profile",
               "www/DNSFilter.asp",
               "www/state.js",
           ]
@@ -233,7 +233,7 @@ jobs:
           if 'dnsfilter_support = false;' in state:
               raise SystemExit("state.js still forcibly disables DNSFilter support")
 
-          profile=(root/"etc/profile").read_text(encoding="utf-8")
+          profile=(root/"rom/etc/profile").read_text(encoding="utf-8")
           profile_required=[
               '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin',
               '[ -f /opt/etc/profile ] && . /opt/etc/profile',
