@@ -59,7 +59,7 @@ jobs:
           section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
 
           section 'ROOTFS PATHS'
-          for p in jffs opt etc/profile root/.profile home/root/.profile www/Advanced_System_Content.asp; do
+          for p in jffs opt etc tmp rom/etc/profile rom/etc/profile.hnd etc/profile root/.profile home/root/.profile www/Advanced_System_Content.asp; do
             if [ -e "$R/$p" ] || [ -L "$R/$p" ]; then
               ls -ld "$R/$p" >> "$OUT"
             else
@@ -70,7 +70,7 @@ jobs:
           section 'TEXT REFERENCES: JFFS CUSTOM SCRIPT/CONFIG CONTRACT'
           grep -RInaE --binary-files=without-match \
             'jffs2_scripts|/jffs/(scripts|configs|addons)|profile\.add|/opt/(etc/profile|bin|sbin|usr/bin|usr/sbin)' \
-            "$R/etc" "$R/www" "$R/usr" 2>/dev/null | head -n 500 >> "$OUT" || true
+            "$R/rom/etc" "$R/etc" "$R/www" "$R/usr" 2>/dev/null | head -n 500 >> "$OUT" || true
 
           section 'CORE BINARY STRINGS'
           for rel in sbin/rc usr/sbin/httpd bin/busybox; do
@@ -87,9 +87,10 @@ jobs:
           fi
 
           section 'PROFILE CONTENT'
-          for rel in etc/profile root/.profile home/root/.profile; do
+          for rel in rom/etc/profile rom/etc/profile.hnd etc/profile root/.profile home/root/.profile; do
             if [ -f "$R/$rel" ]; then
               echo "--- /$rel ---" >> "$OUT"
+              sha256sum "$R/$rel" >> "$OUT"
               cat "$R/$rel" >> "$OUT"
             fi
           done
