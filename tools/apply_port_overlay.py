@@ -16,7 +16,14 @@ def safe_child(base,rel,label):
  return out
 def safe_target(root,target):
  if not target.startswith("/"): raise ValueError(f"absolute target required: {target}")
- out=(root/target.lstrip("/")).resolve(strict=False)
+ lexical=root/target.lstrip("/")
+ cur=root
+ for part in Path(target.lstrip("/")).parts:
+  cur=cur/part
+  if cur.is_symlink():
+   rel=cur.relative_to(root).as_posix()
+   raise ValueError(f"target traverses rootfs symlink /{rel}; use canonical target: {target}")
+ out=lexical.resolve(strict=False)
  try: out.relative_to(root.resolve())
  except ValueError: raise ValueError(f"target escapes rootfs: {target}")
  return out
