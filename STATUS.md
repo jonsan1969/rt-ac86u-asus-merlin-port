@@ -15,13 +15,16 @@
 | Three-way delta classification | **SUCCESS** | 1513 Merlin-delta/ASUS-unchanged, 266 pure Merlin additions, 460 divergent shared changes |
 | Merlin feature compatibility probe | **SUCCESS** | run 35989225935 separates missing features from ASUS-backend overlap |
 | Merlin feature-level inventory | **SUCCESS** | README + 386 changelog + runtime/source/three-way/probe evidence consolidated in master inventory |
-| JFFS/custom-script source delta map | **SUCCESS** | Action 35990042520 completed successfully |
-| JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series documented in docs/jffs-custom-script-port-plan.md |
+| JFFS/custom-script source delta map | **SUCCESS** | Action 36123084408 completed successfully on `asus-52334-merlin-port` |
+| JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series + pinned source contract documented in `docs/jffs-custom-script-port-plan.md` and `docs/jffs-custom-script-source-contract.md` |
 | ASUS 52334 DNSFilter runtime map | **SUCCESS** | Action 35993309478 verified retained stock backend/UI-support pieces |
-| DNS Director phase-1 overlay implementation | **IN PROGRESS** | guarded overlay exists on port branch; latest validation stopped fail-closed at exact state.js text match |
-| DNS Director overlay validation run 36000073528 | **FAILURE** | Apply guarded overlay: entry 2 expected one exact match, found zero |
+| DNS Director phase-1 overlay implementation | **SUCCESS** | guarded overlay changes only `DNSFilter.asp` + exact-patched `state.js`; validation run 36121711046 passed |
+| Guarded Merlin overlay validation | **SUCCESS** | profile.add patch, pinned `helper.sh`, DNS Director adapter, and 20 custom WebUI aliases validated; latest completed feature run 36214921483 passed |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
-| Merlin feature port | **IN PROGRESS** | first guarded DNS Director overlay staged; no unsafe core binary replacement |
+| JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
+| JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
+| AMTM integration | **IN PROGRESS** | stock has required curl/core shell tools but lacks `dos2unix`/`unix2dos`; defer until utility + core-hook prerequisites are satisfied |
+| Merlin feature port | **IN PROGRESS** | DNS Director phase 1 + image-safe JFFS/addon pieces implemented; no unsafe core binary replacement |
 | Flashable firmware | **IN PROGRESS** | no flashability claim until repack + hardware/runtime gates pass |
 
 ## Status vocabulary

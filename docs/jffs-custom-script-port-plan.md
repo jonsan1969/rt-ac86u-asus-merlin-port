@@ -281,4 +281,31 @@ A follow-up addon-helper probe also verified that ASUS 52334 lacks `/usr/sbin/he
 
 **IN PROGRESS**
 
-The behavioral patch specification is complete. The remaining prerequisite for an actual code patch is selecting and labeling the buildable ASUS-side source generation against which these small deltas will be applied.
+### Image-safe subphase — SUCCESS
+
+Validated on the ASUS 52334 image:
+
+- exact patch of `/rom/etc/profile` for gated `profile.add` sourcing;
+- add-only pinned Merlin `/usr/sbin/helper.sh`;
+- add-only `/www/user1.asp` … `/www/user20.asp` aliases targeting the stock `/www/user -> /var/wwwext` namespace;
+- guarded overlay exact-change validation passes with protected ASUS core binaries unchanged.
+
+The custom WebUI-slot validation is run 36214921483. The helper validation is run 36132479605. The profile validation is run 36132166557.
+
+### Core engine — SOURCE-REQUIRED / IN PROGRESS
+
+The remaining M01–M04 behavior needs source integration in the later ASUS control flow:
+
+- JFFS directory creation for `scripts`, `configs`, `addons`;
+- lifecycle/event hooks;
+- custom config replacement/`.add`/postconf call sites;
+- full HTTPD custom-settings API;
+- `jffs2_scripts` administration control once the engine is actually functional.
+
+ASUS 52334 runtime probing found JFFS mount/format primitives, but no `jffs2_exec` or `/jffs/.asusrouter` bootstrap path. Generic `.asusrouter` strings belong to the ASUS Apps/USB autorun namespace.
+
+### AMTM gate
+
+The stock image has `/usr/sbin/curl`, `cmp`, `tail`, `wc`, `awk`, `sed`, `grep`, `cut`, `touch`, and the other base commands used by the integrated AMTM launcher. It lacks `dos2unix` and `unix2dos`.
+
+AMTM is therefore not added yet: doing so before its utility dependencies and the JFFS hook engine are complete would expose a partially working management interface.

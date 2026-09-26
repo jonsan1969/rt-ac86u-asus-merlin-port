@@ -135,6 +135,14 @@ The full WebUI API also requires Merlin HTTPD-side support:
 
 Because ASUS 52334 `httpd` is protected and its matching source is unavailable, the HTTPD half remains source-blocked. Do not replace `httpd` with the Merlin binary.
 
+## AMTM prerequisite probe
+
+The pinned Merlin 386.14_2 AMTM launcher is additive, but it is intentionally not included yet.
+
+ASUS 52334 provides `/usr/sbin/curl` and the normal shell/core commands used by the launcher. It does not provide `dos2unix` or `unix2dos`, and these applets were not identified in the stock BusyBox string surface.
+
+The base AMTM launcher defines its line-ending conversion helper even though that helper is not called by the bootstrap body itself; downloaded AMTM modules/addons may rely on it. More importantly, AMTM can enable `jffs2_scripts` and install addons that expect the lifecycle hook engine. Shipping AMTM before those prerequisites would therefore misrepresent support.
+
 ## Source gate
 
 A core JFFS feature can move from SOURCE-BLOCKED to implementation only when one of these is true:
