@@ -27,19 +27,22 @@ jobs:
           python3 -m pip install --user --break-system-packages ubi-reader pyelftools capstone
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Fetch verified ASUS 51955 and 52334
+      - name: Fetch verified ASUS 51955, ASUS 52334 and Merlin 386.14_2
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p work/51955 work/52334 work/artifacts reports
+          mkdir -p work/51955 work/52334 work/merlin work/artifacts reports
 
           curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438651955.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438651955.zip?model=RT-AC86U'
           curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438652334.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/RT-AC86U_386.14_2.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
 
           echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
 
           unzip -q work/artifacts/FW_RT-AC86U_300438651955.zip -d work/51955
           unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/52334
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
 
           FW51955="$(find work/51955 -maxdepth 1 -type f -name '*.w' -print -quit)"
           test -n "$FW51955"
@@ -49,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for d in 51955 52334; do
+          for d in 51955 52334 merlin; do
             (
               cd "work/$d"
               FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
@@ -57,7 +60,11 @@ jobs:
             )
             ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
             test -n "$ROOT"
-            echo "ROOT$d=$ROOT" >> "$GITHUB_ENV"
+            if [ "$d" = merlin ]; then
+              echo "ROOTMERLIN=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "ROOT$d=$ROOT" >> "$GITHUB_ENV"
+            fi
           done
 
       - name: Compare rc and conntrack surfaces
@@ -67,9 +74,15 @@ jobs:
           OUT=reports/conntrack-runtime-lineage.txt
           : > "$OUT"
 
-          for d in 51955 52334; do
-            eval "R=\$ROOT$d"
-            echo "===== ASUS $d /sbin/rc =====" >> "$OUT"
+          for d in 51955 52334 MERLIN; do
+            if [ "$d" = MERLIN ]; then
+              R="$ROOTMERLIN"
+              label="Merlin 386.14_2"
+            else
+              eval "R=\$ROOT$d"
+              label="ASUS $d"
+            fi
+            echo "===== $label /sbin/rc =====" >> "$OUT"
             file "$R/sbin/rc" >> "$OUT"
             sha256sum "$R/sbin/rc" >> "$OUT"
             stat -c 'size=%s' "$R/sbin/rc" >> "$OUT"
@@ -78,7 +91,34 @@ jobs:
             echo >> "$OUT"
           done
 
-          cmp -s "$ROOT51955/sbin/rc" "$ROOT52334/sbin/rc" && echo 'RC_BYTE_IDENTICAL=yes' >> "$OUT" || echo 'RC_BYTE_IDENTICAL=no' >> "$OUT"
+          cmp -s "$ROOT51955/sbin/rc" "$ROOT52334/sbin/rc" && echo 'ASUS_51955_52334_RC_BYTE_IDENTICAL=yes' >> "$OUT" || echo 'ASUS_51955_52334_RC_BYTE_IDENTICAL=no' >> "$OUT"
+          echo >> "$OUT"
+          for label in ASUS51955 ASUS52334 MERLIN; do
+            case "$label" in
+              ASUS51955) R="$ROOT51955" ;;
+              ASUS52334) R="$ROOT52334" ;;
+              MERLIN) R="$ROOTMERLIN" ;;
+            esac
+            echo "===== EXACT/SUFFIX TOKEN CHECK $label =====" >> "$OUT"
+            if strings -a "$R/sbin/rc" | grep -Fxq 'conntrack'; then echo 'exact_conntrack=yes' >> "$OUT"; else echo 'exact_conntrack=no' >> "$OUT"; fi
+            python3 - "$R/sbin/rc" <<'PYTOK' >> "$OUT"
+import sys
+from pathlib import Path
+data=Path(sys.argv[1]).read_bytes()
+for token in (b"conntrack",b"leds",b"updateresolv"):
+    hits=[]
+    pos=0
+    while True:
+        i=data.find(token+b"\0",pos)
+        if i<0: break
+        lo=data.rfind(b"\0",0,i)+1
+        hi=data.find(b"\0",i)
+        host=data[lo:hi].decode("latin1","replace")
+        hits.append((hex(i),host))
+        pos=i+1
+    print(token.decode(),hits)
+PYTOK
+          done
 
           python3 - <<'PY' >> "$OUT"
           import os, re
@@ -151,6 +191,7 @@ jobs:
 
           analyze("51955",os.environ["ROOT51955"]+"/sbin/rc")
           analyze("52334",os.environ["ROOT52334"]+"/sbin/rc")
+          analyze("MERLIN",os.environ["ROOTMERLIN"]+"/sbin/rc")
           PY
 
           cat "$OUT"
