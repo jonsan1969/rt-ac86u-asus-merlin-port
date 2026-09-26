@@ -1,0 +1,157 @@
+name: Probe ASUS conntrack runtime lineage
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/conntrack-runtime-lineage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils file
+          python3 -m pip install --user --break-system-packages ubi-reader pyelftools capstone
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 51955 and 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/51955 work/52334 work/artifacts reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438651955.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438651955.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/FW_RT-AC86U_300438652334.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+
+          unzip -q work/artifacts/FW_RT-AC86U_300438651955.zip -d work/51955
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/52334
+
+          FW51955="$(find work/51955 -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW51955"
+          echo "af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0  $FW51955" | sha256sum -c -
+
+      - name: Extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in 51955 52334; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            echo "ROOT$d=$ROOT" >> "$GITHUB_ENV"
+          done
+
+      - name: Compare rc and conntrack surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=reports/conntrack-runtime-lineage.txt
+          : > "$OUT"
+
+          for d in 51955 52334; do
+            eval "R=\$ROOT$d"
+            echo "===== ASUS $d /sbin/rc =====" >> "$OUT"
+            file "$R/sbin/rc" >> "$OUT"
+            sha256sum "$R/sbin/rc" >> "$OUT"
+            stat -c 'size=%s' "$R/sbin/rc" >> "$OUT"
+            echo '-- relevant strings --' >> "$OUT"
+            strings -a -t x "$R/sbin/rc" | grep -Ei               'ct_tcp_timeout|ct_udp_timeout|ct_max|conntrack|nf_conntrack|setup.*track|restart.*track'               | sort -u >> "$OUT" || true
+            echo >> "$OUT"
+          done
+
+          cmp -s "$ROOT51955/sbin/rc" "$ROOT52334/sbin/rc" && echo 'RC_BYTE_IDENTICAL=yes' >> "$OUT" || echo 'RC_BYTE_IDENTICAL=no' >> "$OUT"
+
+          python3 - <<'PY' >> "$OUT"
+          import os, re
+          from pathlib import Path
+          from elftools.elf.elffile import ELFFile
+          from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+
+          needles=(b"ct_tcp_timeout", b"ct_udp_timeout", b"ct_max")
+
+          def analyze(label,path):
+              print(f"\n===== STRING XREF PROBE {label} =====")
+              data=Path(path).read_bytes()
+              with open(path,"rb") as f:
+                  elf=ELFFile(f)
+                  text=elf.get_section_by_name(".text")
+                  if text is None:
+                      print("NO .text")
+                      return
+                  code=text.data(); base=text["sh_addr"]
+                  md=Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+                  md.detail=False
+                  ins=list(md.disasm(code,base))
+                  by_addr={x.address:x for x in ins}
+
+                  load_segments=[seg for seg in elf.iter_segments() if seg["p_type"]=="PT_LOAD"]
+                  def fileoff_to_va(off):
+                      for seg in load_segments:
+                          po=seg["p_offset"]; fs=seg["p_filesz"]
+                          if po <= off < po+fs:
+                              return seg["p_vaddr"]+(off-po)
+                      return None
+
+                  for needle in needles:
+                      start=0; found=[]
+                      while True:
+                          off=data.find(needle+b"\0",start)
+                          if off<0: break
+                          found.append((off,fileoff_to_va(off)))
+                          start=off+1
+                      print(f"{needle.decode()}: {found}")
+                      # ARM64 typically materializes string addresses with ADRP + ADD.
+                      # Find ADRP page references to the string page, then nearby ADDs
+                      # that complete the low 12-bit address.
+                      for off,va in found:
+                          if va is None: continue
+                          page=va & ~0xfff; low=va & 0xfff
+                          refs=[]
+                          for idx,x in enumerate(ins):
+                              if x.mnemonic!="adrp": continue
+                              parts=[p.strip() for p in x.op_str.split(",")]
+                              if len(parts)!=2: continue
+                              try: target=int(parts[1].lstrip("#"),0)
+                              except: continue
+                              if target!=page: continue
+                              reg=parts[0]
+                              for y in ins[idx+1:idx+7]:
+                                  if y.mnemonic=="add" and y.op_str.startswith(reg+", "+reg+", "):
+                                      m=re.search(r"#(0x[0-9a-fA-F]+|\d+)",y.op_str)
+                                      if m and int(m.group(1),0)==low:
+                                          refs.append((x.address,x.op_str,y.address,y.op_str))
+                                          break
+                          print(f"  xrefs={refs[:20]} count={len(refs)}")
+
+          analyze("51955",os.environ["ROOT51955"]+"/sbin/rc")
+          analyze("52334",os.environ["ROOT52334"]+"/sbin/rc")
+          PY
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: conntrack-runtime-lineage
+          path: reports/conntrack-runtime-lineage.txt
+          if-no-files-found: error
+          retention-days: 14
