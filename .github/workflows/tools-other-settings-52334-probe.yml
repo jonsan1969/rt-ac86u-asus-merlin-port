@@ -1,0 +1,94 @@
+name: Probe ASUS 52334 Other Settings backends
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/tools-other-settings-52334-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe backend keys and service tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/tools-other-settings-52334.txt
+          : > "$OUT"
+
+          keys=(
+            ct_max ct_tcp_timeout ct_udp_timeout
+            rstats_path rstats_new rstats_offset rstats_stime
+            cstats_enable cstats_all cstats_include cstats_exclude
+            dns_local_cache ntp_ready ntpd_enable ntpd_server_redir
+            shell_timeout reboot_schedule_enable reboot_schedule
+          )
+
+          echo '===== KEY PRESENCE =====' >> "$OUT"
+          for k in "${keys[@]}"; do
+            rc=0; httpd=0; web=0
+            strings -a "$R/sbin/rc" | grep -Fxq "$k" && rc=1 || true
+            strings -a "$R/usr/sbin/httpd" | grep -Fxq "$k" && httpd=1 || true
+            grep -RIl --binary-files=without-match -F "$k" "$R/www" >/dev/null 2>&1 && web=1 || true
+            printf '%-24s rc=%d httpd=%d web=%d\n' "$k" "$rc" "$httpd" "$web" >> "$OUT"
+          done
+
+          echo >> "$OUT"
+          echo '===== SERVICE-LIKE STRING SURFACE =====' >> "$OUT"
+          strings -a "$R/sbin/rc" | grep -Ei '(^|[_-])(rstats|cstats|conntrack|dnsmasq|ntp|ntpd)([_-]|$)|restart_(rstats|cstats|conntrack|dnsmasq|ntp|ntpd)' | sort -u >> "$OUT" || true
+
+          echo >> "$OUT"
+          echo '===== RSTATS/CSTATS FILES =====' >> "$OUT"
+          find "$R" -maxdepth 4 \( -name 'rstats' -o -name 'cstats' -o -name 'cru' \) -print -exec ls -l {} \; >> "$OUT" 2>/dev/null || true
+
+          echo >> "$OUT"
+          echo '===== STOCK WEB REFERENCES =====' >> "$OUT"
+          grep -RInaE --binary-files=without-match 'rstats_path|rstats_offset|ct_tcp_timeout|ct_udp_timeout|ct_max|dns_local_cache|ntpd_enable|ntpd_server_redir' "$R/www" 2>/dev/null | head -n 800 >> "$OUT" || true
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tools-other-settings-52334
+          path: reports/tools-other-settings-52334.txt
+          if-no-files-found: error
+          retention-days: 14
