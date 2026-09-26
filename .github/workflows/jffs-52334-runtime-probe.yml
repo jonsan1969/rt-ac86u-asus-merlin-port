@@ -89,7 +89,7 @@ jobs:
           for rel in sbin/rc usr/sbin/httpd; do
             [ -f "$R/$rel" ] || continue
             echo "--- $rel ---" >> "$OUT"
-            strings -a "$R/$rel" | grep -E 'jffs2_(on|format|clean_fs|exec|scripts)|/jffs/|mount.*jffs|jffs.*mount' | sort -u >> "$OUT" || true
+            strings -a "$R/$rel" | grep -E 'jffs2_(on|format|clean_fs|exec|scripts)|/jffs/|\.asusrouter|run_userfile|mount.*jffs|jffs.*mount' | sort -u >> "$OUT" || true
           done
           if [ -f "$R/www/Advanced_System_Content.asp" ]; then
             grep -nE 'jffs2_|JFFS|jffs' "$R/www/Advanced_System_Content.asp" >> "$OUT" || true
