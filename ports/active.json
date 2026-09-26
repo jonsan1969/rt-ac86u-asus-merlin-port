@@ -43,6 +43,126 @@
       "sha256": "f4f19dd4e0437869d476e37d9b74b0bf75690886941bd00c0079eb1425dd0bba",
       "mode": "0755",
       "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user1.asp",
+      "link_target": "user/user1.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user2.asp",
+      "link_target": "user/user2.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user3.asp",
+      "link_target": "user/user3.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user4.asp",
+      "link_target": "user/user4.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user5.asp",
+      "link_target": "user/user5.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user6.asp",
+      "link_target": "user/user6.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user7.asp",
+      "link_target": "user/user7.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user8.asp",
+      "link_target": "user/user8.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user9.asp",
+      "link_target": "user/user9.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user10.asp",
+      "link_target": "user/user10.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user11.asp",
+      "link_target": "user/user11.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user12.asp",
+      "link_target": "user/user12.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user13.asp",
+      "link_target": "user/user13.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user14.asp",
+      "link_target": "user/user14.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user15.asp",
+      "link_target": "user/user15.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user16.asp",
+      "link_target": "user/user16.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user17.asp",
+      "link_target": "user/user17.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user18.asp",
+      "link_target": "user/user18.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user19.asp",
+      "link_target": "user/user19.asp",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/www/user20.asp",
+      "link_target": "user/user20.asp",
+      "policy": "add_only"
     }
   ]
 }
