@@ -45,9 +45,11 @@ The staged adapter at `ports/candidates/Tools_OtherSettings.asp` intentionally e
 
 It preserves Merlin's value ranges and vector encoding but does not expose `ct_max`.
 
-Activation is gated on a runtime-level proof that the ASUS 52334 service dispatcher accepts the `conntrack` service token used by Merlin's `action_script=restart_conntrack`.
+ASUS source provenance changes the apply strategy. The timeout backend itself is ASUS-origin: `ct_tcp_timeout`, `ct_udp_timeout` and `setup_conntrack()` are already present in the clean RT-AC86U ASUS GPL 382_15098 initial import, where `init.c` invokes `setup_conntrack()` during boot. By contrast, the `strcmp(script, "conntrack")` service-dispatch block is not present in that clean ASUS-origin point and enters the available history through the older Merlin merge lineage.
 
-A plain `strings -Fx conntrack` test is insufficient because link-time suffix/string pooling can hide standalone service tokens. The project therefore compares the stock runtime against the verified Merlin runtime, where the same WebUI action contract is known to be used.
+Therefore phase 1 must **not** rely on `action_script=restart_conntrack`. The staged adapter saves only the verified ASUS NVRAM vectors and requests a normal stock reboot, allowing the ASUS boot path to apply them through `setup_conntrack()`. Immediate conntrack reload remains deferred unless the 52334 runtime dispatcher is independently proven.
+
+The earlier plain `strings -Fx conntrack` negative was also shown to be unsuitable as a discriminator: the verified Merlin 386.14_2 runtime itself lacks an exact standalone `conntrack` string even though its WebUI uses `restart_conntrack`.
 
 ## Traffic-history follow-up
 
