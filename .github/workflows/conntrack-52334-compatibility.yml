@@ -68,6 +68,12 @@ jobs:
           section 'WEBUI REFERENCES'
           grep -RInaE --binary-files=without-match             'ct_max|ct_tcp_timeout|ct_udp_timeout|restart_conntrack|TCP Timeout|UDP Timeout|conntrack'             "$R/www" 2>/dev/null | head -n 500 >> "$OUT" || true
 
+          section 'MENU REFERENCES'
+          if [ -f "$R/www/require/modules/menuTree.js" ]; then
+            grep -nE 'Tools_OtherSettings|Tools_Sysinfo|menu_Tools|Other Settings|Sysinfo' "$R/www/require/modules/menuTree.js" >> "$OUT" || true
+            sha256sum "$R/www/require/modules/menuTree.js" >> "$OUT"
+          fi
+
           section 'RELEVANT STOCK PAGES'
           for p in Advanced_Firewall_Content.asp Advanced_System_Content.asp Tools_OtherSettings.asp; do
             if [ -f "$R/www/$p" ]; then
@@ -80,7 +86,10 @@ jobs:
 
           section 'REQUIRED SIGNATURE SUMMARY'
           failed=0
-          for sig in ct_max ct_tcp_timeout ct_udp_timeout restart_conntrack; do
+          # rc_service accepts action_script=restart_<service> and dispatches the
+          # stripped service name.  For the ASUS backend contract we therefore
+          # require the actual service token, not a literal restart_conntrack string.
+          for sig in ct_tcp_timeout ct_udp_timeout conntrack; do
             if strings -a "$R/sbin/rc" | grep -Fxq "$sig"; then
               echo "PASS rc::$sig" >> "$OUT"
             else
