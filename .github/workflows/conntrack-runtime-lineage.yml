@@ -181,7 +181,28 @@ jobs:
                               lit_off=va_to_fileoff(lit_va)
                               if lit_off is None or lit_off+4>len(data): continue
                               ptr=int.from_bytes(data[lit_off:lit_off+4],"little")
-                              if ptr != va: continue
+                              reg=x.op_str.split(",",1)[0].strip()
+                              matched=(ptr == va)
+                              # Position-independent ARM code frequently loads a
+                              # signed relative offset, then adds PC to materialize
+                              # the local string address.
+                              if not matched:
+                                  signed=ptr if ptr < 0x80000000 else ptr-0x100000000
+                                  for y in ins[idx+1:idx+5]:
+                                      ops=[p.strip() for p in y.op_str.split(",")]
+                                      if y.mnemonic=="add" and len(ops)>=3 and ops[0]==reg:
+                                          if (ops[1]=="pc" and ops[2]==reg) or (ops[1]==reg and ops[2]=="pc"):
+                                              target=(y.address+8+signed) & 0xffffffff
+                                              if target==va:
+                                                  matched=True
+                                                  break
+                                      if y.mnemonic=="sub" and len(ops)>=3 and ops[0]==reg:
+                                          if (ops[1]=="pc" and ops[2]==reg):
+                                              target=(y.address+8-signed) & 0xffffffff
+                                              if target==va:
+                                                  matched=True
+                                                  break
+                              if not matched: continue
                               context=[f"{z.address:08x}: {z.mnemonic} {z.op_str}" for z in ins[max(0,idx-5):idx+8]]
                               refs.append((x.address,context))
                           print(f"  literal_xrefs={len(refs)}")
