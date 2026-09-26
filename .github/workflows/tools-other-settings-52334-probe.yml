@@ -80,6 +80,12 @@ jobs:
           find "$R" -maxdepth 4 \( -name 'rstats' -o -name 'cstats' -o -name 'cru' \) -print -exec ls -l {} \; >> "$OUT" 2>/dev/null || true
 
           echo >> "$OUT"
+          echo '===== REBOOT APPLY CONTRACT =====' >> "$OUT"
+          strings -a "$R/sbin/rc" | grep -E '^reboot$|reboot' | sort -u | head -n 80 >> "$OUT" || true
+          strings -a "$R/usr/sbin/httpd" | grep -E 'get_default_reboot_time|reboot' | sort -u | head -n 120 >> "$OUT" || true
+          grep -RInaE --binary-files=without-match 'FormActions\([^\n]*reboot|get_default_reboot_time\(\)|action_script[^\n]*reboot' "$R/www" 2>/dev/null | head -n 200 >> "$OUT" || true
+
+          echo >> "$OUT"
           echo '===== STOCK WEB REFERENCES =====' >> "$OUT"
           grep -RInaE --binary-files=without-match 'rstats_path|rstats_offset|ct_tcp_timeout|ct_udp_timeout|ct_max|dns_local_cache|ntpd_enable|ntpd_server_redir' "$R/www" 2>/dev/null | head -n 800 >> "$OUT" || true
 
