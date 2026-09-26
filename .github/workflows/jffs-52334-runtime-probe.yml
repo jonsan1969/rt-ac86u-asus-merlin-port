@@ -95,6 +95,19 @@ jobs:
             grep -nE 'jffs2_|JFFS|jffs' "$R/www/Advanced_System_Content.asp" >> "$OUT" || true
           fi
 
+          section 'AMTM BOOTSTRAP DEPENDENCIES'
+          for cmd in curl dos2unix unix2dos cmp tail wc awk mv rm mkdir sed grep cut touch nvram; do
+            echo "--- path: $cmd ---" >> "$OUT"
+            find "$R/bin" "$R/usr/bin" "$R/sbin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$cmd" -print -exec ls -l {} \; 2>/dev/null >> "$OUT" || true
+          done
+          echo '--- BusyBox candidate applet strings ---' >> "$OUT"
+          strings -a "$R/bin/busybox" | grep -Ex 'dos2unix|unix2dos|cmp|tail|wc|awk|mv|rm|mkdir|sed|grep|cut|touch' | sort -u >> "$OUT" || true
+          if [ -f "$R/usr/sbin/curl" ]; then
+            echo 'PASS /usr/sbin/curl present' >> "$OUT"
+          else
+            echo 'MISSING /usr/sbin/curl' >> "$OUT"
+          fi
+
           section 'CORE BINARY STRINGS'
           for rel in sbin/rc usr/sbin/httpd bin/busybox; do
             [ -f "$R/$rel" ] || continue
