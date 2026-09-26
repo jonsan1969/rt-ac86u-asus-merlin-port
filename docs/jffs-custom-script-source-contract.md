@@ -26,7 +26,8 @@ The guarded overlay engine rejects writes through rootfs symlinks, so persistent
 Targeted image probes established:
 
 - JFFS mount/format support is present: `jffs2_on`, `jffs2_format`, `jffs2_clean_fs`, and JFFS mount strings are present in stock `rc`.
-- The stock image has no `jffs2_exec` signature.
+- The stock image has no `jffs2_exec` signature and no `/jffs/.asusrouter` signature.
+- Stock `rc` does contain generic `.asusrouter` strings in the ASUS Apps/USB autorun namespace (for example `%s/%s/.asusrouter`), so those strings are not evidence of a JFFS autorun path.
 - The principal Merlin lifecycle signatures are absent from stock `rc`; the generic string `firewall-start` exists but is not proof of Merlin's custom-script engine.
 - `/www/user` already points to `/var/wwwext` at runtime.
 - `/usr/sbin/helper.sh` and `/jffs/addons` are absent in stock.
