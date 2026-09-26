@@ -134,7 +134,7 @@ jobs:
                           for idx,x in enumerate(ins):
                               if x.mnemonic != "ldr" or "[pc" not in x.op_str:
                                   continue
-                              m=re.search(r"\\[pc(?:,\\s*#(-?(?:0x[0-9a-fA-F]+|\\d+)))?\\]",x.op_str)
+                              m=re.search(r"\[pc(?:,\s*#(-?(?:0x[0-9a-fA-F]+|\d+)))?\]",x.op_str)
                               if not m: continue
                               imm=int(m.group(1),0) if m.group(1) else 0
                               lit_va=(x.address+8+imm) & 0xffffffff
