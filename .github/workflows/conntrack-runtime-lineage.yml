@@ -102,22 +102,22 @@ jobs:
             echo "===== EXACT/SUFFIX TOKEN CHECK $label =====" >> "$OUT"
             if strings -a "$R/sbin/rc" | grep -Fxq 'conntrack'; then echo 'exact_conntrack=yes' >> "$OUT"; else echo 'exact_conntrack=no' >> "$OUT"; fi
             python3 - "$R/sbin/rc" <<'PYTOK' >> "$OUT"
-            import sys
-            from pathlib import Path
-            data=Path(sys.argv[1]).read_bytes()
-            for token in (b"conntrack",b"leds",b"updateresolv"):
-                hits=[]
-                pos=0
-                while True:
-                    i=data.find(token+b"\0",pos)
-                    if i<0: break
-                    lo=data.rfind(b"\0",0,i)+1
-                    hi=data.find(b"\0",i)
-                    host=data[lo:hi].decode("latin1","replace")
-                    hits.append((hex(i),host))
-                    pos=i+1
-                print(token.decode(),hits)
-            PYTOK
+          import sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          for token in (b"conntrack",b"leds",b"updateresolv"):
+              hits=[]
+              pos=0
+              while True:
+                  i=data.find(token+b"\0",pos)
+                  if i<0: break
+                  lo=data.rfind(b"\0",0,i)+1
+                  hi=data.find(b"\0",i)
+                  host=data[lo:hi].decode("latin1","replace")
+                  hits.append((hex(i),host))
+                  pos=i+1
+              print(token.decode(),hits)
+          PYTOK
           done
 
           python3 - <<'PY' >> "$OUT"
