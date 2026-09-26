@@ -87,6 +87,7 @@ function applyRule() {
 		document.getElementById("udp_unreplied").value + " " +
 		document.getElementById("udp_assured").value;
 
+	FormActions("start_apply.htm", "apply", "reboot", "<% get_default_reboot_time(); %>");
 	showLoading();
 	document.form.submit();
 	return true;
@@ -105,8 +106,8 @@ function applyRule() {
 <input type="hidden" name="next_page" value="Tools_OtherSettings.asp">
 <input type="hidden" name="modified" value="0">
 <input type="hidden" name="action_mode" value="apply">
-<input type="hidden" name="action_script" value="restart_conntrack">
-<input type="hidden" name="action_wait" value="5">
+<input type="hidden" name="action_script" value="">
+<input type="hidden" name="action_wait" value="">
 <input type="hidden" name="first_time" value="">
 <input type="hidden" name="preferred_lang" value="<% nvram_get("preferred_lang"); %>">
 <input type="hidden" name="firmver" value="<% nvram_get("firmver"); %>">
