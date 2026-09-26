@@ -51,22 +51,20 @@ From pinned Merlin `release/src/router/shared/scripts.c`:
   - replaces a generated target with `/jffs/configs/<config>` when enabled.
 - `append_custom_config(config, fp)`
   - appends `/jffs/configs/<config>.add` to the generated config when enabled.
-- `setup_jffs_dirs()`
-  - ensures `/jffs/scripts`, `/jffs/configs`, and `/jffs/addons` exist with mode 0755.
-
-The corresponding declarations belong in the shared header used by the rebuilt core components.
+The corresponding declarations for the four helper functions belong in the shared header used by rebuilt core components.
 
 ## Mount-time integration
 
-Merlin calls `setup_jffs_dirs()` after successful JFFS/UBIFS setup:
+Pinned Merlin `386.14_2` does **not** use the later `setup_jffs_dirs()` helper.  In this donor generation the mount implementations create the directories inline after the persistent filesystem is loaded:
 
-- `rc/jffs2.c` for JFFS2;
-- `rc/ubifs.c` for UBIFS;
-- the relevant `rc.h` inline path for eMMC variants.
+- `rc/ubifs.c`: create `/jffs/scripts`, `/jffs/configs`, and `/jffs/addons` with mode 0755 after `userfs_prepare()` and the Loaded/Formatted notice;
+- `rc/jffs2.c`: the same three directory creations after successful JFFS setup.
 
-For RT-AC86U/HND, the implementation must be placed after the ASUS-side persistent filesystem is successfully available, not before it.
+Both pinned donor files still contain the older ASUS `.asusrouter` / `jffs2_exec` or `ubifs_exec` autoexec block, but it is wrapped in `#if 0 /* disable legacy & asus autoexec */` and therefore is deliberately **not** part of Merlin's active custom-script mechanism.
 
-The ASUS 52334 mount implementation and error handling remain authoritative; only the directory-creation delta is to be grafted.
+For RT-AC86U/HND, directory creation must be inserted only after the ASUS-side persistent filesystem is successfully available.
+
+The ASUS 52334 mount implementation and error handling remain authoritative; only the three-directory creation behavior is to be grafted. Do not revive legacy `.asusrouter` or `jffs2_exec` merely as a shortcut.
 
 ## Lifecycle hook contract
 
