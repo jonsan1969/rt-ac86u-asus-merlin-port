@@ -84,9 +84,9 @@ jobs:
           import os, re
           from pathlib import Path
           from elftools.elf.elffile import ELFFile
-          from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+          from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_LITTLE_ENDIAN
 
-          needles=(b"ct_tcp_timeout", b"ct_udp_timeout", b"ct_max")
+          needles=(b"ct_tcp_timeout", b"ct_udp_timeout", b"ct_max", b"conntrack", b"leds", b"updateresolv")
 
           def analyze(label,path):
               print(f"\n===== STRING XREF PROBE {label} =====")
@@ -98,7 +98,7 @@ jobs:
                       print("NO .text")
                       return
                   code=text.data(); base=text["sh_addr"]
-                  md=Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+                  md=Cs(CS_ARCH_ARM, CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN)
                   md.detail=False
                   ins=list(md.disasm(code,base))
                   by_addr={x.address:x for x in ins}
@@ -119,28 +119,35 @@ jobs:
                           found.append((off,fileoff_to_va(off)))
                           start=off+1
                       print(f"{needle.decode()}: {found}")
-                      # ARM64 typically materializes string addresses with ADRP + ADD.
-                      # Find ADRP page references to the string page, then nearby ADDs
-                      # that complete the low 12-bit address.
+                      def va_to_fileoff(va):
+                          for seg in load_segments:
+                              pv=seg["p_vaddr"]; fs=seg["p_filesz"]
+                              if pv <= va < pv+fs:
+                                  return seg["p_offset"]+(va-pv)
+                          return None
+
+                      # ARM32 GCC commonly loads string pointers through a
+                      # PC-relative literal pool: ldr rN, [pc, #imm].
                       for off,va in found:
                           if va is None: continue
-                          page=va & ~0xfff; low=va & 0xfff
                           refs=[]
                           for idx,x in enumerate(ins):
-                              if x.mnemonic!="adrp": continue
-                              parts=[p.strip() for p in x.op_str.split(",")]
-                              if len(parts)!=2: continue
-                              try: target=int(parts[1].lstrip("#"),0)
-                              except: continue
-                              if target!=page: continue
-                              reg=parts[0]
-                              for y in ins[idx+1:idx+7]:
-                                  if y.mnemonic=="add" and y.op_str.startswith(reg+", "+reg+", "):
-                                      m=re.search(r"#(0x[0-9a-fA-F]+|\d+)",y.op_str)
-                                      if m and int(m.group(1),0)==low:
-                                          refs.append((x.address,x.op_str,y.address,y.op_str))
-                                          break
-                          print(f"  xrefs={refs[:20]} count={len(refs)}")
+                              if x.mnemonic != "ldr" or "[pc" not in x.op_str:
+                                  continue
+                              m=re.search(r"\\[pc(?:,\\s*#(-?(?:0x[0-9a-fA-F]+|\\d+)))?\\]",x.op_str)
+                              if not m: continue
+                              imm=int(m.group(1),0) if m.group(1) else 0
+                              lit_va=(x.address+8+imm) & 0xffffffff
+                              lit_off=va_to_fileoff(lit_va)
+                              if lit_off is None or lit_off+4>len(data): continue
+                              ptr=int.from_bytes(data[lit_off:lit_off+4],"little")
+                              if ptr != va: continue
+                              context=[f"{z.address:08x}: {z.mnemonic} {z.op_str}" for z in ins[max(0,idx-5):idx+8]]
+                              refs.append((x.address,context))
+                          print(f"  literal_xrefs={len(refs)}")
+                          for addr,ctx in refs[:8]:
+                              print(f"  REF {addr:08x}")
+                              for line in ctx: print("    "+line)
 
           analyze("51955",os.environ["ROOT51955"]+"/sbin/rc")
           analyze("52334",os.environ["ROOT52334"]+"/sbin/rc")
