@@ -1,0 +1,67 @@
+name: Trace conntrack source provenance
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/conntrack-source-provenance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone pinned Merlin history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git clone --filter=blob:none --single-branch --branch 386.14_2 \
+            https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          test "$(git -C work/merlin-src rev-parse HEAD)" = '6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+
+      - name: Trace conntrack service and backend history
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+          OUT=../../reports/conntrack-source-provenance.txt
+          : > "$OUT"
+
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'SERVICE DISPATCH HISTORY'
+          git log --date=short --format='%H %ad %s' -S'strcmp(script, "conntrack")' -- release/src/router/rc/services.c | head -n 80 >> "$OUT" || true
+
+          section 'TCP TIMEOUT BACKEND HISTORY'
+          git log --date=short --format='%H %ad %s' -S'ct_tcp_timeout' -- release/src/router/rc/common.c | head -n 80 >> "$OUT" || true
+
+          section 'UDP TIMEOUT BACKEND HISTORY'
+          git log --date=short --format='%H %ad %s' -S'ct_udp_timeout' -- release/src/router/rc/common.c | head -n 80 >> "$OUT" || true
+
+          section 'CURRENT SERVICE CONTEXT'
+          grep -n -B8 -A12 'strcmp(script, "conntrack")' release/src/router/rc/services.c >> "$OUT" || true
+
+          section 'CURRENT BACKEND CONTEXT'
+          grep -n -B5 -A90 'void setup_conntrack' release/src/router/rc/common.c | head -n 110 >> "$OUT" || true
+
+          section '52796 MERGE INTERSECTION'
+          git diff -U8 3a61e53e9ca478934f15fd896039ba820027b109 e9e6035c85c673701646f2cf15de09b01a997ab9 -- release/src/router/rc/services.c release/src/router/rc/common.c \
+            | grep -n -E 'conntrack|ct_tcp_timeout|ct_udp_timeout|^@@|^diff --git' >> "$OUT" || true
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: conntrack-source-provenance
+          path: reports/conntrack-source-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
