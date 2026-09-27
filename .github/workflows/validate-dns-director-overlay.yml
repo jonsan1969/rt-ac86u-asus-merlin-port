@@ -224,10 +224,13 @@ jobs:
           menu=(root/"www/require/modules/menuTree.js").read_text(encoding="utf-8")
           tools_index='index: "menu_Tools"'
           tools_page='{url: "Tools_OtherSettings.asp", tabName: "Other Settings"}'
+          monthly_page='{url: "Main_TrafficMonitor_monthly.asp", tabName: "Monthly Traffic"}'
           if menu.count(tools_index) != 1:
               raise SystemExit("menuTree.js Tools menu index not present exactly once")
           if menu.count(tools_page) != 1:
               raise SystemExit("menuTree.js Other Settings entry not present exactly once")
+          if menu.count(monthly_page) != 1:
+              raise SystemExit("menuTree.js Monthly Traffic entry not present exactly once")
 
           other=(root/"www/Tools_OtherSettings.asp").read_text(encoding="utf-8")
           other_required=[
@@ -298,6 +301,31 @@ jobs:
           if (helper_path.stat().st_mode & 0o777) != 0o755:
               raise SystemExit("Merlin addon helper mode is not 0755")
 
+          monthly=(root/"www/Main_TrafficMonitor_monthly.asp").read_text(encoding="utf-8-sig")
+          monthly_required=[
+              '<% bandwidth("monthly"); %>',
+              'monthly_history',
+              '/js/chart.min.js',
+              'Main_TrafficMonitor_realtime.asp',
+              'Main_TrafficMonitor_last24.asp',
+              'Main_TrafficMonitor_daily.asp',
+          ]
+          monthly_forbidden=[
+              'cstats_enable',
+              'Main_TrafficMonitor_devrealtime.asp',
+              'Main_TrafficMonitor_devdaily.asp',
+              'Main_TrafficMonitor_devmonthly.asp',
+          ]
+          missing_monthly=[x for x in monthly_required if x not in monthly]
+          forbidden_monthly=[x for x in monthly_forbidden if x in monthly]
+          if missing_monthly:
+              raise SystemExit(f"Monthly Traffic adapter missing required global-rstats contract: {missing_monthly}")
+          if forbidden_monthly:
+              raise SystemExit(f"Monthly Traffic adapter exposes unsupported per-device surface: {forbidden_monthly}")
+          chart=root/"www/js/chart.min.js"
+          if not chart.is_file() or chart.stat().st_size < 100000:
+              raise SystemExit("Chart.js monthly traffic asset missing or unexpectedly small")
+
           for i in range(1,21):
               slot=root/f"www/user{i}.asp"
               if not slot.is_symlink():
@@ -330,6 +358,13 @@ jobs:
           check_backend_signature "$ASUS_ROOT/bin/rstats" 'rstats_stime' 'Traffic history daemon save interval' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/bin/rstats" 'rstats_offset' 'Traffic history daemon monthly cycle' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/bin/rstats" '*nvram' 'Traffic history daemon NVRAM storage mode' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" '/var/spool/rstats-history.js' 'Traffic history EJ spool' || backend_failed=1
+          if strings -a "$ASUS_ROOT/bin/rstats" | grep -Fq 'MONTHLY: p='; then
+            echo 'PASS backend signature: monthly rstats history'
+          else
+            echo 'ERROR missing backend signature: monthly rstats history' >&2
+            backend_failed=1
+          fi
           if (( backend_failed )); then
             echo 'ERROR: one or more required ASUS 52334 backend signatures are missing' >&2
             exit 1
