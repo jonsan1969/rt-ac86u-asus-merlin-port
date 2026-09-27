@@ -1,0 +1,120 @@
+name: Probe ASUS 52334 rstats compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/rstats-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ASUS_ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe rstats runtime contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/rstats-52334-compatibility.txt
+          : > "$OUT"
+
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'RSTATS BINARY'
+          test -f "$R/bin/rstats"
+          file "$R/bin/rstats" >> "$OUT"
+          sha256sum "$R/bin/rstats" >> "$OUT"
+          stat -c 'mode=%a size=%s' "$R/bin/rstats" >> "$OUT"
+
+          section 'RC RSTATS SURFACE'
+          strings -a "$R/sbin/rc" | grep -E \
+            '(^|[^[:alnum:]_])(rstats|rstats_[[:alnum:]_]+|start_rstats|stop_rstats|restart_rstats)([^[:alnum:]_]|$)' \
+            | sort -u >> "$OUT" || true
+
+          section 'RSTATS DAEMON STRINGS'
+          strings -a "$R/bin/rstats" | grep -Ei \
+            'rstats|nvram|history|daily|monthly|speed|backup|save|path|/jffs|/tmp|/mnt|\.gz|\.bak' \
+            | sort -u | head -n 400 >> "$OUT" || true
+
+          section 'EXACT KEY PRESENCE BY BINARY'
+          keys=(rstats_path rstats_new rstats_offset rstats_stime rstats_enable)
+          for k in "${keys[@]}"; do
+            rc=0; daemon=0; web=0
+            strings -a "$R/sbin/rc" | grep -Fxq "$k" && rc=1 || true
+            strings -a "$R/bin/rstats" | grep -Fxq "$k" && daemon=1 || true
+            grep -RIl --binary-files=without-match -F "$k" "$R/www" >/dev/null 2>&1 && web=1 || true
+            printf '%-18s rc=%d daemon=%d web=%d\n' "$k" "$rc" "$daemon" "$web" >> "$OUT"
+          done
+
+          section 'TRAFFIC MONITOR WEB SURFACE'
+          find "$R/www" -maxdepth 1 -type f -name 'Main_TrafficMonitor*' -print | sort >> "$OUT" || true
+          grep -RInaE --binary-files=without-match \
+            'rstats|traffic.*history|Traffic.*Monitor' "$R/www/Main_TrafficMonitor"* 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'BOOT/SERVICE CORRELATION'
+          strings -a "$R/sbin/rc" | grep -E '^rstats$|rstats_bak|rstats_new|rstats_path' | sort -u >> "$OUT" || true
+
+          section 'SUMMARY'
+          failed=0
+          for sig in rstats_path rstats_new; do
+            if strings -a "$R/sbin/rc" | grep -Fxq "$sig"; then
+              echo "PASS rc::$sig" >> "$OUT"
+            else
+              echo "MISSING rc::$sig" >> "$OUT"
+              failed=1
+            fi
+          done
+          if [ -f "$R/bin/rstats" ]; then
+            echo 'PASS /bin/rstats' >> "$OUT"
+          else
+            echo 'MISSING /bin/rstats' >> "$OUT"
+            failed=1
+          fi
+
+          cat "$OUT"
+          exit "$failed"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rstats-52334-compatibility
+          path: reports/rstats-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
