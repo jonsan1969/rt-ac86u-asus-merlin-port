@@ -89,6 +89,51 @@ jobs:
           echo '===== STOCK WEB REFERENCES =====' >> "$OUT"
           grep -RInaE --binary-files=without-match 'rstats_path|rstats_offset|ct_tcp_timeout|ct_udp_timeout|ct_max|dns_local_cache|ntpd_enable|ntpd_server_redir' "$R/www" 2>/dev/null | head -n 800 >> "$OUT" || true
 
+          echo >> "$OUT"
+          echo '===== STOCK MENU TREE =====' >> "$OUT"
+          MENU="$R/www/require/modules/menuTree.js"
+          test -f "$MENU"
+          sha256sum "$MENU" >> "$OUT"
+          python3 - "$MENU" >> "$OUT" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          lines=p.read_text(encoding="utf-8",errors="replace").splitlines()
+          needles=("menu_AiCloud","menu_Split","Tools_OtherSettings.asp","menu_Tools")
+          hits=sorted({i for i,line in enumerate(lines) if any(n in line for n in needles)})
+          if not hits:
+              print("NO_RELEVANT_MENU_HITS")
+          else:
+              lo=max(0,min(hits)-12); hi=min(len(lines),max(hits)+13)
+              for i in range(lo,hi):
+                  print(f"{i+1:5d}: {lines[i]}")
+          PY
+
+          echo >> "$OUT"
+          echo '===== STAGED ADAPTER CONTRACT =====' >> "$OUT"
+          CAND="$GITHUB_WORKSPACE/ports/candidates/Tools_OtherSettings.asp"
+          test -f "$CAND"
+          required=(
+            'name="ct_tcp_timeout"'
+            'name="ct_udp_timeout"'
+            'FormActions("start_apply.htm", "apply", "reboot", "<% get_default_reboot_time(); %>");'
+            'tcp_established'
+            'udp_unreplied'
+            'udp_assured'
+          )
+          for sig in "${required[@]}"; do
+            grep -Fq "$sig" "$CAND" || { echo "MISSING candidate::$sig" >> "$OUT"; exit 1; }
+            echo "PASS candidate::$sig" >> "$OUT"
+          done
+          forbidden=(ct_max rstats_path rstats_offset cstats_enable dns_local_cache ntpd_enable ntpd_server_redir restart_conntrack)
+          for sig in "${forbidden[@]}"; do
+            if grep -Fq "$sig" "$CAND"; then
+              echo "FORBIDDEN candidate::$sig" >> "$OUT"
+              exit 1
+            fi
+          done
+          echo 'PASS candidate exposes only verified conntrack timeout vectors' >> "$OUT"
+
           cat "$OUT"
 
       - name: Publish report
