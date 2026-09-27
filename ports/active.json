@@ -163,6 +163,25 @@
       "target": "/www/user20.asp",
       "link_target": "user/user20.asp",
       "policy": "add_only"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/Tools_OtherSettings.asp",
+      "target": "/www/Tools_OtherSettings.asp",
+      "sha256": "5a2c171b8f6356d91448ee20b0b6c2ee115a10a014879cc09060e511cd9422f1",
+      "mode": "0644",
+      "policy": "add_only"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/require/modules/menuTree.js",
+      "target_sha256": "73163bdf1b9f20c056a3c2b90629521b0a0f2007ea4967b73c1b3d6d8d9583e2",
+      "find": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
+      "replace": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n{\nmenuName: \"Tools\",\nindex: \"menu_Tools\",\ntab: [\n{url: \"Tools_OtherSettings.asp\", tabName: \"Other Settings\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
     }
   ]
 }

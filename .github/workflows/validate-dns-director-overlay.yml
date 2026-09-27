@@ -178,7 +178,6 @@ jobs:
               "usr/sbin/httpd",
               "usr/sbin/dnsmasq",
               "bin/busybox",
-              "www/require/modules/menuTree.js",
           ]
           for optional in ["usr/sbin/openvpn","usr/bin/dropbearmulti"]:
               if optional in sensitive_before:
@@ -222,9 +221,39 @@ jobs:
           if present_forbidden:
               raise SystemExit(f"adapter references unsupported Merlin-only identifiers: {present_forbidden}")
 
-          menu_hash=digest(root/"www/require/modules/menuTree.js")
-          if menu_hash != sensitive_before["www/require/modules/menuTree.js"]:
-              raise SystemExit("ASUS 52334 menuTree.js changed unexpectedly")
+          menu=(root/"www/require/modules/menuTree.js").read_text(encoding="utf-8")
+          tools_index='index: "menu_Tools"'
+          tools_page='{url: "Tools_OtherSettings.asp", tabName: "Other Settings"}'
+          if menu.count(tools_index) != 1:
+              raise SystemExit("menuTree.js Tools menu index not present exactly once")
+          if menu.count(tools_page) != 1:
+              raise SystemExit("menuTree.js Other Settings entry not present exactly once")
+
+          other=(root/"www/Tools_OtherSettings.asp").read_text(encoding="utf-8")
+          other_required=[
+              'name="ct_tcp_timeout"',
+              'name="ct_udp_timeout"',
+              'FormActions("start_apply.htm", "apply", "reboot", "<% get_default_reboot_time(); %>");',
+              'tcp_established',
+              'udp_unreplied',
+              'udp_assured',
+          ]
+          other_forbidden=[
+              'ct_max',
+              'rstats_path',
+              'rstats_offset',
+              'cstats_enable',
+              'dns_local_cache',
+              'ntpd_enable',
+              'ntpd_server_redir',
+              'restart_conntrack',
+          ]
+          missing_other=[x for x in other_required if x not in other]
+          forbidden_other=[x for x in other_forbidden if x in other]
+          if missing_other:
+              raise SystemExit(f"Other Settings adapter missing verified contract: {missing_other}")
+          if forbidden_other:
+              raise SystemExit(f"Other Settings adapter exposes unverified backend controls: {forbidden_other}")
 
           state=(root/"www/state.js").read_text(encoding="utf-8")
           if state.count('var dnsfilter_support = isSupport("dnsfilter");') != 1:
