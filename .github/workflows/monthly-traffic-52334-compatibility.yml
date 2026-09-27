@@ -55,6 +55,16 @@ jobs:
           : > "$OUT"
           section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
 
+          section 'STAGED ADAPTER'
+          sha256sum ports/files/Main_TrafficMonitor_monthly.asp ports/files/chart.min.js >> "$OUT"
+          grep -F '<% bandwidth("monthly"); %>' ports/files/Main_TrafficMonitor_monthly.asp >> "$OUT"
+          if grep -Eq 'cstats_enable|Main_TrafficMonitor_dev(realtime|daily|monthly)\.asp' ports/files/Main_TrafficMonitor_monthly.asp; then
+            echo 'ERROR staged monthly adapter still references unsupported per-device surface' >> "$OUT"
+            exit 1
+          else
+            echo 'PASS staged adapter is global-rstats only' >> "$OUT"
+          fi
+
           section 'TRAFFIC MONITOR PAGES'
           find "$R/www" -maxdepth 1 -type f -name 'Main_TrafficMonitor*' -printf '%f\n' | sort >> "$OUT" || true
 
