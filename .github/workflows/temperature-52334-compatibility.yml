@@ -69,6 +69,27 @@ jobs:
             'temperature\.[0-9]|get_cpu_temperature|get_fanctrl_info|wl_control_channel|sysinfo|temperature' \
             | sort -u >> "$OUT" || true
 
+          section 'STOCK AJAX CONTRACT'
+          if [ -f "$R/www/ajax_coretmp.asp" ]; then
+            cat "$R/www/ajax_coretmp.asp" >> "$OUT"
+          fi
+
+          section 'HANDLER LOCATION'
+          python3 - "$R" >> "$OUT" <<'PY'
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1])
+          needle=b"get_fanctrl_info\0"
+          for base in (root/"usr/sbin",root/"usr/lib",root/"lib"):
+              if not base.exists(): continue
+              for p in base.rglob("*"):
+                  if not p.is_file(): continue
+                  try: data=p.read_bytes()
+                  except: continue
+                  if needle in data:
+                      print("/"+p.relative_to(root).as_posix())
+          PY
+
           section 'EXISTING WEB CONSUMERS'
           grep -RInaE --binary-files=without-match \
             'temperature\.[01]|get_cpu_temperature|ajax_coretmp|coreTmp|curr_coreTmp|wl_control_channel' \
@@ -90,16 +111,22 @@ jobs:
           else
             echo 'PASS target page absent (add-only candidate)' >> "$OUT"
           fi
-          for sig in 'temperature.0' 'temperature.1' 'get_cpu_temperature'; do
-            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then
-              echo "PASS httpd::$sig" >> "$OUT"
-            else
-              echo "MISSING httpd::$sig" >> "$OUT"
-              failed=1
-            fi
-          done
+          if strings -a "$R/usr/sbin/httpd" | grep -Fq 'get_cpu_temperature'; then
+            echo 'PASS httpd::get_cpu_temperature' >> "$OUT"
+          else
+            echo 'MISSING httpd::get_cpu_temperature' >> "$OUT"
+            failed=1
+          fi
           if [ -f "$R/www/ajax_coretmp.asp" ]; then
             echo 'PASS ajax_coretmp.asp' >> "$OUT"
+            for sig in 'get_fanctrl_info' 'curr_coreTmp_2' 'curr_coreTmp_5' 'curr_cpuTemp'; do
+              if grep -Fq "$sig" "$R/www/ajax_coretmp.asp"; then
+                echo "PASS ajax_coretmp::$sig" >> "$OUT"
+              else
+                echo "MISSING ajax_coretmp::$sig" >> "$OUT"
+                failed=1
+              fi
+            done
           else
             echo 'MISSING ajax_coretmp.asp' >> "$OUT"
             failed=1
