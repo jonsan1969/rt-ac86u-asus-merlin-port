@@ -1,0 +1,118 @@
+name: Probe ASUS 52334 temperature page compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/temperature-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe temperature backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/temperature-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'TARGETS'
+          for rel in www/Advanced_PerformanceTuning_Content.asp www/ajax_coretmp.asp www/fan.svg; do
+            if [ -f "$R/$rel" ]; then
+              echo "PRESENT /$rel" >> "$OUT"
+              sha256sum "$R/$rel" >> "$OUT"
+            else
+              echo "MISSING /$rel" >> "$OUT"
+            fi
+          done
+
+          section 'HTTPD TEMPERATURE SURFACE'
+          strings -a "$R/usr/sbin/httpd" | grep -Ei \
+            'temperature\.[0-9]|get_cpu_temperature|get_fanctrl_info|wl_control_channel|sysinfo|temperature' \
+            | sort -u >> "$OUT" || true
+
+          section 'EXISTING WEB CONSUMERS'
+          grep -RInaE --binary-files=without-match \
+            'temperature\.[01]|get_cpu_temperature|ajax_coretmp|coreTmp|curr_coreTmp|wl_control_channel' \
+            "$R/www" 2>/dev/null | head -n 700 >> "$OUT" || true
+
+          section 'ASSET COMPATIBILITY'
+          for rel in index_style.css form_style.css state.js help.js general.js popup.js validator.js js/jquery.js; do
+            [ -f "$R/www/$rel" ] && echo "PASS $rel" >> "$OUT" || echo "MISSING $rel" >> "$OUT"
+          done
+
+          section 'MENU PREIMAGE'
+          sha256sum "$R/www/require/modules/menuTree.js" >> "$OUT"
+          grep -n -A30 -B15 'Advanced_SettingBackup_Content.asp' "$R/www/require/modules/menuTree.js" >> "$OUT" || true
+
+          section 'SUMMARY'
+          failed=0
+          if [ -f "$R/www/Advanced_PerformanceTuning_Content.asp" ]; then
+            echo 'STOCK target page exists' >> "$OUT"
+          else
+            echo 'PASS target page absent (add-only candidate)' >> "$OUT"
+          fi
+          for sig in 'temperature.0' 'temperature.1' 'get_cpu_temperature'; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+              failed=1
+            fi
+          done
+          if [ -f "$R/www/ajax_coretmp.asp" ]; then
+            echo 'PASS ajax_coretmp.asp' >> "$OUT"
+          else
+            echo 'MISSING ajax_coretmp.asp' >> "$OUT"
+            failed=1
+          fi
+
+          cat "$OUT"
+          exit "$failed"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: temperature-52334-compatibility
+          path: reports/temperature-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
