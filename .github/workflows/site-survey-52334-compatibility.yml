@@ -1,0 +1,163 @@
+name: Probe ASUS 52334 Site Survey compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/site-survey-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and Merlin 386.14_2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Extract both root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then
+              echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Probe Site Survey runtime contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=reports/site-survey-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'PAGE PRESENCE'
+          for rel in Advanced_Wireless_Survey.asp SITE_info.asp wds_aplist_2g.asp wds_aplist_5g.asp; do
+            for side in ASUS MERLIN; do
+              if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
+              if [ -f "$R/www/$rel" ]; then
+                echo "$side PRESENT /www/$rel" >> "$OUT"
+                sha256sum "$R/www/$rel" >> "$OUT"
+              else
+                echo "$side MISSING /www/$rel" >> "$OUT"
+              fi
+            done
+          done
+
+          section 'MERLIN PAGE CONTRACT'
+          P="$MERLIN_ROOT/www/Advanced_Wireless_Survey.asp"
+          test -f "$P"
+          grep -nEi -A8 -B5 'sitesurvey|SITE_info|ajax|scan|channel|ssid|bssid|signal|noise|auth|band' "$P" | head -n 800 >> "$OUT" || true
+
+          section 'ASUS HTTPD SURVEY STRINGS'
+          strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Ei \
+            'sitesurvey|site_survey|SITE_info|wds_aplist|wlscan|scan.*wireless|wireless.*scan' \
+            | sort -u >> "$OUT" || true
+
+          section 'ASUS RC/WL SCAN STRINGS'
+          strings -a "$ASUS_ROOT/sbin/rc" | grep -Ei \
+            'sitesurvey|site_survey|wds_aplist|wlscan|scan.*wireless|wireless.*scan' \
+            | sort -u >> "$OUT" || true
+
+          section 'STOCK SURVEY CONSUMERS'
+          grep -RInaE --binary-files=without-match \
+            'SITE_info\.asp|sitesurvey\(|wds_aplist_[25]g|site.?survey' \
+            "$ASUS_ROOT/www" 2>/dev/null | head -n 800 >> "$OUT" || true
+
+          section 'ASSET CHECK'
+          python3 - "$P" "$ASUS_ROOT/www" >> "$OUT" <<'PY'
+          from pathlib import Path
+          import re,sys
+          page=Path(sys.argv[1]).read_text(errors='replace')
+          root=Path(sys.argv[2])
+          refs=[]
+          for pat in (r'<script[^>]+src=["\']([^"\']+)',r'<link[^>]+href=["\']([^"\']+)'):
+              refs += re.findall(pat,page,re.I)
+          seen=set()
+          for ref in refs:
+              if ref in seen: continue
+              seen.add(ref)
+              if ref.startswith(('http://','https://','//')): continue
+              rel=ref.split('?',1)[0].lstrip('/')
+              p=root/rel
+              print(('PASS' if p.exists() else 'MISSING'),ref)
+          PY
+
+          section 'MENU PREIMAGE'
+          sha256sum "$ASUS_ROOT/www/require/modules/menuTree.js" >> "$OUT"
+          grep -n -A40 -B20 'Main_WOL_Content.asp' "$ASUS_ROOT/www/require/modules/menuTree.js" >> "$OUT" || true
+
+          section 'SUMMARY'
+          failed=0
+          if [ -f "$ASUS_ROOT/www/Advanced_Wireless_Survey.asp" ]; then
+            echo 'STOCK page already exists' >> "$OUT"
+          else
+            echo 'PASS target page absent (add-only candidate)' >> "$OUT"
+          fi
+          if [ -f "$ASUS_ROOT/www/SITE_info.asp" ]; then
+            echo 'PASS ASUS SITE_info.asp endpoint exists' >> "$OUT"
+          else
+            echo 'MISSING ASUS SITE_info.asp endpoint' >> "$OUT"
+            failed=1
+          fi
+          if strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Fq 'sitesurvey'; then
+            echo 'PASS ASUS httpd::sitesurvey' >> "$OUT"
+          else
+            echo 'MISSING ASUS httpd::sitesurvey' >> "$OUT"
+            failed=1
+          fi
+
+          cp "$MERLIN_ROOT/www/Advanced_Wireless_Survey.asp" reports/Merlin-Advanced_Wireless_Survey.asp
+          cat "$OUT"
+          exit "$failed"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-survey-52334-compatibility
+          path: |
+            reports/site-survey-52334-compatibility.txt
+            reports/Merlin-Advanced_Wireless_Survey.asp
+          if-no-files-found: error
+          retention-days: 14
