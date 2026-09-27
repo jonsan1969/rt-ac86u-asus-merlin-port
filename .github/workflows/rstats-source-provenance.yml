@@ -1,0 +1,90 @@
+name: Trace rstats source provenance
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/rstats-source-provenance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone pinned Merlin history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git clone --filter=blob:none https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          test "$(git -C work/merlin-src rev-parse 386.14_2)" = '6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b'
+          test "$(git -C work/merlin-src rev-parse 2e104e83cd16cfec2eb55aed10741d70b954f134^{commit})" = '2e104e83cd16cfec2eb55aed10741d70b954f134'
+
+      - name: Extract targeted rstats contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin-src
+          python3 - <<'PY' > ../../reports/rstats-source-provenance.txt
+          import subprocess
+
+          CLEAN="2e104e83cd16cfec2eb55aed10741d70b954f134"
+          DONOR="6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b"
+          specs=[
+              ("release/src/router/rc/services.c", ("stop_rstats", "start_rstats", "restart_rstats", "rstats_bak", "rstats_new", "rstats_path")),
+              ("release/src/router/rstats/rstats.c", ("rstats_path", "rstats_stime", "rstats_offset", "*nvram")),
+          ]
+
+          def get(ref,path):
+              return subprocess.check_output(["git","show",f"{ref}:{path}"],text=True,errors="replace").splitlines()
+
+          def emit(ref,label,path,needles):
+              lines=get(ref,path)
+              hits=sorted({i for i,l in enumerate(lines) if any(n in l for n in needles)})
+              print(f"===== {label} :: {path} =====")
+              if not hits:
+                  print("NO HITS")
+                  return
+              ranges=[]
+              for i in hits:
+                  lo=max(0,i-10); hi=min(len(lines),i+20)
+                  if ranges and lo <= ranges[-1][1]:
+                      ranges[-1]=(ranges[-1][0],max(ranges[-1][1],hi))
+                  else:
+                      ranges.append((lo,hi))
+              for lo,hi in ranges:
+                  print(f"--- lines {lo+1}-{hi} ---")
+                  for n in range(lo,hi):
+                      print(f"{n+1:6d} {lines[n]}")
+
+          print("Clean ASUS-origin reference:")
+          print("2e104e83cd16cfec2eb55aed10741d70b954f134")
+          print("Initial commit of GPL 3.0.0.3.382_15098 for the RT-AC86U")
+          print()
+          for path,needles in specs:
+              emit(CLEAN,"ASUS 382_15098",path,needles)
+              print()
+              emit(DONOR,"Merlin 386.14_2",path,needles)
+              print()
+
+          print("===== TARGETED DIFF STATS =====")
+          subprocess.run(["git","diff","--stat",CLEAN,DONOR,"--",
+                          "release/src/router/rc/services.c",
+                          "release/src/router/rstats/rstats.c"],check=False)
+          PY
+          cat ../../reports/rstats-source-provenance.txt
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rstats-source-provenance
+          path: reports/rstats-source-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
