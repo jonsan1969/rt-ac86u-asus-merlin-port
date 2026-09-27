@@ -9,10 +9,15 @@ def main():
  seen=set()
  for i,e in enumerate(d.get("entries",[]),1):
   t=e.get("target",""); typ=e.get("type","copy"); assert t.startswith("/") and t not in seen and not protected(t)
-  assert typ in {"copy","symlink","text_replace"}
+  assert typ in {"copy","symlink","text_replace","text_replace_multi"}
   if typ=="copy": assert e.get("policy","add_only")=="add_only" and e.get("source") and e.get("sha256") and e.get("source_kind","merlin") in {"merlin","repo"}
   elif typ=="symlink": assert e.get("policy")=="add_only" and e.get("link_target")
-  else: assert e.get("policy")=="patch_exact" and e.get("target_sha256") and "find" in e and "replace" in e and int(e.get("count",1))>0
+  elif typ=="text_replace": assert e.get("policy")=="patch_exact" and e.get("target_sha256") and "find" in e and "replace" in e and int(e.get("count",1))>0
+  else:
+   assert e.get("policy")=="patch_exact" and e.get("target_sha256")
+   reps=e.get("replacements")
+   assert isinstance(reps,list) and len(reps)>0
+   for r in reps: assert "find" in r and "replace" in r and int(r.get("count",1))>0
   seen.add(t)
  print(f"SUCCESS: manifest valid; {len(seen)} entries")
 if __name__=="__main__": main()

@@ -58,15 +58,25 @@ def main():
    lt=e.get("link_target")
    if not lt: raise SystemExit(f"entry {i}: missing link target")
    dst.parent.mkdir(parents=True,exist_ok=True); os.symlink(lt,dst); rows.append((t,typ,"symlink",lt,"-","add_only"))
-  elif typ=="text_replace":
+  elif typ in {"text_replace","text_replace_multi"}:
    if e.get("policy")!="patch_exact" or not dst.is_file(): raise SystemExit(f"entry {i}: invalid exact patch target")
-   pre=e.get("target_sha256"); find=e.get("find"); repl=e.get("replace"); count=int(e.get("count",1))
-   if not pre or find is None or repl is None: raise SystemExit(f"entry {i}: patch metadata missing")
+   pre=e.get("target_sha256")
+   if not pre: raise SystemExit(f"entry {i}: patch preimage missing")
    actual=sha256(dst)
    if actual.lower()!=pre.lower(): raise SystemExit(f"entry {i}: preimage checksum mismatch expected {pre} got {actual}")
-   enc=e.get("encoding","utf-8"); txt=dst.read_text(encoding=enc); found=txt.count(find)
-   if found!=count: raise SystemExit(f"entry {i}: expected {count} exact match(es), found {found}")
-   dst.write_text(txt.replace(find,repl,count),encoding=enc,newline=""); after=sha256(dst)
+   enc=e.get("encoding","utf-8"); txt=dst.read_text(encoding=enc)
+   if typ=="text_replace":
+    replacements=[{"find":e.get("find"),"replace":e.get("replace"),"count":int(e.get("count",1))}]
+   else:
+    replacements=e.get("replacements")
+    if not isinstance(replacements,list) or not replacements: raise SystemExit(f"entry {i}: multi patch replacements missing")
+   for n,r in enumerate(replacements,1):
+    find=r.get("find"); repl=r.get("replace"); count=int(r.get("count",1))
+    if find is None or repl is None or count<1: raise SystemExit(f"entry {i}: replacement {n} metadata invalid")
+    found=txt.count(find)
+    if found!=count: raise SystemExit(f"entry {i}: replacement {n} expected {count} exact match(es), found {found}")
+    txt=txt.replace(find,repl,count)
+   dst.write_text(txt,encoding=enc,newline=""); after=sha256(dst)
    if e.get("result_sha256") and after.lower()!=e["result_sha256"].lower(): raise SystemExit(f"entry {i}: result checksum mismatch")
    rows.append((t,typ,"asus-preimage",pre,after,"patch_exact"))
   else: raise SystemExit(f"entry {i}: unsupported type {typ}")
