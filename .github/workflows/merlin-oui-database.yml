@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   extract:
@@ -67,6 +67,24 @@ jobs:
           PY
           } > reports/ouiDB-provenance.txt
           cat reports/ouiDB-provenance.txt
+
+      - name: Stage verified OUI database in port tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum reports/ouiDB.json | awk '{print $1}')" = '079e881ae86ae8ba503aed0aa7d4c1dca93e4c1f318829e674541ecb23de18a4'
+          mkdir -p ports/files
+          cp reports/ouiDB.json ports/files/ouiDB.json
+          if git diff --quiet -- ports/files/ouiDB.json && git ls-files --error-unmatch ports/files/ouiDB.json >/dev/null 2>&1; then
+            echo 'Verified OUI database already staged'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ports/files/ouiDB.json
+          git commit -m 'port: stage verified Merlin OUI database'
+          git pull --rebase origin asus-52334-merlin-port
+          git push origin HEAD:asus-52334-merlin-port
 
       - name: Publish OUI donor artifact
         uses: actions/upload-artifact@v4
