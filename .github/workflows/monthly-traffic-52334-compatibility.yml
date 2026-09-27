@@ -59,7 +59,7 @@ jobs:
           find "$R/www" -maxdepth 1 -type f -name 'Main_TrafficMonitor*' -printf '%f\n' | sort >> "$OUT" || true
 
           section 'REQUIRED STATIC ASSETS'
-          for rel in js/chart.min.js state.js help.js general.js tmmenu.js tmhist.js popup.js js/jquery.js js/httpApi.js; do
+          for rel in state.js help.js general.js tmmenu.js tmhist.js popup.js js/jquery.js js/httpApi.js; do
             if [ -f "$R/www/$rel" ]; then
               printf 'PASS /www/%s\n' "$rel" >> "$OUT"
               sha256sum "$R/www/$rel" >> "$OUT"
@@ -91,7 +91,7 @@ jobs:
 
           section 'SUMMARY'
           failed=0
-          for rel in js/chart.min.js state.js help.js general.js tmmenu.js tmhist.js popup.js js/jquery.js js/httpApi.js; do
+          for rel in state.js help.js general.js tmmenu.js tmhist.js popup.js js/jquery.js js/httpApi.js; do
             if [ -f "$R/www/$rel" ]; then
               echo "PASS asset::$rel" >> "$OUT"
             else
@@ -105,10 +105,24 @@ jobs:
             echo 'MISSING httpd::bandwidth' >> "$OUT"
             failed=1
           fi
-          if strings -a "$R/bin/rstats" | grep -Fxq 'rstats_enable'; then
-            echo 'PASS rstats::rstats_enable' >> "$OUT"
+          if strings -a "$R/usr/sbin/httpd" | grep -Fxq 'monthly'; then
+            echo 'PASS httpd::monthly' >> "$OUT"
           else
-            echo 'MISSING rstats::rstats_enable' >> "$OUT"
+            echo 'MISSING httpd::monthly' >> "$OUT"
+            failed=1
+          fi
+
+          if strings -a "$R/bin/rstats" | grep -Fq 'MONTHLY: p='; then
+            echo 'PASS rstats::monthly-history' >> "$OUT"
+          else
+            echo 'MISSING rstats::monthly-history' >> "$OUT"
+            failed=1
+          fi
+
+          if [ -f "$R/www/js/chart.min.js" ]; then
+            echo 'STOCK asset::js/chart.min.js' >> "$OUT"
+          else
+            echo 'ADD-ONLY candidate::js/chart.min.js' >> "$OUT"
           fi
 
           cat "$OUT"
