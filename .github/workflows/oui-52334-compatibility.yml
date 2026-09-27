@@ -75,8 +75,8 @@ jobs:
           grep -RInaE --binary-files=without-match 'ouiDB\.json|nw-dlcdnet\.asus\.com/plugin/js/ouiDB' "$R/www" 2>/dev/null | head -n 300 >> "$OUT" || true
 
           section 'SUMMARY'
-          local_refs=$(grep -RIl --binary-files=without-match -F '/ajax/ouiDB.json' "$R/www" 2>/dev/null | wc -l)
-          remote_refs=$(grep -RIl --binary-files=without-match -F 'https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json' "$R/www" 2>/dev/null | wc -l)
+          local_refs=$( { grep -RIl --binary-files=without-match -F '/ajax/ouiDB.json' "$R/www" 2>/dev/null || true; } | wc -l)
+          remote_refs=$( { grep -RIl --binary-files=without-match -F 'https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json' "$R/www" 2>/dev/null || true; } | wc -l)
           echo "local_ref_files=$local_refs" >> "$OUT"
           echo "remote_ref_files=$remote_refs" >> "$OUT"
           if [ "$remote_refs" -gt 0 ] || [ "$local_refs" -gt 0 ]; then
