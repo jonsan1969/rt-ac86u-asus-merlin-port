@@ -84,6 +84,11 @@ jobs:
           section 'WEB BANDWIDTH CALLS'
           grep -RInaE --binary-files=without-match             '<%[[:space:]]*bandwidth\("(monthly|daily|speed)"\)'             "$R/www" 2>/dev/null | head -n 300 >> "$OUT" || true
 
+          section 'DAILY PAGE NAVIGATION PREIMAGE'
+          sha256sum "$R/www/Main_TrafficMonitor_daily.asp" >> "$OUT"
+          grep -n -A35 -B5 'function switchPage' "$R/www/Main_TrafficMonitor_daily.asp" >> "$OUT" || true
+          grep -n -A18 -B3 'id="page_select"' "$R/www/Main_TrafficMonitor_daily.asp" >> "$OUT" || true
+
           section 'DEVICE TRAFFIC SURFACE'
           for rel in Main_TrafficMonitor_devrealtime.asp Main_TrafficMonitor_devdaily.asp Main_TrafficMonitor_devmonthly.asp; do
             [ -f "$R/www/$rel" ] && echo "PRESENT $rel" >> "$OUT" || echo "MISSING $rel" >> "$OUT"
@@ -115,10 +120,14 @@ jobs:
             echo 'MISSING httpd::bandwidth' >> "$OUT"
             failed=1
           fi
-          if strings -a "$R/usr/sbin/httpd" | grep -Fxq 'monthly'; then
-            echo 'PASS httpd::monthly' >> "$OUT"
+          # The ASUS rstats history spool contains both daily_history and
+          # monthly_history.  The bandwidth EJ handler exposes the same history
+          # spool used by the stock daily page, so an exact "monthly" string in
+          # stripped httpd is not a valid requirement.
+          if strings -a "$R/usr/sbin/httpd" | grep -Fxq '/var/spool/rstats-history.js'; then
+            echo 'PASS httpd::rstats-history-spool' >> "$OUT"
           else
-            echo 'MISSING httpd::monthly' >> "$OUT"
+            echo 'MISSING httpd::rstats-history-spool' >> "$OUT"
             failed=1
           fi
 
