@@ -1,0 +1,133 @@
+name: Trace ASUS 52334 bandwidth handler
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/monthly-traffic-httpd-xref.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils file
+          python3 -m pip install --user --break-system-packages ubi-reader pyelftools capstone
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Trace handler strings and ARM32 xrefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > reports/monthly-traffic-httpd-xref.txt
+          import os,re
+          from pathlib import Path
+          from elftools.elf.elffile import ELFFile
+          from capstone import Cs,CS_ARCH_ARM,CS_MODE_ARM,CS_MODE_LITTLE_ENDIAN
+
+          path=Path(os.environ["ASUS_ROOT"])/"usr/sbin/httpd"
+          data=path.read_bytes()
+          print("httpd:",path)
+          print("size:",len(data))
+
+          needles=[
+              b"bandwidth\0",
+              b"/var/spool/rstats-history.js\0",
+              b"/var/spool/rstats-speed.js\0",
+              b"speed\0",
+              b"daily\0",
+              b"monthly\0",
+          ]
+
+          with path.open("rb") as f:
+              elf=ELFFile(f)
+              text=elf.get_section_by_name(".text")
+              code=text.data(); base=text["sh_addr"]
+              md=Cs(CS_ARCH_ARM,CS_MODE_ARM|CS_MODE_LITTLE_ENDIAN)
+              ins=list(md.disasm(code,base))
+              loads=[seg for seg in elf.iter_segments() if seg["p_type"]=="PT_LOAD"]
+
+          def fileoff_to_va(off):
+              for seg in loads:
+                  po,fs=seg["p_offset"],seg["p_filesz"]
+                  if po<=off<po+fs:
+                      return seg["p_vaddr"]+(off-po)
+          def va_to_off(va):
+              for seg in loads:
+                  pv,fs=seg["p_vaddr"],seg["p_filesz"]
+                  if pv<=va<pv+fs:
+                      return seg["p_offset"]+(va-pv)
+
+          def refs_to(va):
+              refs=[]
+              for idx,x in enumerate(ins):
+                  if x.mnemonic!="ldr" or "[pc" not in x.op_str: continue
+                  m=re.search(r"\[pc(?:,\s*#(-?(?:0x[0-9a-fA-F]+|\d+)))?\]",x.op_str)
+                  if not m: continue
+                  imm=int(m.group(1),0) if m.group(1) else 0
+                  lit=(x.address+8+imm)&0xffffffff
+                  off=va_to_off(lit)
+                  if off is None or off+4>len(data): continue
+                  ptr=int.from_bytes(data[off:off+4],"little")
+                  if ptr==va:
+                      refs.append((idx,x.address))
+              return refs
+
+          for needle in needles:
+              label=needle[:-1].decode(errors="replace")
+              positions=[]; start=0
+              while True:
+                  off=data.find(needle,start)
+                  if off<0: break
+                  positions.append((off,fileoff_to_va(off)))
+                  start=off+1
+              print(f"\n===== {label} =====")
+              print("positions",positions)
+              for off,va in positions:
+                  if va is None: continue
+                  refs=refs_to(va)
+                  print("xref_count",len(refs))
+                  for idx,addr in refs[:20]:
+                      print(f"-- REF {addr:08x} --")
+                      for z in ins[max(0,idx-14):idx+28]:
+                          print(f"{z.address:08x}: {z.mnemonic:8s} {z.op_str}")
+          PY
+          cat reports/monthly-traffic-httpd-xref.txt
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-traffic-httpd-xref
+          path: reports/monthly-traffic-httpd-xref.txt
+          if-no-files-found: error
+          retention-days: 14
