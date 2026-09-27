@@ -225,12 +225,15 @@ jobs:
           tools_index='index: "menu_Tools"'
           tools_page='{url: "Tools_OtherSettings.asp", tabName: "Other Settings"}'
           monthly_page='{url: "Main_TrafficMonitor_monthly.asp", tabName: "Monthly Traffic"}'
+          survey_page='{url: "Advanced_Wireless_Survey.asp", tabName: "Site Survey"}'
           if menu.count(tools_index) != 1:
               raise SystemExit("menuTree.js Tools menu index not present exactly once")
           if menu.count(tools_page) != 1:
               raise SystemExit("menuTree.js Other Settings entry not present exactly once")
           if menu.count(monthly_page) != 1:
               raise SystemExit("menuTree.js Monthly Traffic entry not present exactly once")
+          if menu.count(survey_page) != 1:
+              raise SystemExit("menuTree.js Site Survey entry not present exactly once")
 
           other=(root/"www/Tools_OtherSettings.asp").read_text(encoding="utf-8")
           other_required=[
@@ -405,6 +408,26 @@ jobs:
                   raise SystemExit(f"stock ASUS temperature endpoint missing {sig}")
           if menu.count('{url: "Advanced_PerformanceTuning_Content.asp", tabName: "<#2069#>"}') != 1:
               raise SystemExit("stock ASUS temperature menu slot not present exactly once")
+
+          survey=(root/"www/Advanced_Wireless_Survey.asp").read_text(encoding="utf-8")
+          survey_required=[
+              '/apscan.asp',
+              'restart_wlcscan',
+              'flag" value="sitesurvey',
+              'wlc_scan_state',
+              'aplist',
+              'safeText',
+              '2.4 GHz',
+              '5 GHz',
+              'BSSID',
+          ]
+          missing_survey=[x for x in survey_required if x not in survey]
+          if missing_survey:
+              raise SystemExit(f"Site Survey adapter missing ASUS runtime contract: {missing_survey}")
+          stock_apscan=(root/"www/apscan.asp").read_text(encoding="utf-8-sig")
+          for sig in ['wlc_scan_state','aplist = [<% get_ap_info(); %>][0]']:
+              if sig not in stock_apscan:
+                  raise SystemExit(f"stock ASUS apscan endpoint missing {sig}")
           PY
 
           check_backend_signature() {
