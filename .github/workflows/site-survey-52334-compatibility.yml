@@ -72,7 +72,7 @@ jobs:
           section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
 
           section 'PAGE PRESENCE'
-          for rel in Advanced_Wireless_Survey.asp SITE_info.asp wds_aplist_2g.asp wds_aplist_5g.asp; do
+          for rel in Advanced_Wireless_Survey.asp SITE_info.asp apscan.asp wds_aplist_2g.asp wds_aplist_5g.asp images/InternetScan.gif images/survey/radio_status.png; do
             for side in ASUS MERLIN; do
               if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
               if [ -f "$R/www/$rel" ]; then
@@ -96,7 +96,7 @@ jobs:
 
           section 'ASUS RC/WL SCAN STRINGS'
           strings -a "$ASUS_ROOT/sbin/rc" | grep -Ei \
-            'sitesurvey|site_survey|wds_aplist|wlscan|scan.*wireless|wireless.*scan' \
+            'sitesurvey|site_survey|wds_aplist|wlcscan|wlscan|scan.*wireless|wireless.*scan' \
             | sort -u >> "$OUT" || true
 
           section 'STOCK SURVEY CONSUMERS'
@@ -134,16 +134,30 @@ jobs:
           else
             echo 'PASS target page absent (add-only candidate)' >> "$OUT"
           fi
-          if [ -f "$ASUS_ROOT/www/SITE_info.asp" ]; then
-            echo 'PASS ASUS SITE_info.asp endpoint exists' >> "$OUT"
-          else
-            echo 'MISSING ASUS SITE_info.asp endpoint' >> "$OUT"
-            failed=1
-          fi
+          for rel in SITE_info.asp apscan.asp images/InternetScan.gif images/survey/radio_status.png; do
+            if [ -f "$ASUS_ROOT/www/$rel" ]; then
+              echo "PASS ASUS /www/$rel" >> "$OUT"
+            else
+              echo "MISSING ASUS /www/$rel" >> "$OUT"
+              failed=1
+            fi
+          done
           if strings -a "$ASUS_ROOT/usr/sbin/httpd" | grep -Fq 'sitesurvey'; then
             echo 'PASS ASUS httpd::sitesurvey' >> "$OUT"
           else
             echo 'MISSING ASUS httpd::sitesurvey' >> "$OUT"
+            failed=1
+          fi
+          if strings -a "$ASUS_ROOT/sbin/rc" | grep -Fxq 'wlcscan'; then
+            echo 'PASS ASUS rc::wlcscan' >> "$OUT"
+          else
+            echo 'MISSING ASUS rc::wlcscan' >> "$OUT"
+            failed=1
+          fi
+          if grep -Fq 'aplist' "$ASUS_ROOT/www/apscan.asp"; then
+            echo 'PASS ASUS apscan.asp::aplist contract' >> "$OUT"
+          else
+            echo 'MISSING ASUS apscan.asp::aplist contract' >> "$OUT"
             failed=1
           fi
 
