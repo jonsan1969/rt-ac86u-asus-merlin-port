@@ -345,6 +345,43 @@ jobs:
                   raise SystemExit(f"remote OUI lookup still present: {rel}")
               if content.count(local_oui) != 1:
                   raise SystemExit(f"local OUI lookup not present exactly once: {rel}")
+
+          qr=root/"www/js/qrcode.min.js"
+          if digest(qr) != "7f5a45e2791b3ef6cde1a34a253711b7510ad7c6136d20fc91404b48f744647b":
+              raise SystemExit("QR library checksum mismatch")
+
+          guest=(root/"www/Guest_network.asp").read_text(encoding="utf-8")
+          guest_required=[
+              'src="js/qrcode.min.js"',
+              'function genQRCodes(gn_array, unit)',
+              'genQRCodes(gn_array_2g_tmp, 0);',
+              'genQRCodes(gn_array_5g_tmp, 1);',
+              'id="showqrdiv',
+              'id="qrcodepanel',
+              "text: 'WIFI:'",
+          ]
+          missing_guest=[x for x in guest_required if x not in guest]
+          if missing_guest:
+              raise SystemExit(f"Guest Network QR adapter missing contract: {missing_guest}")
+          if guest.count('function genQRCodes(gn_array, unit)') != 1:
+              raise SystemExit("Guest Network QR generator not present exactly once")
+
+          router=(root/"www/device-map/router.asp").read_text(encoding="utf-8")
+          router_required=[
+              'src="../js/qrcode.min.js"',
+              'function genQRCodes(){',
+              'wl0_closed',
+              'wl1_closed',
+              'genQRCodes();',
+              'id="showqrdiv',
+              'id="qrcodepanel',
+              "text: 'WIFI:'",
+          ]
+          missing_router=[x for x in router_required if x not in router]
+          if missing_router:
+              raise SystemExit(f"Router-map QR adapter missing contract: {missing_router}")
+          if router.count('function genQRCodes(){') != 1:
+              raise SystemExit("Router-map QR generator not present exactly once")
           PY
 
           check_backend_signature() {

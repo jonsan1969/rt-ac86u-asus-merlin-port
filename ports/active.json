@@ -240,6 +240,105 @@
       "count": 1,
       "encoding": "utf-8",
       "policy": "patch_exact"
+    },
+    {
+      "type": "copy",
+      "source_kind": "merlin",
+      "source": "release/src/router/www/js/qrcode.min.js",
+      "target": "/www/js/qrcode.min.js",
+      "sha256": "7f5a45e2791b3ef6cde1a34a253711b7510ad7c6136d20fc91404b48f744647b",
+      "mode": "0644",
+      "policy": "add_only"
+    },
+    {
+      "type": "text_replace_multi",
+      "target": "/www/Guest_network.asp",
+      "target_sha256": "1fbef75e39da1a854eb47a14a03bf3afea8b8974ff616c659b18c07a98f2b1eb",
+      "replacements": [
+        {
+          "find": "<script type=\"text/javascript\" src=\"js/httpApi.js\"></script>\n<style>",
+          "replace": "<script type=\"text/javascript\" src=\"js/httpApi.js\"></script>\n<script src=\"js/qrcode.min.js\"></script>\n<style>",
+          "count": 1
+        },
+        {
+          "find": "if(sw_mode != \"3\"){\nhtmlcode += '<tr><th align=\"left\" style=\"width:20%;height:28px;\"><#996#></th></tr>';\n}\nhtmlcode += '<tr><th align=\"left\" style=\"height:40px;\"></th></tr>';",
+          "replace": "if(sw_mode != \"3\"){\nhtmlcode += '<tr><th align=\"left\" style=\"width:20%;height:28px;\"><#996#></th></tr>';\n}\nhtmlcode += '<tr><th align=\"left\" style=\"height:40px;\"></th></tr>';\nhtmlcode += '<tr><th align=\"left\" style=\"height:40px;\"></th></tr>';",
+          "count": 1
+        },
+        {
+          "find": "if(captive_portal_used_wl_array[\"wl\" + unit_subunit] == undefined) {\nhtmlcode += '<tr><td align=\"center\" class=\"gninfo_table_bottom\"></td></tr>';\nhtmlcode += '<tfoot><tr><td align=\"center\"><input type=\"button\" class=\"button_gen\" value=\"<#1658#>\" onclick=\"close_guest_unit('+ unit +','+ subunit +');\"></td></tr></tfoot>';\n}",
+          "replace": "if(captive_portal_used_wl_array[\"wl\" + unit_subunit] == undefined) {\nhtmlcode += '<tr><td align=\"center\" class=\"gninfo_table_bottom\"></td></tr>';\nhtmlcode += '<tfoot><div id=\"qrcodepanel' + unit + subunit + '\" style=\"position:absolute;display:none;box-shadow:3px 3px 10px #000;width:180px;margin-left:15px;border-radius:5px;z-index:200;background-color:#2B373B;\">';\nhtmlcode += '<div style=\"padding:10px;\"><div style=\"text-align:center;\">Scan to connect:</div>';\nhtmlcode += '<div style=\"margin:10px 0;height:2px;width:100%;\" class=\"splitLine\"></div>';\nhtmlcode += '<div id=\"qr' + unit + subunit + '\" style=\"background:#fff;padding:10px;\"></div><input style=\"margin-top:10px;width:100%;\" type=\"button\" class=\"button_gen\" value=\"Close\" onclick=\"hide_qr_code(\\'' + unit + subunit + '\\');\"></div></div>';\nhtmlcode += '<tfoot><tr><td align=\"center\" class=\"gninfo_table_bottom\"><div id=\"showqrdiv' + unit + subunit + '\" style=\"display:none;\"><span style=\"color:#FFCC00;cursor:pointer;text-decoration:underline\" onclick=\"show_qr_code(\\'' + unit + subunit + '\\');\">Show QR code</span></div></td></tr>';\nhtmlcode += '<tr><td align=\"center\"><input type=\"button\" class=\"button_gen\" value=\"<#1658#>\" onclick=\"close_guest_unit('+ unit +','+ subunit +');\"></td></tr></tfoot>';\n}",
+          "count": 1
+        },
+        {
+          "find": "document.getElementById(\"guest_table2\").innerHTML = htmlcode;\ncheck_bw_status(gn_array_2g_tmp);",
+          "replace": "document.getElementById(\"guest_table2\").innerHTML = htmlcode;\ncheck_bw_status(gn_array_2g_tmp);\ngenQRCodes(gn_array_2g_tmp, 0);",
+          "count": 1
+        },
+        {
+          "find": "document.getElementById(\"guest_table5\").innerHTML = htmlcode5;\ncheck_bw_status(gn_array_5g_tmp);",
+          "replace": "document.getElementById(\"guest_table5\").innerHTML = htmlcode5;\ncheck_bw_status(gn_array_5g_tmp);\ngenQRCodes(gn_array_5g_tmp, 1);",
+          "count": 1
+        },
+        {
+          "find": "function apply_amazon_wss(){\napply_amazon_wss_flag = true;\ndocument.form.wl_bss_enabled.value = \"1\";\napplyRule();\n}\n</script>",
+          "replace": "function apply_amazon_wss(){\napply_amazon_wss_flag = true;\ndocument.form.wl_bss_enabled.value = \"1\";\napplyRule();\n}\nfunction genQRCodes(gn_array, unit){\nif(based_modelid === 'GT-AXE16000'){\nunit = (unit+3)%4;\n}\nfor(var i=0; i < gn_array.length; i++){\nvar gn_entry = gn_array[i];\nif (gn_entry[0] != 1)\ncontinue;\nsubunit = i + 1;\nvar ssid = \"S:\" + decodeURIComponent(gn_entry[1]).replace(/[\\\\\":;,]/g, '\\\\$&') + \";\";\nvar _authMode = gn_entry[2];\nif(_authMode == 'psk' || _authMode == 'psk2' || _authMode == 'sae' || _authMode == 'pskpsk2' || _authMode == 'psk2sae'){\nvar type = \"T:WPA;\";\nvar pass = \"P:\" + decodeURIComponent(gn_entry[4]).replace(/[\\\\\":;,]/g, '\\\\$&') + \";\";\n} else if (_authMode == \"open\" && gn_entry[5] == \"0\") {\nvar type = \"T:;\";\nvar pass = \"P:;\";\n} else if (_authMode == \"shared\" || _authMode == \"open\") {\nvar type = \"T:WEP;\";\nvar keyindex = parseInt(gn_entry[6]) + 6;\nvar pass = \"P:\" + gn_entry[keyindex] + \";\";\n} else {\nssid = \"\";\n}\nif (gn_entry[22] == \"1\")\nvar hide = \"H:true;\"\nelse\nvar hide = \"\";\nif (ssid != \"\") {\ndocument.getElementById(\"showqrdiv\" + unit + subunit).style.display = \"\";\nnew QRCode(document.getElementById(\"qr\" + unit + subunit), {\ntext: 'WIFI:'+ type + ssid + pass + hide + ';',\nwidth: 140,\nheight: 140,\n});\n}\n}\n}\nfunction show_qr_code(unit) {\n$(\"#qrcodepanel\"+unit).fadeIn(300);\n}\nfunction hide_qr_code(unit) {\n$(\"#qrcodepanel\"+unit).fadeOut(300);\n}\n</script>",
+          "count": 1
+        }
+      ],
+      "encoding": "utf-8",
+      "result_sha256": "5f27d16adf509dc03223f4a9c1df27860a31d35f440de87a90efe1a57fceb3ac",
+      "policy": "patch_exact"
+    },
+    {
+      "type": "text_replace_multi",
+      "target": "/www/device-map/router.asp",
+      "target_sha256": "f00aecaeed026fede41bca590e58cfd19696fb0dfb4239cd8ad5c753bd3b1f4e",
+      "replacements": [
+        {
+          "find": "<script src=\"../switcherplugin/jquery.iphone-switch.js\"></script>\n</head>",
+          "replace": "<script src=\"../switcherplugin/jquery.iphone-switch.js\"></script>\n<script src=\"../js/qrcode.min.js\"></script>\n</head>",
+          "count": 1
+        },
+        {
+          "find": "_element = ['wl0.1_nmode_x', 'wl0.1_auth_mode_x', 'wl0.1_crypto', 'wl0.1_mfp', 'wl0.1_wep_x', 'wl0.1_key', 'wl0.1_key1', 'wl0.1_key2', 'wl0.1_key3', 'wl0.1_key4'];",
+          "replace": "_element = ['wl0.1_nmode_x', 'wl0.1_auth_mode_x', 'wl0.1_crypto', 'wl0.1_mfp', 'wl0.1_wep_x', 'wl0.1_key', 'wl0.1_key1', 'wl0.1_key2', 'wl0.1_key3', 'wl0.1_key4', 'wl0.1_closed'];",
+          "count": 1
+        },
+        {
+          "find": "_element = ['wl0_nmode_x', 'wl0_auth_mode_x', 'wl0_crypto', 'wl0_mfp', 'wl0_wep_x', 'wl0_key', 'wl0_key1', 'wl0_key2', 'wl0_key3', 'wl0_key4'];",
+          "replace": "_element = ['wl0_nmode_x', 'wl0_auth_mode_x', 'wl0_crypto', 'wl0_mfp', 'wl0_wep_x', 'wl0_key', 'wl0_key1', 'wl0_key2', 'wl0_key3', 'wl0_key4', 'wl0_closed'];",
+          "count": 1
+        },
+        {
+          "find": "_element = ['wl1.1_nmode_x', 'wl1.1_auth_mode_x', 'wl1.1_crypto', 'wl1.1_mfp', 'wl1.1_wep_x', 'wl1.1_key', 'wl1.1_key1', 'wl1.1_key2', 'wl1.1_key3', 'wl1.1_key4'];",
+          "replace": "_element = ['wl1.1_nmode_x', 'wl1.1_auth_mode_x', 'wl1.1_crypto', 'wl1.1_mfp', 'wl1.1_wep_x', 'wl1.1_key', 'wl1.1_key1', 'wl1.1_key2', 'wl1.1_key3', 'wl1.1_key4', 'wl1.1_closed'];",
+          "count": 1
+        },
+        {
+          "find": "_element = ['wl1_nmode_x', 'wl1_auth_mode_x', 'wl1_crypto', 'wl1_mfp', 'wl1_wep_x', 'wl1_key', 'wl1_key1', 'wl1_key2', 'wl1_key3', 'wl1_key4'];",
+          "replace": "_element = ['wl1_nmode_x', 'wl1_auth_mode_x', 'wl1_crypto', 'wl1_mfp', 'wl1_wep_x', 'wl1_key', 'wl1_key1', 'wl1_key2', 'wl1_key3', 'wl1_key4', 'wl1_closed'];",
+          "count": 1
+        },
+        {
+          "find": "genElement(wlInterface);\nsetOptions();\n}",
+          "replace": "genElement(wlInterface);\nsetOptions();\ngenQRCodes();\n}",
+          "count": 1
+        },
+        {
+          "find": "else if(_authMode == 'wpa' || _authMode == 'wpa2' || _authMode == 'wpawpa2'){\ncode += '<div class=\"info-block\">';\ncode += '<div class=\"info-title\"><#979#></div>';\ncode += '<div><select id=\"wl'+ unit +'_crypto\" class=\"input_option\" onchange=\"updateVariable(this.id, value)\"></select></div>';\ncode += '</div>';\n}\ncode += '</div>';\n}\n$('#wl_settings_field').html(code);",
+          "replace": "else if(_authMode == 'wpa' || _authMode == 'wpa2' || _authMode == 'wpawpa2'){\ncode += '<div class=\"info-block\">';\ncode += '<div class=\"info-title\"><#979#></div>';\ncode += '<div><select id=\"wl'+ unit +'_crypto\" class=\"input_option\" onchange=\"updateVariable(this.id, value)\"></select></div>';\ncode += '</div>';\n}\ncode += '<div id=\"qrcodepanel' + unit + '\" style=\"position:absolute;display:none;box-shadow:3px 3px 10px #000;width:180px;margin-top:-200px;margin-left:0;border-radius:5px;z-index:200;background-color:#2B373B;\">';\ncode += '<div style=\"padding:10px;\"><div style=\"text-align:center;\">Scan to connect:</div>';\ncode += '<div style=\"margin:10px 0;height:2px;width:100%;\" class=\"splitLine\"></div>';\ncode += '<div id=\"qr' + unit +'\" style=\"background:#fff;padding:10px;\"></div><input style=\"margin-top:10px;width:100%;\" type=\"button\" class=\"button_gen\" value=\"Close\" onclick=\"hide_qr_code(' + unit + ');\"></div></div>';\ncode += '<div style=\"display:none;\" id=\"showqrdiv' + unit + '\"><span style=\"color:#FFCC00;cursor:pointer;text-decoration:underline\" onclick=\"show_qr_code(' + unit + ');\">Show QR code</span></div>';\ncode += '</div>';\n}\n$('#wl_settings_field').html(code);",
+          "count": 1
+        },
+        {
+          "find": "function validateInput(){",
+          "replace": "function genQRCodes(){\nfor(var i=0; i<wlInterface.length; i++){\nvar unit = wlInterface[i][2];\nvar ssid = \"S:\" + variable['wl'+ unit + '_ssid'].replace(/[\\\\\":;,]/g, '\\\\$&') + \";\";\nvar _authMode = variable['wl'+ unit +'_auth_mode_x'];\nif(_authMode == 'psk' || _authMode == 'psk2' || _authMode == 'sae' || _authMode == 'pskpsk2' || _authMode == 'psk2sae'){\nvar type = \"T:WPA;\";\nvar pass = \"P:\" + variable['wl'+ unit + '_wpa_psk'].replace(/[\\\\\":;,]/g, '\\\\$&') + \";\";\n} else if (_authMode == \"open\") {\nvar type = \"T:;\";\nvar pass = \"P:;\";\n} else if (_authMode == \"shared\") {\nvar type = \"T:WEP;\";\nvar pass = \"P:\" + variable['wl'+ unit +'_key'+ variable['wl'+ unit +'_key']] + \";\";\n} else {\nssid = \"\";\n}\nif (variable['wl'+ unit +'_closed'] == \"1\")\nvar hide = \"H:true;\"\nelse\nvar hide = \"\";\nif (ssid != \"\") {\ndocument.getElementById(\"showqrdiv\" + unit).style.display = \"\";\nnew QRCode(document.getElementById(\"qr\" + unit), {\ntext: 'WIFI:'+ type + ssid + pass + hide + ';',\nwidth: 140,\nheight: 140,\n});\n}\n}\n}\nfunction show_qr_code(unit) {\n$(\"#qrcodepanel\"+unit).fadeIn(300);\n}\nfunction hide_qr_code(unit) {\n$(\"#qrcodepanel\"+unit).fadeOut(300);\n}\nfunction validateInput(){",
+          "count": 1
+        }
+      ],
+      "encoding": "utf-8",
+      "result_sha256": "9c2c8679c29020663344ec3724aa99c14a93bd49c21a36cd8de29bbebc988678",
+      "policy": "patch_exact"
     }
   ]
 }
