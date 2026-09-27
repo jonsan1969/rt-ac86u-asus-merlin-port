@@ -1,0 +1,99 @@
+name: Probe ASUS 52334 local OUI compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/oui-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe OUI lookup surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/oui-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'LOCAL DATABASE'
+          if [ -f "$R/www/ajax/ouiDB.json" ]; then
+            echo 'PRESENT /www/ajax/ouiDB.json' >> "$OUT"
+            sha256sum "$R/www/ajax/ouiDB.json" >> "$OUT"
+          else
+            echo 'MISSING /www/ajax/ouiDB.json' >> "$OUT"
+          fi
+
+          section 'INDEX LOOKUP'
+          sha256sum "$R/www/index.asp" >> "$OUT"
+          grep -n -A12 -B4 'function oui_query' "$R/www/index.asp" >> "$OUT" || true
+          grep -nE 'ouiDB\.json|nw-dlcdnet\.asus\.com' "$R/www/index.asp" >> "$OUT" || true
+
+          section 'CLIENT FUNCTION LOOKUPS'
+          sha256sum "$R/www/client_function.js" >> "$OUT"
+          grep -n -A8 -B4 'ouiDB\.json' "$R/www/client_function.js" >> "$OUT" || true
+
+          section 'ALL WEB OUI REFERENCES'
+          grep -RInaE --binary-files=without-match 'ouiDB\.json|nw-dlcdnet\.asus\.com/plugin/js/ouiDB' "$R/www" 2>/dev/null | head -n 300 >> "$OUT" || true
+
+          section 'SUMMARY'
+          local_refs=$(grep -RIl --binary-files=without-match -F '/ajax/ouiDB.json' "$R/www" 2>/dev/null | wc -l)
+          remote_refs=$(grep -RIl --binary-files=without-match -F 'https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json' "$R/www" 2>/dev/null | wc -l)
+          echo "local_ref_files=$local_refs" >> "$OUT"
+          echo "remote_ref_files=$remote_refs" >> "$OUT"
+          if [ "$remote_refs" -gt 0 ] || [ "$local_refs" -gt 0 ]; then
+            echo 'PASS OUI lookup consumer exists' >> "$OUT"
+          else
+            echo 'MISSING OUI lookup consumer' >> "$OUT"
+            cat "$OUT"
+            exit 1
+          fi
+
+          cat "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oui-52334-compatibility
+          path: reports/oui-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
