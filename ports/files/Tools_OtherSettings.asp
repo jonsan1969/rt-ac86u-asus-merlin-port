@@ -74,7 +74,8 @@ function validRangeAllowZero(id, min, max) {
 }
 
 function applyRule() {
-	if (!validRange("tcp_established", 1, 432000) ||
+	if (!validRange("rstats_offset", 1, 31) ||
+	    !validRange("tcp_established", 1, 432000) ||
 	    !validRange("tcp_syn_sent", 1, 86400) ||
 	    !validRange("tcp_syn_recv", 1, 86400) ||
 	    !validRange("tcp_fin_wait", 1, 86400) ||
@@ -144,7 +145,7 @@ function applyRule() {
 <div class="formfonttitle">Tools - Other Settings</div>
 <div style="margin:10px 0 10px 5px;" class="splitLine"></div>
 <div class="formfontdesc">
-Conntrack timeout tuning and shell idle timeout using ASUS 52334 backends. Only settings verified in the stock RT-AC86U runtime are exposed here.
+Conntrack timeout tuning, stock traffic-history persistence, and shell idle timeout using ASUS 52334 backends. Only settings verified in the stock RT-AC86U runtime are exposed here.
 </div>
 
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
@@ -159,6 +160,30 @@ Conntrack timeout tuning and shell idle timeout using ASUS 52334 backends. Only 
 <tr><th>TCP Timeout: Last ACK</th><td><input id="tcp_last_ack" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
 <tr><th>UDP Timeout: Assured</th><td><input id="udp_assured" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
 <tr><th>UDP Timeout: Unreplied</th><td><input id="udp_unreplied" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
+</table>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" style="margin-top:8px;">
+<thead><tr><td colspan="2">Traffic history</td></tr></thead>
+<tr>
+<th>Save traffic history to NVRAM</th>
+<td>
+<input type="radio" name="rstats_bak" value="1" <% nvram_match("rstats_bak", "1", "checked"); %>>Yes
+<input type="radio" name="rstats_bak" value="0" <% nvram_match("rstats_bak", "0", "checked"); %>>No
+</td>
+</tr>
+<tr>
+<th>Save frequency</th>
+<td>
+<select name="rstats_stime" class="input_option">
+<option value="1" <% nvram_match("rstats_stime", "1", "selected"); %>>Every 1 hour</option>
+<option value="6" <% nvram_match("rstats_stime", "6", "selected"); %>>Every 6 hours</option>
+<option value="12" <% nvram_match("rstats_stime", "12", "selected"); %>>Every 12 hours</option>
+<option value="24" <% nvram_match("rstats_stime", "24", "selected"); %>>Every 1 day</option>
+<option value="72" <% nvram_match("rstats_stime", "72", "selected"); %>>Every 3 days</option>
+</select>
+</td>
+</tr>
+<tr><th>Starting day of monthly cycle</th><td><input id="rstats_offset" name="rstats_offset" type="text" maxlength="2" class="input_3_table" onkeypress="return validator.isNumber(this,event);" value="<% nvram_get("rstats_offset"); %>"></td></tr>
 </table>
 
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" style="margin-top:8px;">

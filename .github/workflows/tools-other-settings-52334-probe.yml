@@ -122,19 +122,22 @@ jobs:
             'udp_assured'
             'name="shell_timeout"'
             'shell_timeout_x'
+            'name="rstats_bak"'
+            'name="rstats_stime"'
+            'name="rstats_offset"'
           )
           for sig in "${required[@]}"; do
             grep -Fq "$sig" "$CAND" || { echo "MISSING active::$sig" >> "$OUT"; exit 1; }
             echo "PASS active::$sig" >> "$OUT"
           done
-          forbidden=(ct_max rstats_path rstats_offset cstats_enable dns_local_cache ntpd_enable ntpd_server_redir restart_conntrack)
+          forbidden=(ct_max rstats_path rstats_new cstats_enable dns_local_cache ntpd_enable ntpd_server_redir restart_conntrack)
           for sig in "${forbidden[@]}"; do
             if grep -Fq "$sig" "$CAND"; then
               echo "FORBIDDEN active::$sig" >> "$OUT"
               exit 1
             fi
           done
-          echo 'PASS active adapter exposes only verified conntrack/shell controls' >> "$OUT"
+          echo 'PASS active adapter exposes only verified conntrack/rstats/shell controls' >> "$OUT"
 
           cat "$OUT"
 

@@ -63,7 +63,16 @@ and stock `httpd` exposes the exact `shell_timeout` NVRAM/form string. Merlin's 
 
 ## Traffic-history follow-up
 
-M47 remains a separate adaptation step. The stock 52334 daemon confirms direct consumption of `rstats_path`, `rstats_offset`, `rstats_stime`, `rstats_bak` and the history files. Clean ASUS-origin 382_15098 code also shows that ASUS's `restart_rstats()` historically rewrites `rstats_path` from `rstats_bak` (NVRAM backup vs empty path). Therefore arbitrary USB/JFFS path controls remain deferred until the 52334 wrapper behavior is independently mapped; the daemon strings alone are not enough to claim Merlin-compatible path persistence.
+M47 is split into a safe stock-compatible subset and a deferred Merlin extension.
+
+Verified safe subset:
+- `rstats_bak` selects ASUS's stock NVRAM-backed history mode;
+- `rstats_stime` is consumed directly by the stock 52334 `/bin/rstats` daemon; the adapter offers the donor's conservative 1/6/12/24/72-hour choices;
+- `rstats_offset` is consumed directly by the stock daemon and is constrained to 1–31.
+
+Runtime apply-path proof is also present: 52334 `httpd` dynamically links `/usr/lib/libshared.so`, and that exact library contains the full default-key set used by this page, including `rstats_bak`, `rstats_stime`, `rstats_offset`, `shell_timeout`, `ct_tcp_timeout` and `ct_udp_timeout`.
+
+Clean ASUS-origin 382_15098 code shows that ASUS's `restart_rstats()` rewrites `rstats_path` from `rstats_bak` (NVRAM backup vs empty path), while Merlin later removed that restriction to preserve arbitrary paths. Therefore arbitrary USB/JFFS `rstats_path` and `rstats_new` remain deliberately absent. The active adapter uses the stock reboot path so ASUS's own boot-time `restart_rstats()` semantics remain authoritative.
 
 ## Safety rule
 

@@ -239,11 +239,14 @@ jobs:
               'udp_assured',
               'name="shell_timeout"',
               'shell_timeout_x',
+              'name="rstats_bak"',
+              'name="rstats_stime"',
+              'name="rstats_offset"',
           ]
           other_forbidden=[
               'ct_max',
               'rstats_path',
-              'rstats_offset',
+              'rstats_new',
               'cstats_enable',
               'dns_local_cache',
               'ntpd_enable',
@@ -321,6 +324,12 @@ jobs:
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_custom1' 'DNSFilter custom resolver NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'dnsfilter_modes_list' 'DNSFilter mode-list EJ handler' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'shell_timeout' 'Shell timeout NVRAM form backend' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_bak' 'Traffic history NVRAM-backup default' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_stime' 'Traffic history save-interval default' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_offset' 'Traffic history monthly-cycle default' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/bin/rstats" 'rstats_stime' 'Traffic history daemon save interval' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/bin/rstats" 'rstats_offset' 'Traffic history daemon monthly cycle' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/bin/rstats" '*nvram' 'Traffic history daemon NVRAM storage mode' || backend_failed=1
           if (( backend_failed )); then
             echo 'ERROR: one or more required ASUS 52334 backend signatures are missing' >&2
             exit 1

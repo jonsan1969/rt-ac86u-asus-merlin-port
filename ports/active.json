@@ -169,7 +169,7 @@
       "source_kind": "repo",
       "source": "ports/files/Tools_OtherSettings.asp",
       "target": "/www/Tools_OtherSettings.asp",
-      "sha256": "d0728d5cc74c6eed31e98f8945a49f6f876d20750676bdc2961ccf795974d286",
+      "sha256": "16b6d409b90fe2319adbf62f42b54f0027dddf94913402eba5cd36d955e99d56",
       "mode": "0644",
       "policy": "add_only"
     },
