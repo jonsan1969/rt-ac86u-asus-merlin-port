@@ -382,6 +382,29 @@ jobs:
               raise SystemExit(f"Router-map QR adapter missing contract: {missing_router}")
           if router.count('function genQRCodes(){') != 1:
               raise SystemExit("Router-map QR generator not present exactly once")
+
+          temperature=(root/"www/Advanced_PerformanceTuning_Content.asp").read_text(encoding="utf-8")
+          temperature_required=[
+              '/ajax_coretmp.asp',
+              'curr_coreTmp_2',
+              'curr_coreTmp_5',
+              'curr_cpuTemp',
+              'setTimeout(update_temp, 5000)',
+              '2.4 GHz radio',
+              '5 GHz radio',
+              'CPU',
+          ]
+          missing_temperature=[x for x in temperature_required if x not in temperature]
+          if missing_temperature:
+              raise SystemExit(f"temperature adapter missing ASUS runtime contract: {missing_temperature}")
+          if 'sysinfo("temperature.' in temperature or 'fan.svg' in temperature:
+              raise SystemExit("temperature adapter references unsupported Merlin-only temperature path")
+          stock_ajax=(root/"www/ajax_coretmp.asp").read_text(encoding="utf-8-sig")
+          for sig in ['get_fanctrl_info','curr_coreTmp_2','curr_coreTmp_5','curr_cpuTemp']:
+              if sig not in stock_ajax:
+                  raise SystemExit(f"stock ASUS temperature endpoint missing {sig}")
+          if menu.count('{url: "Advanced_PerformanceTuning_Content.asp", tabName: "<#2069#>"}') != 1:
+              raise SystemExit("stock ASUS temperature menu slot not present exactly once")
           PY
 
           check_backend_signature() {

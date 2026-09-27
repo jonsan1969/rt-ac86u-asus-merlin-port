@@ -339,6 +339,15 @@
       "encoding": "utf-8",
       "result_sha256": "9c2c8679c29020663344ec3724aa99c14a93bd49c21a36cd8de29bbebc988678",
       "policy": "patch_exact"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/Advanced_PerformanceTuning_Content.asp",
+      "target": "/www/Advanced_PerformanceTuning_Content.asp",
+      "sha256": "31d74894f669e1b042d79419be3c171f24438e19a47e05a6f0f1b73a0bf7e590",
+      "mode": "0644",
+      "policy": "add_only"
     }
   ]
 }
