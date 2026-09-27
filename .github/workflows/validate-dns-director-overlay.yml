@@ -333,6 +333,18 @@ jobs:
               expected_target=f"user/user{i}.asp"
               if os.readlink(slot) != expected_target:
                   raise SystemExit(f"custom WebUI slot target mismatch: /www/user{i}.asp -> {os.readlink(slot)!r}")
+
+          oui_path=root/"www/ajax/ouiDB.json"
+          if digest(oui_path) != "079e881ae86ae8ba503aed0aa7d4c1dca93e4c1f318829e674541ecb23de18a4":
+              raise SystemExit("local OUI database checksum mismatch")
+          remote_oui="https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json"
+          local_oui="/ajax/ouiDB.json"
+          for rel in ["www/index.asp","www/client_function.js","www/device-map/clients.asp"]:
+              content=(root/rel).read_text(encoding="utf-8")
+              if remote_oui in content:
+                  raise SystemExit(f"remote OUI lookup still present: {rel}")
+              if content.count(local_oui) != 1:
+                  raise SystemExit(f"local OUI lookup not present exactly once: {rel}")
           PY
 
           check_backend_signature() {

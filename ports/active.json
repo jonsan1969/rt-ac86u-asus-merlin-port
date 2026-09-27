@@ -201,6 +201,45 @@
       "sha256": "b7d5093eb11205e1b6a2329321c14b3c617b9c78b6bc473b7f90362a91ff5015",
       "mode": "0644",
       "policy": "add_only"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/ouiDB.json",
+      "target": "/www/ajax/ouiDB.json",
+      "sha256": "079e881ae86ae8ba503aed0aa7d4c1dca93e4c1f318829e674541ecb23de18a4",
+      "mode": "0644",
+      "policy": "add_only"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/index.asp",
+      "target_sha256": "e851d715965eab99e476661457002f0744d08112fa14a7309fff3ca87a4bcdef",
+      "find": "https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json",
+      "replace": "/ajax/ouiDB.json",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/client_function.js",
+      "target_sha256": "c8fadc0fba8b962bf8bbcdf42ffb5f723aa047c4796ba80ca8c57869b83c9afc",
+      "find": "https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json",
+      "replace": "/ajax/ouiDB.json",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/device-map/clients.asp",
+      "target_sha256": "6f5dc378e82d076ff9aa43e1496a6bdf60b0875c3817c2b5449db380e76c6e67",
+      "find": "https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json",
+      "replace": "/ajax/ouiDB.json",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
     }
   ]
 }
