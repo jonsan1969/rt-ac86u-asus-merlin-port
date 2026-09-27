@@ -71,6 +71,16 @@ jobs:
           sha256sum "$R/www/client_function.js" >> "$OUT"
           grep -n -A8 -B4 'ouiDB\.json' "$R/www/client_function.js" >> "$OUT" || true
 
+          section 'DEVICE MAP LOOKUP'
+          sha256sum "$R/www/device-map/clients.asp" >> "$OUT"
+          grep -n -A8 -B4 'ouiDB\.json' "$R/www/device-map/clients.asp" >> "$OUT" || true
+
+          section 'REMOTE URL EXACT COUNTS'
+          for rel in index.asp client_function.js device-map/clients.asp; do
+            count=$(grep -Foc 'https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json' "$R/www/$rel" || true)
+            printf '%s remote_oui_count=%s\n' "$rel" "$count" >> "$OUT"
+          done
+
           section 'ALL WEB OUI REFERENCES'
           grep -RInaE --binary-files=without-match 'ouiDB\.json|nw-dlcdnet\.asus\.com/plugin/js/ouiDB' "$R/www" 2>/dev/null | head -n 300 >> "$OUT" || true
 
