@@ -92,11 +92,19 @@ jobs:
 
           section 'SUMMARY'
           failed=0
-          for sig in rstats_path rstats_new; do
+          for sig in rstats_path rstats_new rstats_bak; do
             if strings -a "$R/sbin/rc" | grep -Fxq "$sig"; then
               echo "PASS rc::$sig" >> "$OUT"
             else
               echo "MISSING rc::$sig" >> "$OUT"
+              failed=1
+            fi
+          done
+          for sig in rstats_path rstats_bak rstats_stime rstats_offset '*nvram'; do
+            if strings -a "$R/bin/rstats" | grep -Fxq "$sig"; then
+              echo "PASS rstats::$sig" >> "$OUT"
+            else
+              echo "MISSING rstats::$sig" >> "$OUT"
               failed=1
             fi
           done
