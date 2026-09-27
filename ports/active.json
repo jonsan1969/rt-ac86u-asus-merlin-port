@@ -181,7 +181,8 @@
       "replace": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n{\nmenuName: \"Tools\",\nindex: \"menu_Tools\",\ntab: [\n{url: \"Tools_OtherSettings.asp\", tabName: \"Other Settings\"},\n{url: \"Main_TrafficMonitor_monthly.asp\", tabName: \"Monthly Traffic\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
       "count": 1,
       "encoding": "utf-8",
-      "policy": "patch_exact"
+      "policy": "patch_exact",
+      "result_sha256": "47f745e95d82bd3143bfa20d987d9a38e012d35f6ae32139fd58afd8d3cb3194"
     },
     {
       "type": "copy",

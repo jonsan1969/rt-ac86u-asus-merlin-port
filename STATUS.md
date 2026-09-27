@@ -19,12 +19,16 @@
 | JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series + pinned source contract documented in `docs/jffs-custom-script-port-plan.md` and `docs/jffs-custom-script-source-contract.md` |
 | ASUS 52334 DNSFilter runtime map | **SUCCESS** | Action 35993309478 verified retained stock backend/UI-support pieces |
 | DNS Director phase-1 overlay implementation | **SUCCESS** | guarded overlay changes only `DNSFilter.asp` + exact-patched `state.js`; validation run 36121711046 passed |
-| Guarded Merlin overlay validation | **SUCCESS** | profile.add patch, pinned `helper.sh`, DNS Director adapter, and 20 custom WebUI aliases validated; latest completed feature run 36214921483 passed |
+| Guarded Merlin overlay validation | **SUCCESS** | exact-change validation run 36334016748 passed with protected ASUS core hashes unchanged; includes DNS Director, JFFS image-safe pieces, Other Settings and global monthly traffic |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
 | JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
 | AMTM integration | **IN PROGRESS** | stock has required curl/core shell tools but lacks `dos2unix`/`unix2dos`; defer until utility + core-hook prerequisites are satisfied |
-| Merlin feature port | **IN PROGRESS** | DNS Director phase 1 + image-safe JFFS/addon pieces implemented; no unsafe core binary replacement |
+| M31 Conntrack timeout tuning | **SUCCESS** | ASUS-backed UI adapter uses stock NVRAM keys and stock reboot apply path; no `rc` replacement |
+| M47 Traffic history persistence controls | **SUCCESS** | ASUS `rstats`/libshared backend verified and safe controls exposed in Other Settings |
+| M49 Global monthly traffic history | **SUCCESS** | ASUS history spool contains monthly data; adapted Merlin page + add-only Chart.js validated in run 36334016748 |
+| M43 System Info page | **IN PROGRESS** | stock `httpd` has generic `sysinfo` dispatcher but lacks Merlin `cpu.model`, `cpu.freq`, `conn.max`, `nvram.total`; source-side HTTPD work required |
+| Merlin feature port | **IN PROGRESS** | DNS Director + image-safe JFFS/addon + ASUS-backed Other Settings + monthly traffic implemented; no unsafe core binary replacement |
 | Flashable firmware | **IN PROGRESS** | no flashability claim until repack + hardware/runtime gates pass |
 
 ## Status vocabulary
