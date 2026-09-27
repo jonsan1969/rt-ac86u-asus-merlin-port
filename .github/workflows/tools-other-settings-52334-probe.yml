@@ -110,8 +110,8 @@ jobs:
           PY
 
           echo >> "$OUT"
-          echo '===== STAGED ADAPTER CONTRACT =====' >> "$OUT"
-          CAND="$GITHUB_WORKSPACE/ports/candidates/Tools_OtherSettings.asp"
+          echo '===== ACTIVE ADAPTER CONTRACT =====' >> "$OUT"
+          CAND="$GITHUB_WORKSPACE/ports/files/Tools_OtherSettings.asp"
           test -f "$CAND"
           required=(
             'name="ct_tcp_timeout"'
@@ -120,19 +120,21 @@ jobs:
             'tcp_established'
             'udp_unreplied'
             'udp_assured'
+            'name="shell_timeout"'
+            'shell_timeout_x'
           )
           for sig in "${required[@]}"; do
-            grep -Fq "$sig" "$CAND" || { echo "MISSING candidate::$sig" >> "$OUT"; exit 1; }
-            echo "PASS candidate::$sig" >> "$OUT"
+            grep -Fq "$sig" "$CAND" || { echo "MISSING active::$sig" >> "$OUT"; exit 1; }
+            echo "PASS active::$sig" >> "$OUT"
           done
           forbidden=(ct_max rstats_path rstats_offset cstats_enable dns_local_cache ntpd_enable ntpd_server_redir restart_conntrack)
           for sig in "${forbidden[@]}"; do
             if grep -Fq "$sig" "$CAND"; then
-              echo "FORBIDDEN candidate::$sig" >> "$OUT"
+              echo "FORBIDDEN active::$sig" >> "$OUT"
               exit 1
             fi
           done
-          echo 'PASS candidate exposes only verified conntrack timeout vectors' >> "$OUT"
+          echo 'PASS active adapter exposes only verified conntrack/shell controls' >> "$OUT"
 
           cat "$OUT"
 

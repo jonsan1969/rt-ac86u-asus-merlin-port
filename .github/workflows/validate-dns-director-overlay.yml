@@ -237,6 +237,8 @@ jobs:
               'tcp_established',
               'udp_unreplied',
               'udp_assured',
+              'name="shell_timeout"',
+              'shell_timeout_x',
           ]
           other_forbidden=[
               'ct_max',
@@ -265,6 +267,7 @@ jobs:
           profile_required=[
               '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin',
               '[ -f /opt/etc/profile ] && . /opt/etc/profile',
+              'TMOUT="$(nvram get shell_timeout 2>/dev/null)"',
               '[ "$(nvram get jffs2_scripts)" = "1" ] && [ -f /jffs/configs/profile.add ] && . /jffs/configs/profile.add',
           ]
           missing_profile=[x for x in profile_required if x not in profile]
@@ -317,6 +320,7 @@ jobs:
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_rulelist' 'DNSFilter rule list NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_custom1' 'DNSFilter custom resolver NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'dnsfilter_modes_list' 'DNSFilter mode-list EJ handler' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'shell_timeout' 'Shell timeout NVRAM form backend' || backend_failed=1
           if (( backend_failed )); then
             echo 'ERROR: one or more required ASUS 52334 backend signatures are missing' >&2
             exit 1

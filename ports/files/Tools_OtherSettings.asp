@@ -55,10 +55,22 @@ function initial() {
 	document.getElementById("tcp_last_ack").value = tcp[8];
 	document.getElementById("udp_unreplied").value = udp[0];
 	document.getElementById("udp_assured").value = udp[1];
+
+	var shell_seconds = parseInt(document.form.shell_timeout.value, 10);
+	if (isNaN(shell_seconds) || shell_seconds < 0)
+		shell_seconds = 0;
+	document.getElementById("shell_timeout_x").value = Math.floor(shell_seconds / 60);
 }
 
 function validRange(id, min, max) {
 	return validator.numberRange(document.getElementById(id), min, max);
+}
+
+function validRangeAllowZero(id, min, max) {
+	var obj = document.getElementById(id);
+	if (obj.value == "0")
+		return true;
+	return validator.numberRange(obj, min, max);
 }
 
 function applyRule() {
@@ -71,7 +83,8 @@ function applyRule() {
 	    !validRange("tcp_close_wait", 1, 86400) ||
 	    !validRange("tcp_last_ack", 1, 86400) ||
 	    !validRange("udp_assured", 1, 86400) ||
-	    !validRange("udp_unreplied", 1, 86400))
+	    !validRange("udp_unreplied", 1, 86400) ||
+	    !validRangeAllowZero("shell_timeout_x", 10, 999))
 		return false;
 
 	document.form.ct_tcp_timeout.value = "0 " +
@@ -86,6 +99,8 @@ function applyRule() {
 	document.form.ct_udp_timeout.value =
 		document.getElementById("udp_unreplied").value + " " +
 		document.getElementById("udp_assured").value;
+	document.form.shell_timeout.value =
+		parseInt(document.getElementById("shell_timeout_x").value, 10) * 60;
 
 	FormActions("start_apply.htm", "apply", "reboot", "<% get_default_reboot_time(); %>");
 	showLoading();
@@ -113,6 +128,7 @@ function applyRule() {
 <input type="hidden" name="firmver" value="<% nvram_get("firmver"); %>">
 <input type="hidden" name="ct_tcp_timeout" value="<% nvram_get("ct_tcp_timeout"); %>">
 <input type="hidden" name="ct_udp_timeout" value="<% nvram_get("ct_udp_timeout"); %>">
+<input type="hidden" name="shell_timeout" value="<% nvram_get("shell_timeout"); %>">
 
 <table class="content" align="center" cellpadding="0" cellspacing="0">
 <tr>
@@ -128,7 +144,7 @@ function applyRule() {
 <div class="formfonttitle">Tools - Other Settings</div>
 <div style="margin:10px 0 10px 5px;" class="splitLine"></div>
 <div class="formfontdesc">
-Conntrack timeout tuning using the ASUS 52334 backend. Only settings verified in the stock RT-AC86U runtime are exposed here.
+Conntrack timeout tuning and shell idle timeout using ASUS 52334 backends. Only settings verified in the stock RT-AC86U runtime are exposed here.
 </div>
 
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
@@ -143,6 +159,11 @@ Conntrack timeout tuning using the ASUS 52334 backend. Only settings verified in
 <tr><th>TCP Timeout: Last ACK</th><td><input id="tcp_last_ack" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
 <tr><th>UDP Timeout: Assured</th><td><input id="udp_assured" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
 <tr><th>UDP Timeout: Unreplied</th><td><input id="udp_unreplied" type="text" maxlength="5" class="input_6_table" onkeypress="return validator.isNumber(this,event);"></td></tr>
+</table>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" style="margin-top:8px;">
+<thead><tr><td colspan="2">Shell settings</td></tr></thead>
+<tr><th>SSH/shell idle timeout</th><td><input id="shell_timeout_x" type="text" maxlength="3" class="input_6_table" onkeypress="return validator.isNumber(this,event);"> minutes <span>(0 disables)</span></td></tr>
 </table>
 
 <div class="apply_gen"><input class="button_gen" onclick="applyRule();" type="button" value="<#CTL_apply#>"></div>

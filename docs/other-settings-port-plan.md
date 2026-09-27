@@ -24,21 +24,21 @@ Targeted runtime probe:
 - `shell_timeout`: stock HTTPD string present;
 - reboot scheduling keys are present in stock RC/HTTPD.
 
-The same probe did **not** establish exact runtime support for:
+The same probe did **not** establish a safe UI/apply contract for:
 
 - `ct_max`;
-- `rstats_offset`;
-- `rstats_stime`;
 - cstats controls;
 - `dns_local_cache`;
 - `ntpd_enable`;
 - `ntpd_server_redir`.
 
+A later targeted `rstats` probe refined the traffic-history result: the stock 52334 daemon itself contains `rstats_path`, `rstats_offset`, `rstats_stime`, `rstats_bak` and the Tomato-compatible history file logic. Those daemon strings prove consumption, but not yet safe arbitrary-path persistence through ASUS's restart/boot wrapper.
+
 Those controls must not be exposed merely because Merlin's page contains them.
 
 ## Conntrack phase 1
 
-The staged adapter at `ports/candidates/Tools_OtherSettings.asp` intentionally exposes only the verified timeout vectors:
+The active adapter at `ports/files/Tools_OtherSettings.asp` exposes the verified timeout vectors:
 
 - the eight TCP state timeout values encoded in `ct_tcp_timeout`;
 - UDP unreplied/assured values encoded in `ct_udp_timeout`.
@@ -51,9 +51,19 @@ Therefore phase 1 must **not** rely on `action_script=restart_conntrack`. The st
 
 The earlier plain `strings -Fx conntrack` negative was also shown to be unsuitable as a discriminator: the verified Merlin 386.14_2 runtime itself lacks an exact standalone `conntrack` string even though its WebUI uses `restart_conntrack`.
 
+Phase 1 was promoted into the guarded active overlay together with a hash-guarded ASUS `menuTree.js` patch that adds only a `Tools -> Other Settings` entry. Validation run `36331580369` passed. The exact menu preimage is `73163bdf1b9f20c056a3c2b90629521b0a0f2007ea4967b73c1b3d6d8d9583e2` and the validated postimage is `fd1982791f0ccb02039e56f883670c8a0dc42f6eae01afe8e135cda35b62c1ac`.
+
+## Shell timeout adaptation
+
+ASUS 52334 already consumes `shell_timeout` in its persistent HND profile:
+
+`TMOUT="$(nvram get shell_timeout 2>/dev/null)"`
+
+and stock `httpd` exposes the exact `shell_timeout` NVRAM/form string. Merlin's UI semantics store seconds while presenting minutes, accepting `0` as disabled or 10–999 minutes. The active Tools adapter therefore exposes only that same conversion/range and uses the already-required stock reboot path. No SSH/Dropbear binary is changed.
+
 ## Traffic-history follow-up
 
-M47 remains a separate adaptation step. Presence of `rstats_path`, `rstats_new`, and `/bin/rstats` is promising, but the Merlin scheduling/location controls must not be enabled until their exact stock service and persistence semantics are mapped.
+M47 remains a separate adaptation step. The stock 52334 daemon confirms direct consumption of `rstats_path`, `rstats_offset`, `rstats_stime`, `rstats_bak` and the history files. Clean ASUS-origin 382_15098 code also shows that ASUS's `restart_rstats()` historically rewrites `rstats_path` from `rstats_bak` (NVRAM backup vs empty path). Therefore arbitrary USB/JFFS path controls remain deferred until the 52334 wrapper behavior is independently mapped; the daemon strings alone are not enough to claim Merlin-compatible path persistence.
 
 ## Safety rule
 
