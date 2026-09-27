@@ -148,12 +148,24 @@ jobs:
             echo 'MISSING ASUS httpd::sitesurvey' >> "$OUT"
             failed=1
           fi
-          if strings -a "$ASUS_ROOT/sbin/rc" | grep -Fxq 'wlcscan'; then
-            echo 'PASS ASUS rc::wlcscan' >> "$OUT"
+          rc_ok=1
+          for sig in start_wlcscan stop_wlcscan; do
+            if strings -a "$ASUS_ROOT/sbin/rc" | grep -Fxq "$sig"; then
+              echo "PASS ASUS rc::$sig" >> "$OUT"
+            else
+              echo "MISSING ASUS rc::$sig" >> "$OUT"
+              rc_ok=0
+            fi
+          done
+          stock_restart_refs=$( { grep -RIl --binary-files=without-match -F 'restart_wlcscan' "$ASUS_ROOT/www" 2>/dev/null || true; } | wc -l)
+          echo "stock_restart_wlcscan_ref_files=$stock_restart_refs" >> "$OUT"
+          if [ "$stock_restart_refs" -gt 0 ]; then
+            echo 'PASS ASUS stock WebUI invokes restart_wlcscan' >> "$OUT"
           else
-            echo 'MISSING ASUS rc::wlcscan' >> "$OUT"
-            failed=1
+            echo 'MISSING ASUS stock restart_wlcscan consumer' >> "$OUT"
+            rc_ok=0
           fi
+          if [ "$rc_ok" -ne 1 ]; then failed=1; fi
           if grep -Fq 'aplist' "$ASUS_ROOT/www/apscan.asp"; then
             echo 'PASS ASUS apscan.asp::aplist contract' >> "$OUT"
           else
