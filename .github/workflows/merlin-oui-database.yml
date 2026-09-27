@@ -1,0 +1,79 @@
+name: Extract Merlin local OUI database
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/merlin-oui-database.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified Merlin 386.14_2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Extract local OUI database
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work/merlin
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/merlin -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          DB="$ROOT/www/ajax/ouiDB.json"
+          test -f "$DB"
+          cp "$DB" reports/ouiDB.json
+          {
+            echo "source=Merlin RT-AC86U 386.14_2"
+            echo "firmware_sha256=1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a"
+            sha256sum "$DB"
+            stat -c 'size=%s mode=%a' "$DB"
+            python3 - "$DB" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          with open(p,encoding='utf-8-sig') as f: d=json.load(f)
+          print("entries="+str(len(d)))
+          keys=list(d)[:5]
+          print("sample_keys="+",".join(keys))
+          PY
+          } > reports/ouiDB-provenance.txt
+          cat reports/ouiDB-provenance.txt
+
+      - name: Publish OUI donor artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: merlin-oui-database
+          path: |
+            reports/ouiDB.json
+            reports/ouiDB-provenance.txt
+          if-no-files-found: error
+          retention-days: 14
