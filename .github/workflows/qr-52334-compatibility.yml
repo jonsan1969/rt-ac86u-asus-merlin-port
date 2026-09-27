@@ -1,0 +1,100 @@
+name: Probe ASUS 52334 QR compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/qr-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe QR WebUI surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/qr-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'QR ASSETS'
+          find "$R/www/js" -maxdepth 3 -type f -iname '*qrcode*' -o -iname '*qr*code*' 2>/dev/null | sort >> "$OUT" || true
+          for rel in js/qrcode/jquery.qrcode.min.js js/qrcode/qrcode.min.js; do
+            if [ -f "$R/www/$rel" ]; then
+              echo "PRESENT /www/$rel" >> "$OUT"
+              sha256sum "$R/www/$rel" >> "$OUT"
+            else
+              echo "MISSING /www/$rel" >> "$OUT"
+            fi
+          done
+
+          section 'GUEST NETWORK'
+          if [ -f "$R/www/Guest_network.asp" ]; then
+            sha256sum "$R/www/Guest_network.asp" >> "$OUT"
+            grep -nEi -A8 -B5 'qrcode|showqr|qrstring' "$R/www/Guest_network.asp" >> "$OUT" || true
+          fi
+
+          section 'ROUTER MAP'
+          if [ -f "$R/www/device-map/router.asp" ]; then
+            sha256sum "$R/www/device-map/router.asp" >> "$OUT"
+            grep -nEi -A8 -B5 'qrcode|showqr|qrstring' "$R/www/device-map/router.asp" >> "$OUT" || true
+          fi
+
+          section 'ALL QR REFERENCES'
+          grep -RInaE --binary-files=without-match 'jquery\.qrcode|qrcode|ShowQRCode|showqrdiv' "$R/www" 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'SUMMARY'
+          refs=$( { grep -RIlE --binary-files=without-match 'jquery\.qrcode|qrcode|ShowQRCode|showqrdiv' "$R/www" 2>/dev/null || true; } | wc -l)
+          echo "qr_consumer_files=$refs" >> "$OUT"
+          if [ "$refs" -gt 0 ]; then
+            echo 'PASS stock QR consumer exists' >> "$OUT"
+          else
+            echo 'MISSING stock QR consumer' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-52334-compatibility
+          path: reports/qr-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
