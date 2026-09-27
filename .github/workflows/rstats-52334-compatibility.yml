@@ -82,6 +82,35 @@ jobs:
             printf '%-18s rc=%d daemon=%d web=%d\n' "$k" "$rc" "$daemon" "$web" >> "$OUT"
           done
 
+          section 'HTTPD APPLY DEFAULTS DEPENDENCIES'
+          readelf -d "$R/usr/sbin/httpd" 2>/dev/null | grep NEEDED >> "$OUT" || true
+          python3 - "$R" >> "$OUT" <<'PY'
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1])
+          keys=[b"shell_timeout\0",b"ct_tcp_timeout\0",b"ct_udp_timeout\0",
+                b"rstats_path\0",b"rstats_new\0",b"rstats_bak\0",
+                b"rstats_stime\0",b"rstats_offset\0"]
+          roots=[root/"lib",root/"usr/lib",root/"usr/sbin"]
+          hits={k[:-1].decode():[] for k in keys}
+          for base in roots:
+              if not base.exists(): continue
+              for p in base.rglob("*"):
+                  if not p.is_file(): continue
+                  try: data=p.read_bytes()
+                  except: continue
+                  for k in keys:
+                      if k in data:
+                          hits[k[:-1].decode()].append("/"+p.relative_to(root).as_posix())
+          for k in hits:
+              print(f"{k}: {hits[k]}")
+          common=None
+          for k in ("shell_timeout","ct_tcp_timeout","ct_udp_timeout","rstats_path","rstats_new","rstats_bak","rstats_stime","rstats_offset"):
+              s=set(hits[k])
+              common=s if common is None else common & s
+          print("all-default-keys-common-files:",sorted(common or []))
+          PY
+
           section 'TRAFFIC MONITOR WEB SURFACE'
           find "$R/www" -maxdepth 1 -type f -name 'Main_TrafficMonitor*' -print | sort >> "$OUT" || true
           grep -RInaE --binary-files=without-match \
