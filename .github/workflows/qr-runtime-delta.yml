@@ -117,12 +117,19 @@ jobs:
                   print(text[start:i])
           PY
 
+          cp "$ASUS_ROOT/www/Guest_network.asp" reports/asus-Guest_network.asp
+          cp "$ASUS_ROOT/www/device-map/router.asp" reports/asus-router.asp
+          cp "$MERLIN_ROOT/www/js/qrcode.min.js" reports/merlin-qrcode.min.js
           cat "$OUT"
 
       - name: Publish report
         uses: actions/upload-artifact@v4
         with:
           name: qr-runtime-delta
-          path: reports/qr-runtime-delta.txt
+          path: |
+            reports/qr-runtime-delta.txt
+            reports/asus-Guest_network.asp
+            reports/asus-router.asp
+            reports/merlin-qrcode.min.js
           if-no-files-found: error
           retention-days: 14
