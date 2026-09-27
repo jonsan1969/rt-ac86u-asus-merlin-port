@@ -1,0 +1,109 @@
+name: Probe ASUS 52334 System Info compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/sysinfo-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe System Info handler surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/sysinfo-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'EXISTING SYSINFO WEB SURFACE'
+          find "$R/www" -maxdepth 2 -type f \( -iname '*sysinfo*' -o -iname '*performance*' -o -iname '*temperature*' \) -printf '%P\n' | sort >> "$OUT" || true
+
+          section 'HTTPD SYSINFO STRINGS'
+          strings -a "$R/usr/sbin/httpd" | grep -Ei \
+            '^(sysinfo|ethernet|ethernet\.rtk|hwaccel\.runner|hwaccel\.fc|conn\.max|nvram\.total|driver_version\.[0-3]|cfe_version|qtn_version|cpu\.model|cpu\.freq)$' \
+            | sort -u >> "$OUT" || true
+
+          section 'HTTPD RELATED TOKENS'
+          strings -a "$R/usr/sbin/httpd" | grep -Ei \
+            'sysinfo|cpu.*freq|cpu.*model|driver.*version|cfe|conn.*max|nvram.*total|ethernet|runner|flow.*cache|hwaccel' \
+            | sort -u | head -n 500 >> "$OUT" || true
+
+          section 'WEB REFERENCES'
+          grep -RInaE --binary-files=without-match \
+            'sysinfo\(|cpu\.freq|cpu\.model|conn\.max|nvram\.total|driver_version' \
+            "$R/www" 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'NVRAM KEYS USED BY DONOR PAGE'
+          for k in ctf_disable ctf_disable_force odmpid ctf_fa_mode buildno extendno rc_support qos_enable qos_type cstats_enable sw_mode ctf_disable_modem ct_tcp_timeout ct_udp_timeout productid buildinfo; do
+            hits=0
+            strings -a "$R/usr/sbin/httpd" | grep -Fxq "$k" && hits=$((hits+1)) || true
+            strings -a "$R/sbin/rc" | grep -Fxq "$k" && hits=$((hits+1)) || true
+            printf '%-20s components=%d\n' "$k" "$hits" >> "$OUT"
+          done
+
+          section 'SUMMARY'
+          failed=0
+          if strings -a "$R/usr/sbin/httpd" | grep -Fxq 'sysinfo'; then
+            echo 'PASS httpd::sysinfo' >> "$OUT"
+          else
+            echo 'MISSING httpd::sysinfo' >> "$OUT"
+            failed=1
+          fi
+          for sig in 'cpu.model' 'cpu.freq' 'conn.max' 'nvram.total'; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fxq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+            fi
+          done
+
+          cat "$OUT"
+          exit "$failed"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sysinfo-52334-compatibility
+          path: reports/sysinfo-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
