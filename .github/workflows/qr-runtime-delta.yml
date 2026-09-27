@@ -1,0 +1,128 @@
+name: Map QR runtime delta
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/qr-runtime-delta.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and Merlin 386.14_2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then
+              echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Map QR delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=reports/qr-runtime-delta.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'ASSET'
+          for rel in js/qrcode.min.js js/qrcode/jquery.qrcode.min.js js/qrcode/qrcode.min.js; do
+            echo "--- $rel ---" >> "$OUT"
+            if [ -f "$MERLIN_ROOT/www/$rel" ]; then
+              echo 'MERLIN present' >> "$OUT"
+              sha256sum "$MERLIN_ROOT/www/$rel" >> "$OUT"
+              stat -c 'size=%s mode=%a' "$MERLIN_ROOT/www/$rel" >> "$OUT"
+            else
+              echo 'MERLIN missing' >> "$OUT"
+            fi
+            if [ -f "$ASUS_ROOT/www/$rel" ]; then
+              echo 'ASUS present' >> "$OUT"
+              sha256sum "$ASUS_ROOT/www/$rel" >> "$OUT"
+            else
+              echo 'ASUS missing' >> "$OUT"
+            fi
+          done
+
+          for rel in Guest_network.asp device-map/router.asp; do
+            section "$rel PREIMAGE"
+            sha256sum "$ASUS_ROOT/www/$rel" >> "$OUT"
+            echo '-- ASUS likely insertion contexts --' >> "$OUT"
+            grep -nE -A12 -B8 'validator\.js|httpApi\.js|function initial|function init|guest_table|wl_settings_field|showqr|qrcode' "$ASUS_ROOT/www/$rel" | head -n 500 >> "$OUT" || true
+
+            echo '-- MERLIN QR-only contexts --' >> "$OUT"
+            grep -nEi -A18 -B12 'qrcode|min\.js|genQRCodes|show_qr_code|hide_qr_code|showqrdiv|qrcodepanel' "$MERLIN_ROOT/www/$rel" | head -n 1000 >> "$OUT" || true
+          done
+
+          section 'QR FUNCTION DEPENDENCIES'
+          python3 - "$MERLIN_ROOT/www/Guest_network.asp" "$MERLIN_ROOT/www/device-map/router.asp" <<'PY' >> "$OUT"
+          from pathlib import Path
+          import re,sys
+          for p in map(Path,sys.argv[1:]):
+              text=p.read_text(errors='replace')
+              print('---',p.name,'---')
+              for fn in ('genQRCodes','show_qr_code','hide_qr_code'):
+                  m=re.search(r'function\s+'+re.escape(fn)+r'\s*\([^)]*\)\s*\{',text)
+                  if not m: continue
+                  start=m.start(); i=m.end(); depth=1
+                  while i<len(text) and depth:
+                      if text[i]=='{': depth+=1
+                      elif text[i]=='}': depth-=1
+                      i+=1
+                  print(text[start:i])
+          PY
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-runtime-delta
+          path: reports/qr-runtime-delta.txt
+          if-no-files-found: error
+          retention-days: 14
