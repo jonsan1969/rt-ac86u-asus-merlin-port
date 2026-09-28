@@ -1,0 +1,62 @@
+name: Verify M48 cstats is disabled on HND donor
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/m48-cstats-hnd-classification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin source
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify HND exclusions
+        run: |
+          set -euo pipefail
+          M=work/merlin/release/src/router
+          OUT=reports/m48-cstats-hnd.txt
+          : > "$OUT"
+          pass(){ echo "PASS $*" | tee -a "$OUT"; }
+          fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
+
+          grep -A2 -F 'ifneq ($(HND_ROUTER),y)' "$M/Makefile" | grep -Fq 'obj-y += cstats'             && pass "Top-level build excludes cstats on HND"             || fail "Top-level HND cstats exclusion missing"
+
+          grep -Fq '#if !defined(HND_ROUTER)' "$M/rc/services.c"             && grep -Fq 'void start_cstats(int new)' "$M/rc/services.c"             && pass "cstats rc lifecycle is non-HND guarded"             || fail "cstats rc lifecycle guard missing"
+
+          grep -A5 -F '// Setup traffic accounting' "$M/rc/firewall.c" | grep -Fq '#if !defined(HND_ROUTER)'             && pass "Classic ipt_account firewall setup excluded on HND"             || fail "HND firewall exclusion missing"
+
+          grep -A10 -F '#if !defined(HND_ROUTER)' "$M/httpd/data_arrays.h" | grep -Fq 'ej_ipt_bandwidth'             && pass "Classic IP-traffic HTTPD handlers excluded on HND"             || fail "HTTPD HND exclusion missing"
+
+          for p in Main_TrafficMonitor_devdaily.asp Main_TrafficMonitor_devmonthly.asp Main_TrafficMonitor_devrealtime.asp; do
+            grep -A5 -F 'ifeq ($(HND_ROUTER),y)' "$M/www/Makefile" | grep -Fq "rm -rf $(INSTALLDIR)/www/$p"               && pass "HND build removes $p"               || fail "HND page removal missing for $p"
+          done
+
+          echo 'CLASSIFICATION M48_NO_PORT_DONOR_DISABLED_ON_HND' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m48-cstats-hnd
+          path: reports/m48-cstats-hnd.txt
+          if-no-files-found: warn
+          retention-days: 30
