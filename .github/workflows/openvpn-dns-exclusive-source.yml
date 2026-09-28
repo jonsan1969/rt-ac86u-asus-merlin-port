@@ -49,7 +49,7 @@ jobs:
           fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
           must_have() {
             local path="$1" token="$2" label="$3"
-            grep -Fq "$token" "$path" && pass "$label" || fail "$label"
+            grep -Fq -- "$token" "$path" && pass "$label" || fail "$label"
           }
 
           echo '===== PINNING =====' | tee -a "$OUT"
