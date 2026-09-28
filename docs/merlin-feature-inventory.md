@@ -56,7 +56,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M07 | 20 custom WebUI slots | absent | **PORT** | A/C | `user1.asp` … `user20.asp`, mount/allocation plumbing |
 | M08 | AMTM management interface | absent | **PORT** | A/C | depends on working JFFS/addon framework |
 | M09 | Entware/addon friendliness | no integrated Merlin setup path | **PORT** | A/C | `/opt` exists but Merlin integration/setup behavior must be restored |
-| M10 | JFFS backup/restore/upload WebUI | `UploadingJFFS.asp` absent | **PORT** | A/C | verify backend handlers before adding page |
+| M10 | JFFS backup/restore/upload WebUI | stock settings-backup page exists, but JFFS-specific upload/backup handlers are absent from ASUS 52334 | **PORT** | C | source-side HTTPD/uploader integration required; do not expose dead UI |
 | M11 | Custom DDNS user-script callback | `ddns_custom_updated` absent | **PORT** | A/C | restore custom provider/script integration |
 | M12 | Scheduled jobs / `cru` | ASUS already has `/usr/sbin/cru`; implementation differs | **REVIEW** | B/C | preserve stock primitive; evaluate Merlin collision/race fixes; `crontab` utility is Merlin-only |
 
@@ -126,7 +126,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M57 | Advanced VPN status page | page absent; stock IPsec AJAX exists but Merlin OpenVPN status endpoint/globals are absent | **PORT** | C | do not add page alone; source-side HTTPD/OpenVPN status endpoint integration required before UI port |
 | M58 | QR codes for network/Guest Network | Merlin `qrcode.min.js` present; no same runtime asset in ASUS | **PORT/REVIEW** | A/C | verify ASUS has no alternative implementation before adding |
 | M59 | Local OUI database for WebUI/networkmap | Merlin `ajax/ouiDB.json` is runtime-only | **PORT/REVIEW** | A/C | enables local vendor lookup without remote query |
-| M60 | JFFS upload/restore page | absent | **PORT** | A/C | also listed under addon/JFFS block for dependency ordering |
+| M60 | JFFS upload/restore page | absent and backend handler absent | **PORT** | C | same source-side dependency as M10; keep as dependency-order alias, not a separate image port |
 
 ## 6. QoS and networking refinements from the 386 changelog
 
