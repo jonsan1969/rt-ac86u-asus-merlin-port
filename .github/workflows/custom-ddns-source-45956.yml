@@ -1,0 +1,103 @@
+name: Probe custom DDNS source delta on ASUS 386.45956
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/custom-ddns-source-45956.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify narrow custom DDNS delta
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/custom-ddns-source-45956.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          must_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            grep -Fq "$token" "$root/$path" && pass "$label" || fail "$label"
+          }
+          must_not_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            if grep -Fq "$token" "$root/$path"; then fail "$label"; else pass "$label"; fi
+          }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C "$A" show -s --format='ASUS %H %s' HEAD | tee -a "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          echo '===== EXISTING ASUS DDNS BASE =====' | tee -a "$OUT"
+          must_have "$A" release/src/router/rc/rc.c '{ "ddns_updated"' "ASUS retains ddns_updated rc command"
+          must_have "$A" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'WWW.DYNDNS.ORG(CUSTOM)' "ASUS retains DynDNS custom provider mode"
+          must_have "$M" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'WWW.DYNDNS.ORG(CUSTOM)' "Merlin also retains DynDNS custom provider mode"
+
+          echo '===== MERLIN SCRIPT-DRIVEN CUSTOM PROVIDER =====' | tee -a "$OUT"
+          must_not_have "$A" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'option value="CUSTOM"' "ASUS lacks separate script-driven CUSTOM provider"
+          must_have "$M" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'option value="CUSTOM"' "Merlin adds separate script-driven CUSTOM provider"
+          must_have "$M" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'nvram_get("jffs2_scripts")' "Merlin CUSTOM UI checks custom-script enablement"
+          must_have "$M" release/src/router/www/Advanced_ASUSDDNS_Content.asp 'ddns-start script' "Merlin CUSTOM UI documents ddns-start dependency"
+
+          echo '===== RC MULTICALL CALLBACK =====' | tee -a "$OUT"
+          for path in release/src/router/rc/rc.c release/src/router/rc/rc.h release/src/router/rc/Makefile; do
+            must_not_have "$A" "$path" 'ddns_custom_updated' "ASUS lacks ddns_custom_updated in $path"
+            must_have "$M" "$path" 'ddns_custom_updated' "Merlin adds ddns_custom_updated in $path"
+          done
+
+          echo '===== DDNS START HOOK SEMANTICS =====' | tee -a "$OUT"
+          must_not_have "$A" release/src/router/rc/services.c 'run_custom_script("ddns-start"' "ASUS lacks ddns-start lifecycle hook"
+          must_have "$M" release/src/router/rc/services.c 'run_custom_script("ddns-start", 120, wan_ip, NULL)' "Merlin CUSTOM provider blocks up to 120 seconds"
+          must_have "$M" release/src/router/rc/services.c 'run_custom_script("ddns-start", 0, wan_ip, NULL)' "Merlin normal provider fires async ddns-start hook"
+          must_have "$M" release/src/router/rc/services.c 'strcmp(server, "CUSTOM")' "Merlin start_ddns recognizes CUSTOM provider"
+          must_have "$M" release/src/router/rc/services.c 'ddns_custom_updated_main' "Merlin implements custom completion callback"
+          must_have "$M" release/src/router/rc/services.c 'nvram_set("ddns_return_code", "200")' "Custom callback reports success code"
+          must_have "$M" release/src/router/rc/services.c 'nvram_set("ddns_return_code", "unknown_error")' "Custom callback reports failure code"
+
+          hooks="$(grep -Fc 'run_custom_script("ddns-start"' "$M/release/src/router/rc/services.c")"
+          [ "$hooks" -eq 2 ] \
+            && pass "Pinned Merlin has exactly two ddns-start call sites" \
+            || fail "Pinned Merlin has exactly two ddns-start call sites (found $hooks)"
+
+          echo 'CLASSIFICATION CUSTOM_DDNS_SOURCE_REQUIRED_JFFS_GATED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-ddns-source-45956
+          path: reports/custom-ddns-source-45956.txt
+          if-no-files-found: warn
+          retention-days: 30
