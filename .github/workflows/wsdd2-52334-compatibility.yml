@@ -156,6 +156,13 @@ jobs:
           readelf -d "$BIN" | grep -Fq 'Shared library: [libc.so.6]'
           readelf -d "$BIN" | grep -Fq 'Shared library: [ld-linux.so.3]'
 
+          # This workflow is long-running; another verified port may update
+          # ports/active.json while firmware extraction is in progress.
+          # Rebase the workspace to current branch head before creating the
+          # staging commit so manifest additions are composed, not conflicted.
+          git fetch origin asus-52334-merlin-port
+          git reset --hard origin/asus-52334-merlin-port
+
           mkdir -p ports/files/usr/sbin
           cp "$BIN" ports/files/usr/sbin/wsdd2
           chmod 0755 ports/files/usr/sbin/wsdd2
