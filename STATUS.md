@@ -90,3 +90,5 @@ Only these project states are used:
 | M25/M40 VPN Director routing | **IN PROGRESS** | rule schema, persistent store, `ovpncN` table construction, RPDB priority ownership, per-client killswitch, cleanup and M38 DNS coupling are specified in `docs/vpn-director-routing-source-contract.md`; later ASUS-compatible OpenVPN/routing source remains required |
 
 | M46 QoS Stats | **IN PROGRESS** | narrowed to read-only tc-class + BWDPI HTTPD handlers, then add-only page/AJAX/menu integration; M64 download counters share this backend. See `docs/qos-stats-source-contract.md` |
+
+| M52 Wireless client auto-refresh | **IN PROGRESS** | narrowed to read-only `get_wl_status` Broadcom/HND HTTPD handler + AJAX/exact Wireless Log page adaptation; no wireless daemon/driver replacement. Must compose with M53 no-auto-logout. See `docs/wireless-client-refresh-source-contract.md` |
