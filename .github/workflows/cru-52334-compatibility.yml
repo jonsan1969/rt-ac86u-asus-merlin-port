@@ -70,6 +70,23 @@ jobs:
             echo 'ASUS_MERLIN_BYTE_IDENTICAL=yes' >> "$OUT" ||
             echo 'ASUS_MERLIN_BYTE_IDENTICAL=no' >> "$OUT"
 
+          echo '===== ASUS FLOCK SURFACE =====' >> "$OUT"
+          FP="$(find "$ASUS_ROOT/bin" "$ASUS_ROOT/sbin" "$ASUS_ROOT/usr/bin" "$ASUS_ROOT/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name flock -print -quit 2>/dev/null || true)"
+          if [ -n "$FP" ]; then
+            echo "flock_path=$FP target=$(readlink "$FP" || true)" >> "$OUT"
+            ls -l "$FP" >> "$OUT"
+            file -L "$FP" >> "$OUT" || true
+            set +e
+            qemu-arm-static -L "$ASUS_ROOT" "$FP" -x 9 sh -c 'echo FLOCK_OK' > reports/flock-test.txt 2>&1
+            frc=$?
+            set -e
+            echo "flock_test_rc=$frc" >> "$OUT"
+            cat reports/flock-test.txt >> "$OUT"
+          else
+            echo 'flock_path=MISSING' >> "$OUT"
+          fi
+          echo >> "$OUT"
+
           echo '===== CROND SURFACE =====' >> "$OUT"
           for side in ASUS MERLIN; do
             if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
