@@ -490,6 +490,15 @@
       "sha256": "6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb",
       "mode": "0755",
       "policy": "add_only"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/usr/sbin/wsdd2",
+      "target": "/usr/sbin/wsdd2",
+      "sha256": "89a4309ccbe6a33c74ac2ea971c91af1e753ca930c26767259594172189b94e0",
+      "mode": "0755",
+      "policy": "add_only"
     }
   ]
 }
