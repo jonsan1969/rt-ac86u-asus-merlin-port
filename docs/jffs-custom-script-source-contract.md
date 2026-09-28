@@ -35,6 +35,20 @@ Targeted image probes established:
 
 Therefore there is no hidden stock primitive that can substitute for the missing Merlin hook engine.
 
+
+## Clean ASUS 386.45956 helper provenance
+
+The clean community mirror commit `a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6` (“update GPL 386.45956”) materially narrows the helper delta:
+
+- `release/src/router/shared/scripts.c` already contains `run_custom_script()`, `run_postconf()`, `use_custom_config()`, and `append_custom_config()`;
+- the complete four-function helper block is text-identical to the pinned Merlin 386.14_2 donor block;
+- ASUS 45956 `shared/Makefile` only builds `scripts.o` when `RTCONFIG_TOR=y`;
+- ASUS 45956 `shared/shared.h` exposes the declarations only under `#ifdef RTCONFIG_TOR`;
+- `release/src/router/config_base` has `RTCONFIG_TOR is not set`;
+- repository search finds no Merlin lifecycle call sites such as `services-start` or `firewall-start`, and no normal `jffs2_scripts` default outside the dormant helper implementation.
+
+Therefore, for a later verified ASUS-compatible source baseline, the shared-helper implementation itself should be treated as an ASUS-lineage primitive where it still exists. The minimal source work is to compile/expose it under the appropriate JFFS/custom-script feature condition, add the reviewed defaults/directories, and add only the required lifecycle/config-generator call sites. This finding does **not** make 386.45956 a runtime base and does not prove the helper survived unchanged into 52334.
+
 ## Core helper API that must be source-integrated
 
 From pinned Merlin `release/src/router/shared/scripts.c`:
