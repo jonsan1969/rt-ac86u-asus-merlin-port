@@ -80,3 +80,5 @@ Only these project states are used:
 | M04 custom config/postconf framework | **IN PROGRESS** | helper implementation is inherited from ASUS lineage; exact append → full replace → 120s postconf sequencing and staged generator targets are specified in `docs/custom-config-postconf-source-contract.md` |
 
 | M01-M03 JFFS core lifecycle patch series | **IN PROGRESS** | helper exposure, JFFS directory bootstrap, service/network/DHCP/USB/QoS/update hook signatures and blocking/argument semantics are frozen in `docs/jffs-core-source-patch-series.md`; signatures are stable across 386.12/51997 and 386.14_2 |
+
+| M10/M60 JFFS backup/restore | **IN PROGRESS** | donor UI/archive semantics are bounded, but old `rm -rf /jffs/*` + unrestricted `tar -xf` restore is explicitly rejected; hardened authenticated full-JFFS design is in `docs/jffs-backup-restore-source-contract.md`; ASUS `RTCONFIG_SAVEJFFS` is partial-design reference only |
