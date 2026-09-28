@@ -39,6 +39,8 @@ This is a **community mirror of ASUS GPL material**, not an ASUS-hosted canonica
 
 A later ASUS RT-AC86U GPL generation `386_46092` is historically corroborated by downstream firmware projects, but this project has not independently verified an original ASUS archive or a clean unmodified mirror for that release.
 
+A targeted source inspection of clean-mirror commit `a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6` also found that ASUS 386.45956 already carries the four custom-script helper functions in `release/src/router/shared/scripts.c`. Their helper block is text-identical to Merlin 386.14_2, but ASUS gates `scripts.o` and the declarations behind `RTCONFIG_TOR`, which is disabled in `config_base`, and the normal Merlin lifecycle call sites/defaults are absent. This makes 45956 useful as a source-lineage anchor for the helper primitive, not as evidence that stock 45956 or 52334 exposes Merlin custom scripts.
+
 ## Late ASUS GPL history inside Merlin
 
 The Merlin donor history contains:
