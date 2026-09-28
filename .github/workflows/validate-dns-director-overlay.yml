@@ -483,6 +483,21 @@ jobs:
           for sig in ['wlc_scan_state','aplist = [<% get_ap_info(); %>][0]']:
               if sig not in stock_apscan:
                   raise SystemExit(f"stock ASUS apscan endpoint missing {sig}")
+
+          samba=(root/"www/Advanced_AiDisk_samba.asp").read_text(encoding="utf-8")
+          wins_controls=[
+              'name="smbd_wins" class="input" value="1"',
+              'name="smbd_wins" class="input" value="0"',
+              'nvram_match_x("", "smbd_wins", "1", "checked")',
+              'nvram_match_x("", "smbd_wins", "0", "checked")',
+              'action_script" value="restart_ftpsamba"',
+          ]
+          for sig in wins_controls:
+              if samba.count(sig) != 1:
+                  raise SystemExit(f"WINS UI contract missing or duplicated: {sig}")
+          for unsupported in ['smbd_master','smbd_simpler_naming']:
+              if unsupported in samba:
+                  raise SystemExit(f"WINS-only adaptation accidentally exposes unsupported control: {unsupported}")
           PY
 
           check_backend_signature() {
@@ -502,6 +517,8 @@ jobs:
           check_backend_signature "$ASUS_ROOT/sbin/rc" 'dnsfilter_custom1' 'DNSFilter custom resolver NVRAM' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'dnsfilter_modes_list' 'DNSFilter mode-list EJ handler' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/sbin/httpd" 'shell_timeout' 'Shell timeout NVRAM form backend' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/sbin/rc" 'smbd_wins' 'ASUS Samba WINS backend' || backend_failed=1
+          check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'smbd_wins' 'ASUS Samba WINS default/NVRAM key' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_bak' 'Traffic history NVRAM-backup default' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_stime' 'Traffic history save-interval default' || backend_failed=1
           check_backend_signature "$ASUS_ROOT/usr/lib/libshared.so" 'rstats_offset' 'Traffic history monthly-cycle default' || backend_failed=1
