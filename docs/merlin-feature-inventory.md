@@ -109,7 +109,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
-| M43 | System Info summary page | absent | **PORT** | A/C | `Tools_Sysinfo.asp` + httpd/sysinfo handlers |
+| M43 | System Info summary page | stock ASUS has generic sysinfo plumbing but lacks key Merlin read-only fields | **PORT** | C backend + A UI | minimal HTTPD handler set and add-only page/AJAX contract in `docs/system-info-source-contract.md`; do not replace ASUS httpd or import irrelevant platform handlers |
 | M44 | Other Settings page | stock page absent, but required ASUS-backed controls were individually proven and are now exposed through an add-only Tools page | **ADAPT** | A/C | implemented image-safely for verified conntrack, traffic-history and shell-timeout settings only; unsupported Merlin controls are deliberately omitted |
 | M45 | Temperature/performance page | absent | **PORT** | A/C | AC86U temperature display from `Advanced_PerformanceTuning_Content.asp` |
 | M46 | QoS Stats page | page absent and ASUS 52334 lacks Merlin tc/IPv6/conntrack EJ data handlers plus `ajax_gettcdata.asp` | **PORT** | C | source-side HTTPD/QoS data integration required before UI port |
