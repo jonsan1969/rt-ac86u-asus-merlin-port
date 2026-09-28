@@ -96,7 +96,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M32 | Cake SQM QoS | cake module absent | **PORT** | B/C | requires kernel/source compatibility; hardware acceleration implications |
 | M33 | WireGuard kernel module/userspace tool | Merlin has `wireguard.ko` + `wg`; ASUS image lacks same runtime components but contains generic WG pages/libvpn | **REVIEW** | B/C/D | determine ASUS 52334 WireGuard capability path before any kernel/tool port |
 | M34 | Wireless Site Survey | page absent | **PORT** | A/C | AC86U-specific supported feature since Merlin 386.10 |
-| M35 | Detailed WiFi troubleshooting / WiFi Insight | AC86U-specific page absent | **PORT** | A/C | `WiFi_Insight.asp` has RT-AC86U-specific source |
+| M35 | Detailed WiFi troubleshooting / WiFi Insight | launcher absent in ASUS; pinned Merlin image contains only a stale launcher and no visualization pages/backends | **NO PORT** | — | do not resurrect incomplete legacy WiFi Radar runtime; donor firmware lacks `visindex.asp`/capacity/metrics/config pages and `vis-datacollector`/`vis-dcon` |
 | M36 | IPv6-aware DNS Director | ASUS backend overlap exists | **ADAPT** | C | preserve Merlin IPv6/custom resolver behavior only where missing |
 | M37 | IPv6 OpenVPN server + optional IPv6 NAT | stock support must be verified | **REVIEW** | B/C | part of advanced OpenVPN block |
 | M38 | OpenVPN DNS Exclusive behavior | shared OpenVPN/dnsmasq stack differs | **REVIEW** | B/C | preserve later ASUS security; port behavior only if missing |
@@ -118,7 +118,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M49 | Monthly traffic history page | absent | **PORT** | A/C | `Main_TrafficMonitor_monthly.asp` |
 | M50 | DHCP reservation hostname field | already present in ASUS page | **NO PORT** | — | stock page contains `dhcp_hostname_x_0`; compare only semantics |
 | M51 | Wireless ACL/client-name display enhancement | shared page is divergent | **REVIEW** | C | manual page-level comparison |
-| M52 | Auto-refreshing advanced wireless client list | Merlin signatures absent from ASUS | **PORT** | A/C | `ajax_wificlients.asp`, refresh preference |
+| M52 | Auto-refreshing advanced wireless client list | stock wireless log page exists, but Merlin AJAX endpoint and `get_wl_status` HTTPD handler are absent | **PORT** | C | page refresh UI is simple, but full Merlin client-list data path requires source-side HTTPD handler before adding `ajax_wificlients.asp` |
 | M53 | System Log / Wireless Log no-auto-logout behavior | shared pages differ | **PORT/REVIEW** | C | Merlin explicitly disables auto logout on these log pages |
 | M54 | System Log layout/filter/log-level enhancements | shared pages differ | **REVIEW** | C | port only demonstrably missing useful UI behavior |
 | M55 | WiFi icon reports both radios | shared UI; exact stock behavior unverified | **REVIEW** | C | small visual/behavioral delta |
