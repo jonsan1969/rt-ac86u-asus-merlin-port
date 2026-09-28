@@ -82,10 +82,12 @@ jobs:
           must_have "$C" '-I DNSVPN%d -s %s -j RETURN' "WAN policy sources are exempted"
           must_have "$C" '--dport 53 -j DNSVPN%d' "PREROUTING diverts DNS to per-client chain"
 
-          udp="$(grep -Fc -- '-p udp -m udp --dport 53' "$C")"
-          tcp="$(grep -Fc -- '-p tcp -m tcp --dport 53' "$C")"
-          [ "$udp" -ge 3 ] && pass "UDP/53 setup-update-teardown surface present ($udp)" || fail "UDP/53 surface incomplete ($udp)"
-          [ "$tcp" -ge 3 ] && pass "TCP/53 setup-update-teardown surface present ($tcp)" || fail "TCP/53 surface incomplete ($tcp)"
+          must_have "$C" '-I PREROUTING -p udp -m udp --dport 53 -j DNSVPN%d' "Generated setup script inserts UDP/53 jump"
+          must_have "$C" '-I PREROUTING -p tcp -m tcp --dport 53 -j DNSVPN%d' "Generated setup script inserts TCP/53 jump"
+          must_have "$C" '"-D", "PREROUTING", "-p", "udp", "-m", "udp", "--dport", "53", "-j", buffer' "Cleanup/order code deletes UDP/53 jump"
+          must_have "$C" '"-D", "PREROUTING", "-p", "tcp", "-m", "tcp", "--dport", "53", "-j", buffer' "Cleanup/order code deletes TCP/53 jump"
+          must_have "$C" '"-I", "PREROUTING", "-p", "udp", "-m", "udp", "--dport", "53", "-j", buffer' "Order refresh reinserts UDP/53 jump"
+          must_have "$C" '"-I", "PREROUTING", "-p", "tcp", "-m", "tcp", "--dport", "53", "-j", buffer' "Order refresh reinserts TCP/53 jump"
 
           echo '===== ORDER / TEARDOWN =====' | tee -a "$OUT"
           must_have "$C" 'for (unit = OVPN_CLIENT_MAX; unit > 0; unit--)' "Multiple-client DNS jump ordering is deterministic"
