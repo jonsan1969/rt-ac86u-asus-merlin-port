@@ -17,6 +17,18 @@ They are layered on top of the generic JFFS/addon foundation:
 
 Once those prerequisites are implemented in the source build, AMTM can be restored as an add-only shell script and Entware can use the normal addon lifecycle.
 
+## Verified runtime probe
+
+GitHub Actions run `36382931979` against the pinned ASUS 52334 and Merlin 386.14_2 images established:
+
+- ASUS has no integrated `/usr/sbin/amtm`;
+- Merlin `/usr/sbin/amtm` is a POSIX shell script, SHA-256 `283fa24cec4cb7df84fa6d7f1e5cde82b164f28a675ebe5167127c8a891bc7ba`;
+- both images already use `/opt -> /tmp/opt`;
+- neither image exposes a dedicated `rc` string/backend for `amtm`, `entware`, or `opkg`;
+- Merlin differs by having the generic `services-start` and `post-mount` lifecycle surface that stock ASUS lacks.
+
+This confirms that M08/M09 should remain generic-JFFS-dependent add-on layers rather than receive feature-specific core patches.
+
 ## M08 — AMTM
 
 Pinned donor installs:
