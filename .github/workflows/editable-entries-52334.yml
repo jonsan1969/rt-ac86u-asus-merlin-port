@@ -1,0 +1,101 @@
+name: Probe Merlin editable-entry WebUI delta on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/editable-entries-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Compare editable-entry surfaces
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/editable-entries-52334.txt
+          : > "$OUT"
+
+          pages='Advanced_DHCP_Content.asp Advanced_VirtualServer_Content.asp Advanced_MACFilter_Content.asp Advanced_URLFilter_Content.asp Advanced_KeywordFilter_Content.asp Advanced_WAdvanced_Content.asp Advanced_Wireless_Content.asp Advanced_LAN_Content.asp'
+
+          echo '===== PAGE PRESENCE AND EDIT SIGNATURES =====' >> "$OUT"
+          for page in $pages; do
+            echo "===== $page =====" >> "$OUT"
+            for side in ASUS MERLIN; do
+              [ "$side" = ASUS ] && R="$A" || R="$M"
+              P="$R/www/$page"
+              echo "--- $side ---" >> "$OUT"
+              if [ ! -f "$P" ]; then
+                echo 'MISSING' >> "$OUT"
+                continue
+              fi
+              sha256sum "$P" >> "$OUT"
+              grep -Ein 'edit|modify|change.*entry|select.*row|row.*select|onclick=.*(edit|modify)|ondblclick|tableApi|tableAPI' "$P" | head -n 120 >> "$OUT" || true
+            done
+          done
+
+          echo '===== GLOBAL EDITABLE CANDIDATE PAGES =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            grep -RIlE 'ondblclick|onclick=.*(edit|modify)|function[[:space:]]+(edit|modify)|edit_Row|editRow|edit_rule|editRule' "$R/www" 2>/dev/null \
+              | sed "s#^$R/www/##" | sort | head -n 250 >> "$OUT" || true
+          done
+
+          echo '===== HIGH-SIGNAL FUNCTION TOKENS =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            grep -RhoE 'function[[:space:]]+[A-Za-z0-9_]*(edit|Edit|modify|Modify)[A-Za-z0-9_]*[[:space:]]*\(' "$R/www" 2>/dev/null \
+              | sed 's/[[:space:]]\+/ /g' | sort -u | head -n 300 >> "$OUT" || true
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: editable-entries-52334
+          path: reports/editable-entries-52334.txt
+          if-no-files-found: error
+          retention-days: 14
