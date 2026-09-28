@@ -47,9 +47,9 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
-| M01 | JFFS user scripts under `/jffs/scripts/` | direct Merlin signature absent | **PORT** | C | restore shared script helper and individual event call sites |
-| M02 | `service-event` / `service-event-end` hooks | absent | **PORT** | C | source-level `rc/services.c` integration |
-| M03 | Event hooks: init/firewall/services/NAT/WAN/QoS/DDNS/USB/DHCP/update | most Merlin hook signatures absent | **PORT** | C | add only hook calls, never Merlin `rc` binary |
+| M01 | JFFS user scripts under `/jffs/scripts/` | helper implementation exists in clean ASUS lineage but is TOR-gated and normal lifecycle call sites are absent | **PORT** | C | ordered source patch series in `docs/jffs-core-source-patch-series.md`; preserve inherited helper implementation and add only exposure/default/bootstrap + reviewed call sites |
+| M02 | `service-event` / `service-event-end` hooks | absent | **PORT** | C | stable across Merlin 386.12/51997 and 386.14_2: blocking 120s pre-dispatch + async post-dispatch with action/service args; exact contract in `docs/jffs-core-source-patch-series.md` |
+| M03 | Event hooks: init/firewall/services/NAT/WAN/QoS/DDNS/USB/DHCP/update | most Merlin hook signatures absent | **PORT** | C | core non-DDNS lifecycle signatures are stable across 386.12/51997 and 386.14_2 and frozen in `docs/jffs-core-source-patch-series.md`; DDNS-specific M11 remains separate |
 | M04 | postconf/custom config framework | helper primitive exists in clean ASUS lineage but generator call sites are absent | **PORT** | B/C | exact append → replace → blocking postconf sequencing and Tier-1 generator targets are defined in `docs/custom-config-postconf-source-contract.md`; port per generator, never transplant donor rc/httpd files |
 | M05 | Addon helper API | stock helper absent; pinned Merlin `helper.sh` is now add-only in guarded overlay | **PORT** | A | image-safe foundation implemented; includes postconf helpers |
 | M06 | Addon custom-settings API | stock API absent; active pinned `helper.sh` already provides `am_settings_get/set` and `/jffs/addons/custom_settings.txt` | **PORT** | A | image-safe implementation already delivered as part of JFFS helper foundation |
@@ -102,8 +102,8 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M38 | OpenVPN DNS Exclusive behavior | ASUS retains `vpn_client_adns` default but lacks Merlin `ovpn_set_exclusive_dns`, `ovpn_clear_exclusive_dns` and ordered per-client DNS-chain behavior | **PORT** | C | exact donor contract in `docs/openvpn-dns-exclusive-source-contract.md`; preserve later ASUS OpenVPN/dnsmasq and reconcile policy-mode DNS interception with M40/VPN Director routing ownership |
 | M39 | OpenVPN custom options stored in JFFS / expanded storage | ASUS 52334 already uses `/jffs/openvpn` and exposes a 15000-character `vpn_server_custom` field; Merlin adds the older `custom3` split-storage contract | **NO PORT** | — | run 36384020800: preserve newer ASUS OpenVPN storage; do not graft Merlin `custom3`/`cust2` layout onto ASUS 52334 |
 | M40 | Multiple OpenVPN client routes and Merlin routing semantics | ASUS has generic route-nopull/route primitives but lacks Merlin `ovpnc` policy tables, `vpn_client*_rgw/enforce` and VPN Director rule integration | **PORT** | C | run 36384020800: source-side OpenVPN/routing integration required; preserve ASUS OpenVPN binary and later routing/security baseline |
-| M41 | `dhcpc-event` IPv4/IPv6 protocol argument | Merlin hook API extension | **PORT** | C | pinned donor `rc/udhcpc.c` passes event + `"4"` for IPv4 WAN and event + `"6"` for DHCPv6; restore exactly with M01–M03 hook engine, not as an image patch |
-| M42 | QoS `qos-start init` blocking hook semantics | stock user-hook absent | **PORT** | C | pinned donor `rc/qos.c` uses async `qos-start rules` plus 120-second blocking `qos-start init` at both init paths; preserve this exact ordering with the JFFS hook engine |
+| M41 | `dhcpc-event` IPv4/IPv6 protocol argument | Merlin hook API extension | **PORT** | C | exact three-context contract is frozen in `docs/jffs-core-source-patch-series.md`: WAN v4 = event+`4`, LAN/AP DHCP client = event only, WAN v6 = event+`6`; stable across 386.12/386.14 |
+| M42 | QoS `qos-start init` blocking hook semantics | stock user-hook absent | **PORT** | C | stable across 386.12/386.14: async `qos-start rules` plus 120-second blocking `qos-start init` at both donor init paths; exact contract in `docs/jffs-core-source-patch-series.md` |
 
 ## 5. WebUI, monitoring and diagnostics
 
