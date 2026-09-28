@@ -82,3 +82,5 @@ Only these project states are used:
 | M01-M03 JFFS core lifecycle patch series | **IN PROGRESS** | helper exposure, JFFS directory bootstrap, service/network/DHCP/USB/QoS/update hook signatures and blocking/argument semantics are frozen in `docs/jffs-core-source-patch-series.md`; signatures are stable across 386.12/51997 and 386.14_2 |
 
 | M10/M60 JFFS backup/restore | **IN PROGRESS** | donor UI/archive semantics are bounded, but old `rm -rf /jffs/*` + unrestricted `tar -xf` restore is explicitly rejected; hardened authenticated full-JFFS design is in `docs/jffs-backup-restore-source-contract.md`; ASUS `RTCONFIG_SAVEJFFS` is partial-design reference only |
+
+| M29/M30 local NTP server + redirect | **IN PROGRESS** | donor `/usr/sbin/ntp` proven to be Merlin BusyBox NTPD alias, so no binary transplant. Clean ASUS source already carries server-capable NTPD code but disables it. Plan: isolated ASUS-source NTPD in `-w` server-only mode after JFFS hooks, DHCP advertisement via M04 postconf, M30 via `firewall-start`; `ntpd_server_trust` is not a 386.14_2 donor key. See `docs/local-ntp-jffs-adaptation.md` |
