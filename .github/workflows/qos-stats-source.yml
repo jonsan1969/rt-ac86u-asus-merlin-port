@@ -1,0 +1,83 @@
+name: Verify M46 QoS Stats donor contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/qos-stats-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/httpd release/src/router/www
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify tc and BWDPI data paths
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/qos-stats-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          D="$M/release/src/router/httpd/data_arrays.c"
+          H="$M/release/src/router/httpd/data_arrays.h"
+          A="$M/release/src/router/www/ajax_gettcdata.asp"
+          W="$M/release/src/router/www/QoS_Stats.asp"
+
+          test -f "$D" && pass "data_arrays.c exists" || fail "data_arrays.c missing"
+          test -f "$A" && pass "ajax_gettcdata.asp exists" || fail "ajax_gettcdata.asp missing"
+          test -f "$W" && pass "QoS_Stats.asp exists" || fail "QoS_Stats.asp missing"
+
+          have "$H" 'ej_tcclass_dump_array' "Header exports tc-class handler"
+          have "$D" 'int ej_tcclass_dump_array' "tc-class handler implemented"
+          have "$D" 'var tcdata_lan_array = [[]]' "QoS disabled returns valid empty arrays"
+          have "$D" 'tc -s class show dev br0' "Donor reads LAN tc classes"
+          have "$D" 'tc -s class show dev imq0' "Donor reads donor download interface"
+          have "$D" 'tc -s class show dev %s' "Donor reads WAN tc classes"
+          have "$D" 'Sent %llu bytes' "tc parser reads cumulative bytes"
+          have "$D" 'rate %15s %15s backlog' "tc parser reads rates"
+
+          have "$H" 'ej_bwdpi_conntrack' "Header exports BWDPI conntrack handler"
+          have "$D" 'int ej_bwdpi_conntrack' "BWDPI conntrack handler implemented"
+          have "$D" 'fopen("/proc/bw_cte_dump", "r")' "BWDPI handler consumes target flow dump"
+          have "$D" 'hsearch_r' "BWDPI handler maps app database through hash"
+          have "$D" '_fix_TM_ipv6' "Donor includes TrendMicro IPv6 repair"
+
+          have "$A" 'get_tcclass_array()' "AJAX endpoint calls tc-class handler"
+          have "$A" 'bwdpi_conntrack()' "AJAX endpoint calls BWDPI handler"
+          have "$W" '/ajax_gettcdata.asp' "QoS page polls AJAX endpoint"
+          have "$W" 'tcdata_lan_array' "QoS page consumes download/LAN array"
+          have "$W" 'tcdata_wan_array' "QoS page consumes upload/WAN array"
+          have "$W" 'bwdpi_conntrack' "QoS page consumes BWDPI connections"
+
+          echo 'CLASSIFICATION M46_READ_ONLY_BACKEND_PLUS_ADD_ONLY_UI' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qos-stats-source
+          path: reports/qos-stats-source.txt
+          if-no-files-found: warn
+          retention-days: 30
