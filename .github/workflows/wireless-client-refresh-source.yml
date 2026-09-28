@@ -1,0 +1,73 @@
+name: Verify M52 wireless client refresh donor contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/wireless-client-refresh-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin source
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/httpd release/src/router/www
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify handler and polling contract
+        run: |
+          set -euo pipefail
+          M=work/merlin/release/src/router
+          OUT=reports/wireless-client-refresh-source.txt
+          : > "$OUT"
+          pass(){ echo "PASS $*" | tee -a "$OUT"; }
+          fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have(){ grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          B="$M/httpd/sysdeps/web-broadcom-am.c"
+          W="$M/httpd/web.c"
+          P="$M/www/Main_WStatus_Content.asp"
+          A="$M/www/ajax_wificlients.asp"
+
+          have "$W" '{ "get_wl_status", ej_wl_status_array}' "EJ name maps to read-only wireless status array"
+          have "$B" 'ej_wl_status_array' "Broadcom status array handler exists"
+          have "$B" 'ej_wl_unit_status_array' "Per-radio status collector exists"
+          have "$B" 'WLC_GET_RADIO' "Handler reads radio state"
+          have "$B" 'authe_sta_list' "Handler reads authenticated station list"
+          have "$B" 'read_whole_file("/proc/net/arp")' "Handler reads IPv4 neighbor data"
+          have "$B" 'read_whole_file("/var/lib/misc/dnsmasq.leases")' "Handler reads DHCP hostname data"
+
+          test -f "$A" && pass "AJAX endpoint exists" || fail "AJAX endpoint missing"
+          have "$A" 'get_wl_status()' "AJAX endpoint reuses same structured handler"
+          have "$P" "url: '/ajax_wificlients.asp'" "Wireless Log polls AJAX endpoint"
+          for sec in 0 1 3 5 10; do
+            have "$P" "option value=\"$sec\"" "Refresh selector contains $sec-second choice"
+          done
+          have "$P" "cookie.set('awrtm_wlrefresh'" "Refresh choice is client-side cookie state"
+          have "$P" 'timedEvent = setTimeout("get_wlclient_list();", refreshRate * 1000)' "Success path schedules bounded next refresh"
+
+          echo 'CLASSIFICATION M52_SMALL_READ_ONLY_HTTPD_BACKEND_PLUS_UI' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-client-refresh-source
+          path: reports/wireless-client-refresh-source.txt
+          if-no-files-found: warn
+          retention-days: 30
