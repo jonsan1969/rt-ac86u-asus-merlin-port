@@ -1,0 +1,126 @@
+name: Probe ASUS 52334 stock init lifecycle
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/stock-init-lifecycle-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Extract ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus-fw work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus-fw
+          (
+            cd work/asus-fw
+            FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+            test -n "$FW"
+            binwalk -Me "$FW" >/dev/null
+          )
+          ASUS_ROOT="$(find work/asus-fw -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Map startup execution graph
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"
+          OUT=reports/stock-init-lifecycle-52334.txt
+          : > "$OUT"
+
+          section() { printf '\n===== %s =====\n' "$1" | tee -a "$OUT"; }
+          dump() {
+            local p="$1"
+            if [ -e "$A$p" ] || [ -L "$A$p" ]; then
+              echo "--- $p" | tee -a "$OUT"
+              ls -l "$A$p" | sed "s#$A##" | tee -a "$OUT" || true
+              if [ -f "$A$p" ] && file -b "$A$p" | grep -Eq 'script|text'; then
+                sed -n '1,320p' "$A$p" | tee -a "$OUT"
+              fi
+            fi
+          }
+
+          section "INIT ENTRY FILES"
+          for p in             /etc/inittab /rom/etc/inittab             /etc/init.d/rcS /rom/etc/init.d/rcS             /etc/rcS /rom/etc/rcS             /etc/rc.local /rom/etc/rc.local             /etc/profile /rom/etc/profile; do
+            dump "$p"
+          done
+
+          section "INIT.D DIRECTORY"
+          for d in /etc/init.d /rom/etc/init.d; do
+            if [ -d "$A$d" ]; then
+              echo "--- $d" | tee -a "$OUT"
+              find "$A$d" -maxdepth 2 -printf '%y %m %p -> %l\n' 2>/dev/null |
+                sed "s#$A##" | sort | tee -a "$OUT"
+            fi
+          done
+
+          section "RC DIRECTORIES"
+          for d in /etc/rc.d /etc/rcS.d /etc/rc0.d /etc/rc1.d /etc/rc2.d /etc/rc3.d /etc/rc4.d /etc/rc5.d /etc/rc6.d /rom/etc/rc.d; do
+            if [ -e "$A$d" ]; then
+              echo "--- $d" | tee -a "$OUT"
+              find "$A$d" -maxdepth 2 -printf '%y %m %p -> %l\n' 2>/dev/null |
+                sed "s#$A##" | sort | tee -a "$OUT"
+            fi
+          done
+
+          section "STARTUP SCRIPT REFERENCES"
+          find "$A/rom/etc" "$A/etc" "$A/usr/sbin" "$A/sbin" -xdev -type f -size -1024k -print 2>/dev/null |
+            while read -r f; do
+              file -b "$f" 2>/dev/null | grep -Eq 'script|text' || continue
+              hits="$(grep -Ein                 'init\.d|rcS|rc\.local|run-parts|for .*init|/etc/rc|/rom/etc/rc|start_service|app_init|services-start|firewall-start|post-mount'                 "$f" 2>/dev/null | head -n 80 || true)"
+              if [ -n "$hits" ]; then
+                echo "--- ${f#"$A"}" | tee -a "$OUT"
+                printf '%s\n' "$hits" | tee -a "$OUT"
+              fi
+            done
+
+          section "MAIN RC INIT STRINGS"
+          if [ -f "$A/sbin/rc" ]; then
+            strings -a "$A/sbin/rc" |
+              grep -Ei                 '/etc/init|/rom/etc/init|rcS|rc\.local|run-parts|init\.d|app_init|start_services|start_service|service_main|init_main|boot' |
+              sort -u | tee -a "$OUT" || true
+          fi
+
+          section "BUSYBOX APPLETS"
+          if [ -f "$A/bin/busybox" ]; then
+            strings -a "$A/bin/busybox" | grep -E '^run-parts$|^start-stop-daemon$' | sort -u | tee -a "$OUT" || true
+          fi
+
+          section "CLASSIFICATION"
+          if grep -RqsE 'run-parts[[:space:]].*/(rom/)?etc/init\.d|for .* /(rom/)?etc/init\.d'               "$A/etc" "$A/rom/etc" 2>/dev/null; then
+            echo 'POTENTIAL_GENERIC_INITD_RUNNER_FOUND_REVIEW_REQUIRED' | tee -a "$OUT"
+          else
+            echo 'NO_PROVEN_GENERIC_ADD_ONLY_INITD_RUNNER' | tee -a "$OUT"
+          fi
+          echo 'DO_NOT_ACTIVATE_DAEMONS_FROM_THIS_REPORT_UNTIL_ORDERING_AND_RESTART_SEMANTICS_ARE_PROVEN' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-init-lifecycle-52334
+          path: reports/stock-init-lifecycle-52334.txt
+          if-no-files-found: warn
+          retention-days: 30
