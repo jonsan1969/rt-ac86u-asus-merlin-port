@@ -54,7 +54,7 @@ jobs:
 
           pass(){ echo "PASS $*" | tee -a "$OUT"; }
           fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
-          have(){ grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+          have(){ grep -Fq -- "$2" "$1" && pass "$3" || fail "$3"; }
 
           echo '===== CLEAN ASUS FEATURE LINEAGE =====' | tee -a "$OUT"
           have "$A/release/src/router/config_base" '# RTCONFIG_TOR is not set' "ASUS clean base disables RTCONFIG_TOR"
