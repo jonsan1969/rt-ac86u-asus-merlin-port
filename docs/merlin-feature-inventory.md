@@ -57,7 +57,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M08 | AMTM management interface | absent | **PORT** | A/C | depends on working JFFS/addon framework |
 | M09 | Entware/addon friendliness | no integrated Merlin setup path | **PORT** | A/C | `/opt` exists but Merlin integration/setup behavior must be restored |
 | M10 | JFFS backup/restore/upload WebUI | stock settings-backup page exists, but JFFS-specific upload/backup handlers are absent from ASUS 52334 | **PORT** | C | source-side HTTPD/uploader integration required; do not expose dead UI |
-| M11 | Custom DDNS user-script callback | `ddns_custom_updated` absent | **PORT** | A/C | restore custom provider/script integration |
+| M11 | Custom DDNS user-script callback | ASUS 52334 lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated` | **PORT** | C | source-side DDNS + JFFS hook integration required; stock DDNS path remains authoritative |
 | M12 | Scheduled jobs / `cru` | ASUS already has `/usr/sbin/cru`; implementation differs | **REVIEW** | B/C | preserve stock primitive; evaluate Merlin collision/race fixes; `crontab` utility is Merlin-only |
 
 ## 2. Shell, SSH and administration
