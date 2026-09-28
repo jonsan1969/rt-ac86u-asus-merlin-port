@@ -1,0 +1,124 @@
+name: Probe Merlin Tor on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/tor-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils qemu-user-static
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Probe Tor binary and integration contract
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/tor-52334-compatibility.txt
+          : > "$OUT"
+
+          echo '===== TOR BINARY =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            p="$R/usr/sbin/Tor"
+            if [ -e "$p" ]; then
+              echo "$side present" >> "$OUT"
+              file "$p" >> "$OUT"
+              sha256sum "$p" >> "$OUT"
+              readelf -d "$p" | grep NEEDED >> "$OUT" || true
+            else
+              echo "$side missing" >> "$OUT"
+            fi
+          done
+
+          echo '===== ASUS DEPENDENCY CHECK =====' >> "$OUT"
+          missing=0
+          if [ -f "$M/usr/sbin/Tor" ]; then
+            while read -r lib; do
+              [ -n "$lib" ] || continue
+              hit="$(find "$A/lib" "$A/usr/lib" -maxdepth 2 \( -type f -o -type l \) -name "$lib" -print -quit 2>/dev/null || true)"
+              if [ -n "$hit" ]; then echo "PASS $lib -> $hit" >> "$OUT"; else echo "MISSING $lib" >> "$OUT"; missing=$((missing+1)); fi
+            done < <(readelf -d "$M/usr/sbin/Tor" | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p')
+          fi
+          echo "missing_needed=$missing" >> "$OUT"
+
+          echo '===== WEBUI =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            find "$R/www" -maxdepth 2 -type f -iname '*tor*' -printf '%P\n' 2>/dev/null | sort >> "$OUT" || true
+          done
+
+          echo '===== NVRAM / LIFECYCLE SURFACE =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              echo "[$rel]" >> "$OUT"
+              strings -a "$R/$rel" | grep -Ei '^tor_|Tor$|torrc|start_tor|stop_tor|restart_tor|SocksPort|TransPort|DNSPort' | sort -u | head -n 160 >> "$OUT" || true
+            done
+          done
+
+          echo '===== CONFIG FILES =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            find "$R" -maxdepth 5 \( -iname '*torrc*' -o -path '*/tor/*' \) -printf '%P\t%y\t%l\n' 2>/dev/null | sort | head -n 160 >> "$OUT" || true
+          done
+
+          asus_rc=no; merlin_rc=no
+          strings -a "$A/sbin/rc" | grep -Eiq 'start_tor|tor_enable|torrc' && asus_rc=yes || true
+          strings -a "$M/sbin/rc" | grep -Eiq 'start_tor|tor_enable|torrc' && merlin_rc=yes || true
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          echo "asus_rc_tor=$asus_rc" >> "$OUT"
+          echo "merlin_rc_tor=$merlin_rc" >> "$OUT"
+          if [ "$missing" -eq 0 ] && [ "$asus_rc" = no ] && [ "$merlin_rc" = yes ]; then
+            echo 'PORT_CLASS=LIFECYCLE_SOURCE_HOOK_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tor-52334-compatibility
+          path: reports/tor-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
