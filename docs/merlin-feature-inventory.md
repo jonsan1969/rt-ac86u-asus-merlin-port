@@ -114,7 +114,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M45 | Temperature/performance page | absent | **PORT** | A/C | AC86U temperature display from `Advanced_PerformanceTuning_Content.asp` |
 | M46 | QoS Stats page | page absent and ASUS 52334 lacks Merlin tc/IPv6/conntrack EJ data handlers plus `ajax_gettcdata.asp` | **PORT** | C | source-side HTTPD/QoS data integration required before UI port |
 | M47 | Save traffic history to USB/JFFS/NVRAM | `rstats_path` backend signature exists; Merlin UI absent | **ADAPT** | A/B/C | compare rstats semantics, then restore location/schedule controls |
-| M48 | Enhanced/per-IP traffic monitoring | only partial stock overlap | **PORT/ADAPT** | A/B/C | monthly page is Merlin-only; existing traffic pages are divergent |
+| M48 | Enhanced/per-IP traffic monitoring | ASUS 52334 lacks `cstats`, `ipt_bandwidth`, cstats backend keys and device traffic pages | **PORT** | B/C | source-side cstats + HTTPD integration required; keep M49 global history separate |
 | M49 | Monthly traffic history page | absent | **PORT** | A/C | `Main_TrafficMonitor_monthly.asp` |
 | M50 | DHCP reservation hostname field | already present in ASUS page | **NO PORT** | — | stock page contains `dhcp_hostname_x_0`; compare only semantics |
 | M51 | Wireless ACL/client-name display enhancement | ASUS 52334 already has client-name resolution and a newer shared `clientList` model | **NO PORT** | — | verified runtime page equivalence; preserve later ASUS implementation |
