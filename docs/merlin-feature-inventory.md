@@ -110,7 +110,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
 | M43 | System Info summary page | absent | **PORT** | A/C | `Tools_Sysinfo.asp` + httpd/sysinfo handlers |
-| M44 | Other Settings page | absent | **PORT/ADAPT** | A/C | umbrella page for traffic storage, conntrack and other controls |
+| M44 | Other Settings page | stock page absent, but required ASUS-backed controls were individually proven and are now exposed through an add-only Tools page | **ADAPT** | A/C | implemented image-safely for verified conntrack, traffic-history and shell-timeout settings only; unsupported Merlin controls are deliberately omitted |
 | M45 | Temperature/performance page | absent | **PORT** | A/C | AC86U temperature display from `Advanced_PerformanceTuning_Content.asp` |
 | M46 | QoS Stats page | page absent and ASUS 52334 lacks Merlin tc/IPv6/conntrack EJ data handlers plus `ajax_gettcdata.asp` | **PORT** | C | source-side HTTPD/QoS data integration required before UI port |
 | M47 | Save traffic history to USB/JFFS/NVRAM | `rstats_path` backend signature exists; Merlin UI absent | **ADAPT** | A/B/C | compare rstats semantics, then restore location/schedule controls |
@@ -142,7 +142,7 @@ These are feature-bearing behavior changes rather than standalone pages.
 | M66 | Prevent Auto DoH also handles DDR / Private Relay interactions | ASUS has DNS Privacy keys but lacks donor `resolver.arpa`, `use-application-dns.net`, `mask.icloud.com`, `mask-h2.icloud.com` canary handling | **PORT** | C | run 36383666065: genuine source-level security behavior gap; integrate narrowly into ASUS dnsmasq-config generation, never replace ASUS dnsmasq/rc wholesale |
 | M67 | OpenVPN client selection for Ookla Speedtest | not present in pinned 386.14_2 donor; appears in later 3006 changelog | **N/A** | — | outside this project's pinned Merlin donor baseline |
 | M68 | Outbound LAN connection logging when allowed-connection logging is enabled | **PORT/VERIFY SOURCE** | run 36383630066 finds `fw_log_x`, `logaccept` and the same `-A FORWARD -i %s -j %s` format in ASUS `rc`, but binary strings cannot prove the rule's runtime target argument; verify/reconcile in ASUS firewall source rather than patching the binary |
-| M69 | Local QR/OUI and WebUI diagnostics additions | **PORT/REVIEW** | grouped supporting WebUI assets |
+| M69 | Local QR/OUI and WebUI diagnostics additions | **NO PORT (umbrella)** | constituent work is tracked and completed under M53/M54/M58/M59; keep this row only as a grouping alias, not an additional port |
 
 ## 7. Items deliberately not treated as Merlin feature ports
 
