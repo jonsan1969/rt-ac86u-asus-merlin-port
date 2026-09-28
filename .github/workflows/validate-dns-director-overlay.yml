@@ -599,6 +599,69 @@ jobs:
           echo 'PASS QEMU local copy path' | tee -a "$OUT"
           echo 'CLASSIFICATION=M16_GUARDED_ADD_ONLY_SCP_PASS' | tee -a "$OUT"
 
+      - name: Verify dormant local NTPD overlay candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          N="$ASUS_ROOT/usr/libexec/rtac86u-ntpd"
+          OUT=reports/ntpd-overlay-validation.txt
+
+          if ! python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ports/active.json").read_text(encoding="utf-8"))
+          raise SystemExit(0 if any(e.get("target")=="/usr/libexec/rtac86u-ntpd" for e in d.get("entries",[])) else 1)
+          PY
+          then
+            echo 'SKIP /usr/libexec/rtac86u-ntpd is not active in overlay manifest'
+            exit 0
+          fi
+
+          : > "$OUT"
+          test -f "$N"
+          test "$(sha256sum "$N" | awk '{print $1}')" = '6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb'
+          test "$(stat -c '%a' "$N")" = '755'
+          file "$N" | tee -a "$OUT"
+          file "$N" | grep -Eq 'ELF 64-bit.*ARM aarch64|ELF 64-bit.*AArch64'
+
+          if readelf -l "$N" | grep -q 'INTERP'; then
+            echo 'FAIL NTPD has PT_INTERP' | tee -a "$OUT"
+            exit 1
+          fi
+          echo 'PASS static AArch64/no PT_INTERP' | tee -a "$OUT"
+
+          set +e
+          qemu-aarch64-static "$N" --help > reports/ntpd-overlay-help.txt 2>&1
+          help_rc=$?
+          set -e
+          test "$help_rc" -ne 126
+          test "$help_rc" -ne 127
+          grep -Eiq 'Usage: ntpd|NTP client/server' reports/ntpd-overlay-help.txt
+          grep -Fq -- '[-dnqNwtl -I IFACE]' reports/ntpd-overlay-help.txt
+          grep -Fq -- '[-p PEER]' reports/ntpd-overlay-help.txt
+          echo 'PASS QEMU NTPD option surface' | tee -a "$OUT"
+
+          python3 - <<'PY' | tee -a "$OUT"
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ports/active.json").read_text(encoding="utf-8"))
+          target="/usr/libexec/rtac86u-ntpd"
+          owners=[e for e in d["entries"] if e.get("target")==target]
+          if len(owners)!=1 or owners[0].get("type")!="copy" or owners[0].get("policy")!="add_only":
+              raise SystemExit("NTPD manifest owner is not exactly one add-only copy")
+          refs=[]
+          for e in d["entries"]:
+              if e.get("target")==target:
+                  continue
+              if "rtac86u-ntpd" in json.dumps(e,sort_keys=True):
+                  refs.append(e.get("target"))
+          if refs:
+              raise SystemExit(f"NTPD is not dormant; other overlay entries reference it: {refs}")
+          print("PASS dormant: no overlay startup/config patch references rtac86u-ntpd")
+          PY
+
+          echo 'CLASSIFICATION=M29_DORMANT_ADD_ONLY_BINARY_FOUNDATION_PASS' | tee -a "$OUT"
+
       - name: Publish text reports only
         uses: actions/upload-artifact@v4
         with:
@@ -611,5 +674,7 @@ jobs:
             reports/menuTree.patch.diff
             reports/scp-overlay-validation.txt
             reports/scp-overlay-usage.txt
+            reports/ntpd-overlay-validation.txt
+            reports/ntpd-overlay-help.txt
           if-no-files-found: error
           retention-days: 14
