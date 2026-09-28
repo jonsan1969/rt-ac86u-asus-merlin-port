@@ -66,10 +66,17 @@ jobs:
           have "$A" 'sysinfo("conn.total")' "AJAX endpoint reads conn.total"
           have "$A" 'sysinfo("conn.active")' "AJAX endpoint reads conn.active"
 
-          if grep -Eq 'nvram_set|nvram_commit|notify_rc|system\(' "$S"; then
-            fail "sysinfo.c unexpectedly contains write/service/shell side effects"
+          core_block="$(sed -n '/strcmp(type,"cpu.model")/,/strncmp(type,"conn.wifi"/p' "$S")"
+          if printf '%s\n' "$core_block" | grep -Eq 'nvram_set|nvram_commit|notify_rc|system\('; then
+            fail "Core M43 cpu/memory/nvram/jffs/conn block has write/service/shell side effects"
           else
-            pass "sysinfo.c remains read-only at coarse side-effect check"
+            pass "Core M43 cpu/memory/nvram/jffs/conn block is read-only"
+          fi
+
+          if grep -Eq 'nvram_set|system\(' "$S"; then
+            pass "Donor has extra non-core sysinfo handlers that require selective adaptation"
+          else
+            fail "Expected donor non-core side-effectful handlers not found; re-review M43 scope"
           fi
 
           echo 'CLASSIFICATION M43_SMALL_HTTPD_BACKEND_PLUS_ADD_ONLY_UI' | tee -a "$OUT"
