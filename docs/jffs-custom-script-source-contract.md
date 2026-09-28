@@ -82,12 +82,12 @@ The pinned Merlin donor contains these custom-script call sites:
 | `firewall-start` | `rc/firewall.c` | after firewall generation/reload; WAN interface argument |
 | `wan-event` | `rc/wan.c` | state transition arguments |
 | `wan-start` | `rc/wan.c` | compatibility hook on connected WAN |
-| `dhcpc-event` | `rc/udhcpc.c` | DHCP event plus protocol argument where applicable |
+| `dhcpc-event` | `rc/udhcpc.c` | pinned donor calls `run_custom_script("dhcpc-event", 0, argv[1], "4")` for IPv4 WAN DHCP and `run_custom_script("dhcpc-event", 0, argv[2], "6")` for DHCPv6; preserve the protocol argument ABI rather than a one-argument compatibility shim |
 | `zcip-event` | `rc/udhcpc.c` | IPv4 link-local event |
 | `pre-mount` | `rc/usb.c` | blocking before mount, device/type arguments |
 | `post-mount` | `rc/usb.c` | blocking after mount, mountpoint argument |
 | `unmount` | `rc/usb.c` | blocking before unmount, mountpoint argument |
-| `qos-start` | `rc/qos*.c` | preserve Merlin's blocking `init` semantics and rule-stage hook |
+| `qos-start` | `rc/qos.c` | pinned donor invokes `qos-start rules` asynchronously after rule programming, and `qos-start init` with a 120-second blocking timeout at both relevant QoS initialization paths; preserve this ordering/timeout contract |
 | `ddns-start` | `rc/services.c` | preserve WAN-IP argument and blocking semantics where used |
 | `update-notification` | `rc/watchdog.c` | after update notification state is established |
 
