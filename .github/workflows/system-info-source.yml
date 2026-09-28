@@ -38,7 +38,7 @@ jobs:
 
           pass() { echo "PASS $*" | tee -a "$OUT"; }
           fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
-          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+          have() { grep -Fq -- "$2" "$1" && pass "$3" || fail "$3"; }
 
           S="$M/release/src/router/httpd/sysinfo.c"
           H="$M/release/src/router/httpd/sysinfo.h"
@@ -50,12 +50,16 @@ jobs:
           test -f "$W" && pass "Pinned donor has Tools_Sysinfo.asp" || fail "Tools_Sysinfo.asp missing"
           test -f "$A" && pass "Pinned donor has ajax_sysinfo.asp" || fail "ajax_sysinfo.asp missing"
 
-          for key in             cpu.model cpu.freq memory.total memory.free memory.buffer memory.swap.total memory.swap.used memory.cache             cpu.load.1 cpu.load.5 cpu.load.15 nvram.total nvram.used jffs.usage jffs.free conn.total conn.active conn.max; do
-            have "$S" ""$key"" "sysinfo backend exposes $key"
+          for key in \
+            cpu.model cpu.freq memory.total memory.free memory.buffer memory.swap.total memory.swap.used memory.cache \
+            cpu.load.1 cpu.load.5 cpu.load.15 nvram.total nvram.used jffs.usage jffs.free conn.total conn.active conn.max; do
+            token="\"${key}\""
+            have "$S" "$token" "sysinfo backend exposes $key"
           done
 
           for key in cpu.model cpu.freq conn.max nvram.total; do
-            have "$W" "sysinfo("$key")" "Tools page consumes $key"
+            token="sysinfo(\"${key}\")"
+            have "$W" "$token" "Tools page consumes $key"
           done
 
           have "$A" 'conn_stats_arr' "AJAX endpoint refreshes connection stats"
