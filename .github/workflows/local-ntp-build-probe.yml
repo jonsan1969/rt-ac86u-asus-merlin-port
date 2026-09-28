@@ -103,6 +103,12 @@ jobs:
 
           cp "$B/busybox" artifacts/rtac86u-ntpd-static
           chmod 0755 artifacts/rtac86u-ntpd-static
+          strings -a artifacts/rtac86u-ntpd-static > reports/local-ntp-strings-first.txt
+          find "$B" -type f -name '*.o' -print0 | sort -z | xargs -0 sha256sum \
+            | sed "s#$B/##" > reports/local-ntp-objects-first.sha256
+          for g in include/usage_compressed.h include/applet_tables.h include/applets.h include/usage.h include/autoconf.h; do
+            [ -f "$B/$g" ] && sha256sum "$B/$g" | sed "s#$B/##" >> reports/local-ntp-generated-first.sha256
+          done
 
           echo '===== ELF =====' | tee -a "$OUT"
           file artifacts/rtac86u-ntpd-static | tee -a "$OUT"
@@ -199,6 +205,12 @@ jobs:
           make -C "$B" -j2 CROSS_COMPILE=aarch64-linux-gnu- V=1 > reports/local-ntp-rebuild.log 2>&1
           cp "$B/busybox" artifacts/rtac86u-ntpd-static-rebuild
           chmod 0755 artifacts/rtac86u-ntpd-static-rebuild
+          strings -a artifacts/rtac86u-ntpd-static-rebuild > reports/local-ntp-strings-second.txt
+          find "$B" -type f -name '*.o' -print0 | sort -z | xargs -0 sha256sum \
+            | sed "s#$B/##" > reports/local-ntp-objects-second.sha256
+          for g in include/usage_compressed.h include/applet_tables.h include/applets.h include/usage.h include/autoconf.h; do
+            [ -f "$B/$g" ] && sha256sum "$B/$g" | sed "s#$B/##" >> reports/local-ntp-generated-second.sha256
+          done
 
           second_hash="$(sha256sum artifacts/rtac86u-ntpd-static-rebuild | awk '{print $1}')"
           echo "first_hash=$first_hash" | tee -a "$OUT"
@@ -224,6 +236,16 @@ jobs:
               echo 'DIAG difference is limited to .note.gnu.build-id' | tee -a "$OUT"
             else
               echo 'DIAG differences remain after removing .note.gnu.build-id' | tee -a "$OUT"
+              echo '===== OBJECT HASH DIFF =====' | tee -a "$OUT"
+              diff -u reports/local-ntp-objects-first.sha256 reports/local-ntp-objects-second.sha256 \
+                | tee reports/local-ntp-object-hash-diff.txt | tee -a "$OUT" || true
+              echo '===== GENERATED HEADER HASH DIFF =====' | tee -a "$OUT"
+              diff -u reports/local-ntp-generated-first.sha256 reports/local-ntp-generated-second.sha256 \
+                | tee reports/local-ntp-generated-hash-diff.txt | tee -a "$OUT" || true
+              echo '===== PRINTABLE STRING DIFF =====' | tee -a "$OUT"
+              diff -u reports/local-ntp-strings-first.txt reports/local-ntp-strings-second.txt \
+                | head -n 160 | tee reports/local-ntp-strings-diff.txt | tee -a "$OUT" || true
+
               for sec in .text .rodata .data .data.rel.ro .got .got.plt; do
                 h1="$(aarch64-linux-gnu-objcopy -O binary --only-section="$sec" artifacts/rtac86u-ntpd-static /dev/stdout 2>/dev/null | sha256sum | awk '{print $1}' || true)"
                 h2="$(aarch64-linux-gnu-objcopy -O binary --only-section="$sec" artifacts/rtac86u-ntpd-static-rebuild /dev/stdout 2>/dev/null | sha256sum | awk '{print $1}' || true)"
@@ -247,6 +269,15 @@ jobs:
             reports/local-ntp-binary-diff.txt
             reports/local-ntp-notes-first.txt
             reports/local-ntp-notes-second.txt
+            reports/local-ntp-strings-first.txt
+            reports/local-ntp-strings-second.txt
+            reports/local-ntp-strings-diff.txt
+            reports/local-ntp-objects-first.sha256
+            reports/local-ntp-objects-second.sha256
+            reports/local-ntp-object-hash-diff.txt
+            reports/local-ntp-generated-first.sha256
+            reports/local-ntp-generated-second.sha256
+            reports/local-ntp-generated-hash-diff.txt
             reports/local-ntp-build.log
             reports/local-ntp-applets.txt
             reports/local-ntp-help.txt
