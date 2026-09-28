@@ -176,6 +176,43 @@ jobs:
 
           echo 'CLASSIFICATION STATIC_ASUS_LINEAGE_NTPD_BUILD_CANDIDATE' | tee -a "$OUT"
 
+      - name: Rebuild reproducibility check
+        run: |
+          set -euo pipefail
+          B=work/asus/release/src/router/busybox
+          OUT=reports/local-ntp-build.txt
+
+          cp "$B/.config" reports/local-ntp-config
+          first_hash="$(sha256sum artifacts/rtac86u-ntpd-static | awk '{print $1}')"
+
+          make -C "$B" distclean
+          cp reports/local-ntp-config "$B/.config"
+
+          set +e
+          set +o pipefail
+          yes "" | make -C "$B" oldconfig CROSS_COMPILE=aarch64-linux-gnu- >/dev/null
+          oldconfig_rc=$?
+          set -o pipefail
+          set -e
+          [ "$oldconfig_rc" -eq 0 ]
+
+          make -C "$B" -j2 CROSS_COMPILE=aarch64-linux-gnu- V=1 > reports/local-ntp-rebuild.log 2>&1
+          cp "$B/busybox" artifacts/rtac86u-ntpd-static-rebuild
+          chmod 0755 artifacts/rtac86u-ntpd-static-rebuild
+
+          second_hash="$(sha256sum artifacts/rtac86u-ntpd-static-rebuild | awk '{print $1}')"
+          echo "first_hash=$first_hash" | tee -a "$OUT"
+          echo "second_hash=$second_hash" | tee -a "$OUT"
+
+          if cmp -s artifacts/rtac86u-ntpd-static artifacts/rtac86u-ntpd-static-rebuild; then
+            echo 'PASS clean rebuild is byte-identical' | tee -a "$OUT"
+          else
+            echo 'FAIL clean rebuild differs' | tee -a "$OUT"
+            cmp -l artifacts/rtac86u-ntpd-static artifacts/rtac86u-ntpd-static-rebuild \
+              | head -n 100 > reports/local-ntp-binary-diff.txt || true
+            exit 1
+          fi
+
       - name: Publish build evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,7 +220,11 @@ jobs:
           name: local-ntp-build-probe
           path: |
             artifacts/rtac86u-ntpd-static
+            artifacts/rtac86u-ntpd-static-rebuild
             reports/local-ntp-build.txt
+            reports/local-ntp-config
+            reports/local-ntp-rebuild.log
+            reports/local-ntp-binary-diff.txt
             reports/local-ntp-build.log
             reports/local-ntp-applets.txt
             reports/local-ntp-help.txt
