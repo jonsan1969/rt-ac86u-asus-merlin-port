@@ -51,23 +51,23 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M02 | `service-event` / `service-event-end` hooks | absent | **PORT** | C | source-level `rc/services.c` integration |
 | M03 | Event hooks: init/firewall/services/NAT/WAN/QoS/DDNS/USB/DHCP/update | most Merlin hook signatures absent | **PORT** | C | add only hook calls, never Merlin `rc` binary |
 | M04 | postconf/custom config framework | postconf signature absent | **PORT** | B/C | `run_postconf()`, `.add`, custom configs; preserve ASUS generators |
-| M05 | Addon helper API | `helper.sh` absent | **PORT** | A | includes postconf helpers |
-| M06 | Addon custom-settings API | absent | **PORT** | A | `/jffs/addons/custom_settings.txt`, `am_settings_get/set` |
-| M07 | 20 custom WebUI slots | absent | **PORT** | A/C | `user1.asp` … `user20.asp`, mount/allocation plumbing |
-| M08 | AMTM management interface | absent | **PORT** | A/C | depends on working JFFS/addon framework |
-| M09 | Entware/addon friendliness | no integrated Merlin setup path | **PORT** | A/C | `/opt` exists but Merlin integration/setup behavior must be restored |
+| M05 | Addon helper API | stock helper absent; pinned Merlin `helper.sh` is now add-only in guarded overlay | **PORT** | A | image-safe foundation implemented; includes postconf helpers |
+| M06 | Addon custom-settings API | stock API absent; active pinned `helper.sh` already provides `am_settings_get/set` and `/jffs/addons/custom_settings.txt` | **PORT** | A | image-safe implementation already delivered as part of JFFS helper foundation |
+| M07 | 20 custom WebUI slots | stock aliases absent; 20 add-only `/www/userN.asp -> user/userN.asp` aliases are active | **PORT** | A/C | image-safe alias layer implemented; deeper addon/event behavior still follows JFFS source-hook dependency |
+| M08 | AMTM management interface | absent; donor `usr/sbin/amtm` is a standalone shell script (run 36382931979) | **PORT** | A/C | do not expose yet: AMTM-managed addons depend on JFFS lifecycle hooks ASUS `rc` lacks; revisit after M01–M03 source integration |
+| M09 | Entware/addon friendliness | both images have `/opt -> tmp/opt`, but ASUS lacks Merlin `services-start`/`post-mount` rc hooks | **PORT** | A/C | dependency-blocked by JFFS event-hook integration; avoid a partial addon environment |
 | M10 | JFFS backup/restore/upload WebUI | stock settings-backup page exists, but JFFS-specific upload/backup handlers are absent from ASUS 52334 | **PORT** | C | source-side HTTPD/uploader integration required; do not expose dead UI |
 | M11 | Custom DDNS user-script callback | ASUS 52334 lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated` | **PORT** | C | source-side DDNS + JFFS hook integration required; stock DDNS path remains authoritative |
-| M12 | Scheduled jobs / `cru` | ASUS has its own shell `cru`; Merlin mainly replaces the hand-rolled lock with `flock`, and ASUS already ships `/usr/bin/flock` | **ADAPT** | B | preserve ASUS crond/BusyBox; consider only an exact script-level locking adaptation after a clean runtime lock test |
+| M12 | Scheduled jobs / `cru` | ASUS has a functional native `cru`; Merlin's material delta is fd-based `flock` locking | **NO PORT** | B | keep ASUS `cru`/crond/BusyBox. QEMU cannot execute this ASUS BusyBox reliably enough to prove the fd-278 delta (run 36383042773), so no unproven lock patch is justified |
 
 ## 2. Shell, SSH and administration
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
 | M13 | Nano editor | absent | **PORT** | A/B | Merlin image includes `nano` and `rnano` |
-| M14 | Enhanced CLI utility set | many command names absent; most Merlin entries are symlinks to Merlin BusyBox and stock Dropbear has no SCP applet | **ADAPT** | A/B | never transplant Merlin BusyBox; prove each ASUS stock applet/multicall capability or add an isolated compatible binary bundle |
+| M14 | Enhanced CLI utility set | run 36382597888 found no Merlin-only BusyBox symlink command absent from ASUS; remaining standalone donor ELFs belong to separately tracked feature blocks | **NO PORT** | A/B | no generic CLI transplant. M13 Nano is the isolated proven exception; BusyBox remains ASUS-authoritative |
 | M15 | SSH public-key authentication | already present | **NO PORT** | C | ASUS `rc` already contains `authorized_keys` support |
-| M16 | Merlin SSH behavior/key persistence | partially overlaps | **ADAPT** | B/C | compare `rc/ssh.c`, JFFS host-key persistence/fallback, Dropbear options and SCP |
+| M16 | Merlin SSH behavior/key persistence | basic key/NVRAM/host-key signatures overlap; ASUS lacks `scp`, while Merlin `scp` resolves to Merlin `dropbearmulti` | **ADAPT** | B/C | run 36382880359: never add the symlink against ASUS Dropbear or transplant donor Dropbear; remaining SCP/behavior delta needs ASUS-compatible source/build work |
 | M17 | SNMP | not present in verified AC86U Merlin image | **N/A** | — | Merlin README says only some models; do not invent support |
 
 ## 3. SMB, disk sharing and filesystem services
@@ -76,8 +76,8 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 |---|---|---|---|---|---|
 | M18 | Simpler SMB share naming | `smbd_simpler_naming` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
 | M19 | Force SMB Master Browser | `smbd_master` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
-| M20 | WINS server | ASUS rc + libshared retain `smbd_wins`, but no matching WebUI/httpd token was found | **ADAPT** | A/C | probe whether generic ASUS apply handling can expose the retained backend without httpd/core replacement |
-| M21 | Windows discovery via `wsdd2` | ASUS smbd/nmbd present, `wsdd2` absent | **PORT** | A/B | integrate only after standalone binary/dependency compatibility is proven against ASUS Samba stack |
+| M20 | WINS server | ASUS rc + libshared retain `smbd_wins`; generic Samba form/NVRAM apply handling was proven | **ADAPT** | A/C | implemented as one exact UI row in stock Samba page; guarded run 36382734032 validates WINS on/off controls, stock `restart_ftpsamba`, and absence of M18/M19 leakage |
+| M21 | Windows discovery via `wsdd2` | ASUS smbd/nmbd present; donor `wsdd2` ELF has all NEEDED libs in ASUS, but ASUS `rc` has no wsdd2 lifecycle | **PORT** | A/B/C | binary compatibility proven in 36382208517; source-side start/stop integration is still required, so no binary-only overlay |
 | M22 | NFS exports for USB storage | NFS page/daemon/modules absent | **PORT** | A/B/C | `nfsd`, `mountd`, `exportfs`, sunrpc/NFS modules + WebUI/config |
 | M23 | CIFS client support | mount points exist but CIFS kernel module absent | **PORT** | B/C | add source-compatible CIFS client support; no blind module transplant |
 
@@ -89,7 +89,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M25 | VPN Director | page and `vpndirector_rulelist` backend absent | **PORT** | A/B/C | JFFS-backed rules, RPDB routing, kill-switch/DNS interaction |
 | M26 | DNS Director | ASUS has DNSFilter backend; Merlin page absent | **ADAPT** | A/C | retain ASUS backend, adapt Merlin UI/schema; verify IPv4/IPv6/custom providers |
 | M27 | ipset kernel/userspace support | absent | **PORT** | A/B | modules + `libipset` + userspace `ipset` |
-| M28 | TOR with per-client access control | daemon/page absent | **PORT** | A/B/C | restore only current safe integration |
+| M28 | TOR with per-client access control | ASUS lacks daemon/page and all `Tor_*`/`start_tor` lifecycle contract; donor ELF itself has all NEEDED libs in ASUS | **PORT** | A/B/C | run 36383112487 proves binary compatibility but also Merlin-only rc/libshared lifecycle; source integration required, no standalone-binary overlay |
 | M29 | Local NTP daemon | ASUS 52334 has no ntpd/chronyd and no `ntpd_enable` backend/default/UI contract | **PORT** | A/B/C | source/runtime integration required; not an image-only UI port |
 | M30 | Redirect client NTP queries to router | `ntpd_server_redir`/`ntpd_server_trust` and firewall redirect contract absent | **PORT** | C | source-side rc/firewall/default/UI integration tied to M29 |
 | M31 | TCP/UDP conntrack timeout tuning | backend keys already present; Merlin UI absent | **ADAPT** | A/C | reuse ASUS backend and add compatible controls |
