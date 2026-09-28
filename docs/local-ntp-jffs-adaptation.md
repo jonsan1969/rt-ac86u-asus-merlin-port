@@ -330,7 +330,7 @@ The remaining build requirement is producing the isolated NTPD executable from t
 
 ## Isolated daemon build result
 
-GitHub Actions run `36447439013` successfully built and smoke-tested the isolated candidate from the pinned clean ASUS BusyBox lineage.
+GitHub Actions run `36466577777` successfully built and smoke-tested the isolated candidate from the pinned clean ASUS BusyBox lineage.
 
 Evidence:
 
@@ -344,6 +344,6 @@ Evidence:
 - qemu-aarch64 root launch with `-w -l -I lo -p 192.0.2.1` remained alive until the three-second timeout;
 - stock ASUS BusyBox is not involved or replaced.
 
-The build is therefore no longer the M29 blocker. Remaining work is image integration, lifecycle gating after ASUS `ntp_ready`, dnsmasq postconf, and real-router NTP reply validation.
+The build is therefore no longer the M29 blocker. Run `36466577777` additionally proves a clean rebuild is byte-identical after normalizing the old BusyBox build-time banner; both candidate binaries hash to `6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb`. Remaining work is image integration, lifecycle gating after ASUS `ntp_ready`, dnsmasq postconf, and real-router NTP reply validation.
 
 The artifact hash is evidence for this CI build, not yet a permanent release pin. Before shipping, make the build reproducible/pinned and rerun guarded image-size/runtime validation.
