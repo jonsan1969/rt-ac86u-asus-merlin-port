@@ -54,3 +54,5 @@ Only these project states are used:
 - **FAILURE**
 - **IN PROGRESS**
 - **CANCELLED**
+
+| M67 Speedtest VPN interface selector | **CANCELLED** | feature appears in later 3006 Merlin changelog; pinned 386.14_2 `internet_speed.html` has no VPN/interface selector, so it is outside this donor baseline |
