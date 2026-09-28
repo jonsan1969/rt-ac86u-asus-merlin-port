@@ -46,6 +46,9 @@ jobs:
           sha256sum "$P" > "$OUT"
           {
             echo
+            echo '===== PARTIAL ICON CSS ====='
+            grep -RIna --include='*.css' 'wifihwswstatuspartial' "$ASUS_ROOT/www" 2>/dev/null || true
+            echo
             echo '===== RADIO STATUS CONTEXT ====='
             grep -n -A35 -B25 'No HW switch' "$P" || true
             grep -n -A30 -B20 'wifi_hw_sw_status' "$P" | head -n 500 || true
@@ -54,8 +57,10 @@ jobs:
             if grep -Fq 'wifihwswstatuspartial' "$P" &&
                grep -Eq 'radio_2.*&&.*radio_5|radio_2.*\|\|.*radio_5' "$P"; then
               echo 'CLASSIFICATION=NO_PORT_STOCK_EQUIVALENT'
+            elif grep -RIl --include='*.css' 'wifihwswstatuspartial' "$ASUS_ROOT/www" 2>/dev/null | grep -q .; then
+              echo 'CLASSIFICATION=PATCH_CANDIDATE_CSS_READY'
             else
-              echo 'CLASSIFICATION=PATCH_CANDIDATE'
+              echo 'CLASSIFICATION=PATCH_REQUIRES_PARTIAL_ICON_CSS'
             fi
           } >> "$OUT"
           cp "$P" reports/asus-state.js
