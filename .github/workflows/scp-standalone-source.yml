@@ -1,0 +1,75 @@
+name: Verify standalone SCP source path
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/scp-standalone-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch ASUS lineage and pinned Merlin Dropbear
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router/dropbear
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/dropbear
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify standalone SCP invariants
+        run: |
+          set -euo pipefail
+          A=work/asus/release/src/router/dropbear
+          M=work/merlin/release/src/router/dropbear
+          OUT=reports/scp-standalone-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          have "$A/sysoptions.h" '#define DROPBEAR_VERSION "2020.81"' "Clean ASUS Dropbear version pinned"
+          have "$M/sysoptions.h" '#define DROPBEAR_VERSION "2022.83"' "Pinned Merlin Dropbear version pinned"
+
+          for root in "$A" "$M"; do
+            have "$root/Makefile.in" 'SCPOBJS=scp.o progressmeter.o atomicio.o scpmisc.o compat.o'               "Standalone SCP object set exists in $root"
+            have "$root/Makefile.in" "# scp doesn't use the libs so is special."               "SCP is explicitly independent of Dropbear libs in $root"
+            have "$root/Makefile.in" 'scp: $(SCPOBJS)'               "Standalone SCP target exists in $root"
+            have "$root/default_options.h" '#define DROPBEAR_PATH_SSH_PROGRAM "/usr/bin/dbclient"'               "Standalone SCP delegates SSH to /usr/bin/dbclient in $root"
+          done
+
+          have "$M/scp.c" 'execvp(ssh_program, args.list)' "SCP executes configured SSH transport"
+          have "$M/scp.c" 'char *ssh_program = DROPBEAR_PATH_SSH_PROGRAM' "SCP initializes transport from fixed Dropbear path"
+
+          echo 'CLASSIFICATION M16_ADD_ONLY_STANDALONE_SCP_BUILD' | tee -a "$OUT"
+          echo 'DO_NOT_REPLACE_ASUS_DROPBEAR' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scp-standalone-source
+          path: reports/scp-standalone-source.txt
+          if-no-files-found: warn
+          retention-days: 30
