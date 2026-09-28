@@ -1,11 +1,15 @@
-# Per-IP traffic monitoring / cstats HND design
+# Future HND-native per-IP traffic enhancement (outside M48 donor parity)
 
 Date: 2026-09-28  
-Feature inventory ID: M48  
+Former inventory reference: M48 (NO PORT for donor parity)  
 Runtime baseline: ASUS RT-AC86U 3.0.0.4.386_52334  
 Merlin donor: 386.14_2 @ `6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b`
 
 ## Decision
+
+**This document is not active M48 port work.** M48 is **NO PORT** because the pinned Merlin RT-AC86U/HND donor deliberately excludes classic cstats/IPTraffic.
+
+The material below is retained only as a possible **future, separately-scoped enhancement** if the project later chooses to add a new HND-native per-device traffic engine beyond Merlin 386.14_2 donor parity.
 
 M48 is **not a direct Merlin 386.14_2 source port on RT-AC86U/HND**.
 
@@ -263,6 +267,6 @@ Before M48 becomes **SUCCESS**, prove:
 
 ## Current classification
 
-**SOURCE/KERNEL-ACCOUNTING REIMPLEMENTATION REQUIRED**
+**OUT OF SCOPE FOR M48 / FUTURE ENHANCEMENT ONLY**
 
-The pinned donor itself does not provide this feature on HND. The correct project goal is user-visible Merlin per-device traffic functionality implemented on top of a 52334-compatible HND accounting source.
+The pinned donor itself does not provide classic per-device cstats/IPTraffic on HND. Any HND-native replacement would be a new feature beyond donor parity and requires a separate project decision before implementation.
