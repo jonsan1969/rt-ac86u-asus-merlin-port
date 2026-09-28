@@ -1,0 +1,155 @@
+name: Probe ASUS 52334 WINS UI adaptation
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/samba-wins-ui-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS and Merlin images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then
+              echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Analyze WINS UI and generic apply contract
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"
+          M="$MERLIN_ROOT"
+          AP="$A/www/Advanced_AiDisk_samba.asp"
+          MP="$M/www/Advanced_AiDisk_samba.asp"
+          OUT=reports/samba-wins-ui-52334.txt
+          : > "$OUT"
+
+          test -f "$AP"
+          test -f "$MP"
+
+          echo '===== PAGE HASHES =====' >> "$OUT"
+          sha256sum "$AP" "$MP" >> "$OUT"
+
+          echo '===== BACKEND SURFACE =====' >> "$OUT"
+          for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+            if strings -a "$A/$rel" | grep -Fq 'smbd_wins'; then
+              echo "PASS $rel::smbd_wins" >> "$OUT"
+            else
+              echo "MISSING $rel::smbd_wins" >> "$OUT"
+            fi
+          done
+
+          echo '===== PAGE WINS SURFACE =====' >> "$OUT"
+          if grep -Fq 'smbd_wins' "$AP"; then
+            echo 'ASUS_PAGE_WINS=yes' >> "$OUT"
+          else
+            echo 'ASUS_PAGE_WINS=no' >> "$OUT"
+          fi
+          if grep -Fq 'smbd_wins' "$MP"; then
+            echo 'MERLIN_PAGE_WINS=yes' >> "$OUT"
+            grep -n -C 8 -F 'smbd_wins' "$MP" >> "$OUT" || true
+          else
+            echo 'MERLIN_PAGE_WINS=no' >> "$OUT"
+          fi
+
+          echo '===== APPLY CONTRACT =====' >> "$OUT"
+          for tag in ASUS MERLIN; do
+            if [ "$tag" = ASUS ]; then P="$AP"; else P="$MP"; fi
+            echo "--- $tag ---" >> "$OUT"
+            grep -nE 'start_apply|apply\.cgi|action_mode|action_script|restart_samba|restart_ftpsamba|applyRule|document\.form\.submit' "$P" | head -n 120 >> "$OUT" || true
+          done
+
+          echo '===== ASUS SAMBA PAGE NVRAM KEYS =====' >> "$OUT"
+          grep -oE 'smbd_[A-Za-z0-9_]+' "$AP" | sort -u > reports/asus-samba-page-keys.txt || true
+          cat reports/asus-samba-page-keys.txt >> "$OUT"
+
+          echo '===== GENERIC TOKENLESS-PAGE EVIDENCE =====' >> "$OUT"
+          tokenless=0
+          while read -r key; do
+            [ -n "$key" ] || continue
+            in_shared=no
+            in_httpd=no
+            strings -a "$A/usr/lib/libshared.so" | grep -Fxq "$key" && in_shared=yes || true
+            strings -a "$A/usr/sbin/httpd" | grep -Fxq "$key" && in_httpd=yes || true
+            echo "$key libshared=$in_shared httpd=$in_httpd" >> "$OUT"
+            if [ "$in_shared" = yes ] && [ "$in_httpd" = no ]; then
+              tokenless=$((tokenless+1))
+            fi
+          done < reports/asus-samba-page-keys.txt
+          echo "page_keys_present_in_libshared_but_absent_httpd=$tokenless" >> "$OUT"
+
+          echo '===== PAGE DIFF =====' >> "$OUT"
+          diff -u "$AP" "$MP" > reports/samba-page.diff || true
+          grep -n -C 12 -F 'smbd_wins' reports/samba-page.diff >> "$OUT" || true
+
+          rc_wins=no
+          shared_wins=no
+          merlin_ui=no
+          asus_ui_absent=no
+          strings -a "$A/sbin/rc" | grep -Fxq 'smbd_wins' && rc_wins=yes || true
+          strings -a "$A/usr/lib/libshared.so" | grep -Fxq 'smbd_wins' && shared_wins=yes || true
+          grep -Fq 'smbd_wins' "$MP" && merlin_ui=yes || true
+          if ! grep -Fq 'smbd_wins' "$AP"; then asus_ui_absent=yes; fi
+
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          echo "rc_wins=$rc_wins" >> "$OUT"
+          echo "libshared_wins=$shared_wins" >> "$OUT"
+          echo "merlin_ui=$merlin_ui" >> "$OUT"
+          echo "asus_ui_absent=$asus_ui_absent" >> "$OUT"
+          if [ "$rc_wins" = yes ] && [ "$shared_wins" = yes ] && [ "$merlin_ui" = yes ] && [ "$asus_ui_absent" = yes ] && [ "$tokenless" -gt 0 ]; then
+            echo 'CLASSIFICATION=IMAGE_SAFE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=NEEDS_MORE_PROOF' >> "$OUT"
+          fi
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: samba-wins-ui-52334
+          path: |
+            reports/samba-wins-ui-52334.txt
+            reports/asus-samba-page-keys.txt
+            reports/samba-page.diff
+          if-no-files-found: error
+          retention-days: 14
