@@ -1,0 +1,111 @@
+name: Verify OpenVPN DNS Exclusive donor contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/openvpn-dns-exclusive-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source anchors
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router/libvpn release/src/router/libovpn
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router/libovpn
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify source availability and donor semantics
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/openvpn-dns-exclusive-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          must_have() {
+            local path="$1" token="$2" label="$3"
+            grep -Fq "$token" "$path" && pass "$label" || fail "$label"
+          }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C "$A" show -s --format='ASUS %H %s' HEAD | tee -a "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          echo '===== SOURCE-BASE LIMITATION =====' | tee -a "$OUT"
+          test -f "$A/release/src/router/libvpn/Makefile"             && pass "45956 exposes libvpn build surface"             || fail "45956 exposes libvpn build surface"
+          test ! -f "$A/release/src/router/libvpn/openvpn_control.c"             && pass "45956 does not expose comparable open openvpn_control.c"             || fail "45956 unexpectedly exposes openvpn_control.c; re-review source strategy"
+          test -f "$M/release/src/router/libovpn/openvpn_control.c"             && pass "Pinned Merlin exposes donor OpenVPN control source"             || fail "Pinned Merlin donor source missing"
+
+          C="$M/release/src/router/libovpn/openvpn_control.c"
+          H="$M/release/src/router/libovpn/openvpn_control.h"
+
+          echo '===== ACTIVATION / LOCKING =====' | tee -a "$OUT"
+          must_have "$H" '#define VPNROUTING_LOCK "vpnrouting-dns"' "Dedicated DNS routing lock is pinned"
+          must_have "$C" 'nvram_pf_get_int(prefix, "adns") == OVPN_DNSMODE_EXCLUSIVE' "Exclusive DNS mode gates setup"
+          must_have "$C" 'nvram_pf_get_int(prefix, "rgw") == OVPN_RGW_POLICY' "Policy routing can use exclusive DNS"
+          must_have "$C" 'nvram_pf_get_int(prefix, "rgw") == OVPN_RGW_ALL' "Redirect-all routing can use exclusive DNS"
+          must_have "$C" 'lock = file_lock(VPNROUTING_LOCK)' "Setup is serialized"
+          must_have "$C" 'ovpn_set_exclusive_dns(unit);' "Client-up installs exclusive DNS"
+          must_have "$C" 'ovpn_update_exclusive_dns_rules();' "Client-up refreshes chain order"
+
+          echo '===== PER-CLIENT DNS CHAIN =====' | tee -a "$OUT"
+          must_have "$C" 'sprintf(buffer, "DNSVPN%d", unit)' "Per-client DNSVPN chain name is pinned"
+          must_have "$C" '/etc/openvpn/client%d/client.resolv' "Setup consumes client resolver file"
+          must_have "$C" '/etc/openvpn/client%d/dns.sh' "Setup owns per-client DNS script"
+          must_have "$C" 'iptables -t nat -N DNSVPN%d' "Setup creates nat chain"
+          must_have "$C" 'DNAT --to-destination %s' "Setup DNATs intercepted DNS"
+          must_have "$C" '-I DNSVPN%d -s %s -j RETURN' "WAN policy sources are exempted"
+          must_have "$C" '--dport 53 -j DNSVPN%d' "PREROUTING diverts DNS to per-client chain"
+
+          udp="$(grep -Fc -- '-p udp -m udp --dport 53' "$C")"
+          tcp="$(grep -Fc -- '-p tcp -m tcp --dport 53' "$C")"
+          [ "$udp" -ge 3 ] && pass "UDP/53 setup-update-teardown surface present ($udp)" || fail "UDP/53 surface incomplete ($udp)"
+          [ "$tcp" -ge 3 ] && pass "TCP/53 setup-update-teardown surface present ($tcp)" || fail "TCP/53 surface incomplete ($tcp)"
+
+          echo '===== ORDER / TEARDOWN =====' | tee -a "$OUT"
+          must_have "$C" 'for (unit = OVPN_CLIENT_MAX; unit > 0; unit--)' "Multiple-client DNS jump ordering is deterministic"
+          must_have "$C" 'ovpn_clear_exclusive_dns(unit);' "Client-down clears exclusive DNS first"
+          must_have "$C" '-F", buffer' "Teardown flushes per-client chain"
+          must_have "$C" '-X", buffer' "Teardown deletes per-client chain"
+          must_have "$C" 'unlink(buffer);' "Teardown removes generated state"
+
+          echo '===== DNSMASQ COORDINATION =====' | tee -a "$OUT"
+          must_have "$C" 'int ovpn_skip_dnsmasq()' "Donor has dnsmasq exclusion helper"
+          must_have "$C" 'nvram_pf_get_int(varname, "adns") == OVPN_DNSMODE_EXCLUSIVE' "dnsmasq exclusion is exclusive-mode specific"
+          must_have "$C" 'nvram_pf_get_int(varname, "state") > OVPN_STS_STOP' "dnsmasq exclusion requires running client state"
+
+          echo 'CLASSIFICATION M38_DONOR_CONTRACT_VERIFIED_TARGET_SOURCE_STILL_REQUIRED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvpn-dns-exclusive-source
+          path: reports/openvpn-dns-exclusive-source.txt
+          if-no-files-found: warn
+          retention-days: 30
