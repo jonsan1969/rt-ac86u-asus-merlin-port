@@ -1,0 +1,103 @@
+name: Probe Merlin AMTM and Entware on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/amtm-entware-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Inspect AMTM and Entware runtime
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/amtm-entware-52334.txt
+          : > "$OUT"
+
+          echo '===== NAMED RUNTIME FILES =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            find "$R" -maxdepth 4 \( -iname '*amtm*' -o -iname '*entware*' -o -iname '*opkg*' \) -printf '%P\t%y\t%l\n' 2>/dev/null | sort | head -n 200 >> "$OUT" || true
+          done
+
+          echo '===== /opt SURFACE =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            find "$R/opt" -maxdepth 3 -printf '%P\t%y\t%l\n' 2>/dev/null | head -n 120 >> "$OUT" || true
+          done
+
+          echo '===== SCRIPT DETAILS =====' >> "$OUT"
+          for p in \
+            "$M/usr/sbin/amtm" "$M/usr/sbin/amtm.sh" "$M/usr/sbin/entware-setup.sh" \
+            "$M/usr/sbin/entware-setup" "$M/rom/etc/amtm" "$M/rom/etc/entware-setup.sh"; do
+            [ -e "$p" ] || continue
+            echo "--- ${p#"$M/"} ---" >> "$OUT"
+            file "$p" >> "$OUT"
+            sha256sum "$p" >> "$OUT" || true
+            if file "$p" | grep -qi 'script\|text'; then
+              head -n 40 "$p" >> "$OUT" || true
+              grep -En '/jffs|/opt|service-event|services-start|post-mount|init-start|curl|wget|opkg|github|asuswrt-merlin|amtm|Entware' "$p" | head -n 160 >> "$OUT" || true
+            fi
+          done
+
+          echo '===== MERLIN RC INTEGRATION =====' >> "$OUT"
+          for sig in amtm entware opkg /opt services-start post-mount; do
+            if strings -a "$M/sbin/rc" | grep -Fq "$sig"; then echo "MERLIN_RC_PASS $sig" >> "$OUT"; else echo "MERLIN_RC_MISSING $sig" >> "$OUT"; fi
+          done
+          echo '===== ASUS RC INTEGRATION =====' >> "$OUT"
+          for sig in amtm entware opkg /opt services-start post-mount; do
+            if strings -a "$A/sbin/rc" | grep -Fq "$sig"; then echo "ASUS_RC_PASS $sig" >> "$OUT"; else echo "ASUS_RC_MISSING $sig" >> "$OUT"; fi
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: amtm-entware-52334
+          path: reports/amtm-entware-52334.txt
+          if-no-files-found: error
+          retention-days: 14
