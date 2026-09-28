@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
@@ -143,6 +143,61 @@ jobs:
           fi
 
           cat "$OUT"
+
+      - name: Stage dormant verified wsdd2 in guarded overlay
+        run: |
+          set -euo pipefail
+          BIN="$(readlink -f "$MERLIN_ROOT/usr/sbin/wsdd2")"
+          EXPECTED=89a4309ccbe6a33c74ac2ea971c91af1e753ca930c26767259594172189b94e0
+
+          test -f "$BIN"
+          test "$(sha256sum "$BIN" | awk '{print $1}')" = "$EXPECTED"
+          file "$BIN" | grep -Eq 'ELF 32-bit.*ARM'
+          readelf -d "$BIN" | grep -Fq 'Shared library: [libc.so.6]'
+          readelf -d "$BIN" | grep -Fq 'Shared library: [ld-linux.so.3]'
+
+          mkdir -p ports/files/usr/sbin
+          cp "$BIN" ports/files/usr/sbin/wsdd2
+          chmod 0755 ports/files/usr/sbin/wsdd2
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p=Path("ports/active.json")
+          d=json.loads(p.read_text(encoding="utf-8"))
+          expected={
+              "type":"copy",
+              "source_kind":"repo",
+              "source":"ports/files/usr/sbin/wsdd2",
+              "target":"/usr/sbin/wsdd2",
+              "sha256":"89a4309ccbe6a33c74ac2ea971c91af1e753ca930c26767259594172189b94e0",
+              "mode":"0755",
+              "policy":"add_only",
+          }
+          matches=[e for e in d["entries"] if e.get("target")=="/usr/sbin/wsdd2"]
+          if not matches:
+              d["entries"].append(expected)
+          elif len(matches)!=1 or matches[0]!=expected:
+              raise SystemExit(f"existing wsdd2 manifest entry differs: {matches!r}")
+          p.write_text(json.dumps(d,indent=2)+"\n",encoding="utf-8")
+          PY
+
+          python3 tools/check_port_overlay.py ports/active.json
+          test "$(sha256sum ports/files/usr/sbin/wsdd2 | awk '{print $1}')" = "$EXPECTED"
+
+          if git diff --quiet -- ports/files/usr/sbin/wsdd2 ports/active.json &&
+             git ls-files --error-unmatch ports/files/usr/sbin/wsdd2 >/dev/null 2>&1; then
+            echo 'Verified dormant wsdd2 already staged'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ports/files/usr/sbin/wsdd2 ports/active.json
+          git commit -m 'port: stage verified dormant wsdd2'
+          git pull --rebase origin asus-52334-merlin-port
+          git push origin HEAD:asus-52334-merlin-port
 
       - name: Publish report
         if: always()
