@@ -76,12 +76,43 @@ jobs:
             echo "flock_path=$FP target=$(readlink "$FP" || true)" >> "$OUT"
             ls -l "$FP" >> "$OUT"
             file -L "$FP" >> "$OUT" || true
+            # Merlin cru does not use flock's "run a command" mode.  It opens
+            # fd 278 on the lock file and asks the BusyBox flock applet to lock
+            # that already-open descriptor.  Test exactly those semantics.
+            BB="$ASUS_ROOT/bin/busybox"
+            LOCK="$PWD/reports/flock.lock"
+            : > "$LOCK"
+
+            exec 278>"$LOCK"
             set +e
-            qemu-arm-static -L "$ASUS_ROOT" "$FP" -x 9 sh -c 'echo FLOCK_OK' > reports/flock-test.txt 2>&1
-            frc=$?
+            qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -x 278 > reports/flock-acquire.txt 2>&1
+            acquire_rc=$?
+            (
+              exec 279>"$LOCK"
+              qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -n -x 279
+            ) > reports/flock-contend.txt 2>&1
+            contend_rc=$?
             set -e
-            echo "flock_test_rc=$frc" >> "$OUT"
-            cat reports/flock-test.txt >> "$OUT"
+
+            exec 278>&-
+
+            set +e
+            (
+              exec 279>"$LOCK"
+              qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -n -x 279
+            ) > reports/flock-release.txt 2>&1
+            release_rc=$?
+            set -e
+
+            echo "flock_fd_acquire_rc=$acquire_rc" >> "$OUT"
+            echo "flock_fd_contend_rc=$contend_rc" >> "$OUT"
+            echo "flock_fd_release_rc=$release_rc" >> "$OUT"
+            cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt >> "$OUT"
+
+            test "$acquire_rc" -eq 0
+            test "$contend_rc" -ne 0
+            test "$release_rc" -eq 0
+            echo 'flock_fd_semantics=PASS' >> "$OUT"
           else
             echo 'flock_path=MISSING' >> "$OUT"
           fi
