@@ -70,3 +70,5 @@ Only these project states are used:
 | M67 Speedtest VPN interface selector | **CANCELLED** | feature appears in later 3006 Merlin changelog; pinned 386.14_2 `internet_speed.html` has no VPN/interface selector, so it is outside this donor baseline |
 
 | M68 Outbound LAN allowed logging | **IN PROGRESS** | clean ASUS 45956 source vs pinned Merlin proves a one-line `ACCEPT` → `logaccept` target delta in the default LAN→WAN FORWARD rule; contract: `docs/outbound-lan-logging-source-contract.md`; later ASUS `rc` source still required |
+
+| M66 Prevent Auto DoH / DDR / Private Relay | **IN PROGRESS** | donor Auto/Yes/No conditions and exact dnsmasq canaries are specified in `docs/prevent-auto-doh-source-contract.md`; source config-generation port only, with a targeted 52334 key/UI ownership check still required |
