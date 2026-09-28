@@ -76,47 +76,61 @@ jobs:
             echo "flock_path=$FP target=$(readlink "$FP" || true)" >> "$OUT"
             ls -l "$FP" >> "$OUT"
             file -L "$FP" >> "$OUT" || true
-            # Merlin cru does not use flock's "run a command" mode.  It opens
-            # fd 278 on the lock file and asks the BusyBox flock applet to lock
-            # that already-open descriptor.  Test exactly those semantics.
+            # Merlin cru uses the BusyBox flock applet on an already-open fd.
+            # A symlink alone is not proof that the ASUS BusyBox was built with
+            # that applet, so verify the multicall applet table first.
             BB="$ASUS_ROOT/bin/busybox"
             LOCK="$PWD/reports/flock.lock"
             : > "$LOCK"
 
-            exec 278>"$LOCK"
             set +e
-            qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -x 278 > reports/flock-acquire.txt 2>&1
-            acquire_rc=$?
-            (
-              exec 279>"$LOCK"
-              qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -n -x 279
-            ) > reports/flock-contend.txt 2>&1
-            contend_rc=$?
+            qemu-arm-static -L "$ASUS_ROOT" "$BB" --list > reports/busybox-applets.txt 2>&1
+            list_rc=$?
+            qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" --help > reports/flock-help.txt 2>&1
+            symlink_style_rc=$?
             set -e
 
-            exec 278>&-
+            echo "busybox_list_rc=$list_rc" >> "$OUT"
+            if grep -Fxq flock reports/busybox-applets.txt; then
+              echo 'flock_applet_present=yes' >> "$OUT"
 
-            set +e
-            (
-              exec 279>"$LOCK"
-              qemu-arm-static -L "$ASUS_ROOT" "$BB" flock -n -x 279
-            ) > reports/flock-release.txt 2>&1
-            release_rc=$?
-            set -e
+              exec 278>"$LOCK"
+              set +e
+              qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -x 278 > reports/flock-acquire.txt 2>&1
+              acquire_rc=$?
+              (
+                exec 279>"$LOCK"
+                qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -n -x 279
+              ) > reports/flock-contend.txt 2>&1
+              contend_rc=$?
+              set -e
 
-            echo "flock_fd_acquire_rc=$acquire_rc" >> "$OUT"
-            echo "flock_fd_contend_rc=$contend_rc" >> "$OUT"
-            echo "flock_fd_release_rc=$release_rc" >> "$OUT"
-            cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt >> "$OUT"
-            echo '--- flock fd diagnostic ---'
-            echo "acquire_rc=$acquire_rc contend_rc=$contend_rc release_rc=$release_rc"
-            cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt || true
-            qemu-arm-static -L "$ASUS_ROOT" "$BB" flock --help 2>&1 | head -n 40 || true
+              exec 278>&-
 
-            test "$acquire_rc" -eq 0
-            test "$contend_rc" -ne 0
-            test "$release_rc" -eq 0
-            echo 'flock_fd_semantics=PASS' >> "$OUT"
+              set +e
+              (
+                exec 279>"$LOCK"
+                qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -n -x 279
+              ) > reports/flock-release.txt 2>&1
+              release_rc=$?
+              set -e
+
+              echo "flock_fd_acquire_rc=$acquire_rc" >> "$OUT"
+              echo "flock_fd_contend_rc=$contend_rc" >> "$OUT"
+              echo "flock_fd_release_rc=$release_rc" >> "$OUT"
+              cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt >> "$OUT" || true
+
+              test "$acquire_rc" -eq 0
+              test "$contend_rc" -ne 0
+              test "$release_rc" -eq 0
+              echo 'flock_fd_semantics=PASS' >> "$OUT"
+              echo 'CLASSIFICATION=EXACT_CRU_FLOCK_PATCH_JUSTIFIED' >> "$OUT"
+            else
+              echo 'flock_applet_present=no' >> "$OUT"
+              echo "symlink_style_help_rc=$symlink_style_rc" >> "$OUT"
+              cat reports/flock-help.txt >> "$OUT" || true
+              echo 'CLASSIFICATION=KEEP_ASUS_CRU_NO_FLOCK_ADAPT' >> "$OUT"
+            fi
           else
             echo 'flock_path=MISSING' >> "$OUT"
           fi
