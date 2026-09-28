@@ -554,8 +554,19 @@ jobs:
           set -euo pipefail
           S="$ASUS_ROOT/usr/bin/scp"
           OUT=reports/scp-overlay-validation.txt
-          : > "$OUT"
 
+          if ! python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ports/active.json").read_text(encoding="utf-8"))
+          raise SystemExit(0 if any(e.get("target")=="/usr/bin/scp" for e in d.get("entries",[])) else 1)
+          PY
+          then
+            echo 'SKIP /usr/bin/scp is not active in overlay manifest'
+            exit 0
+          fi
+
+          : > "$OUT"
           test -f "$S"
           test "$(sha256sum "$S" | awk '{print $1}')" = 'd47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851'
           test "$(stat -c '%a' "$S")" = '755'
