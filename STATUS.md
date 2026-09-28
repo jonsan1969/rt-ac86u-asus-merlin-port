@@ -88,3 +88,5 @@ Only these project states are used:
 | M28 Tor transparent proxy | **IN PROGRESS** | clean ASUS 45956 already contains disabled `RTCONFIG_TOR` backend/page/accounts/firewall/source; pinned donor advances Tor to 0.4.7.16. Final design re-enables/reconciles ASUS-lineage source, requires M29 local NTP, keeps fail-closed IPv4 rules synchronous in firewall generation, and adds IPv6 FORWARD-drop hardening. See `docs/tor-source-lineage-contract.md` |
 
 | M25/M40 VPN Director routing | **IN PROGRESS** | rule schema, persistent store, `ovpncN` table construction, RPDB priority ownership, per-client killswitch, cleanup and M38 DNS coupling are specified in `docs/vpn-director-routing-source-contract.md`; later ASUS-compatible OpenVPN/routing source remains required |
+
+| M46 QoS Stats | **IN PROGRESS** | narrowed to read-only tc-class + BWDPI HTTPD handlers, then add-only page/AJAX/menu integration; M64 download counters share this backend. See `docs/qos-stats-source-contract.md` |
