@@ -37,6 +37,7 @@
 | M53 System/Wireless Log no-auto-logout | **SUCCESS** | two SHA-locked page-only patches validated by guarded overlay run 36369816037; no backend/core changes |
 | M54 System Log enhancements | **SUCCESS** | safe UI-only subset implemented: local logFilter database + auto-refresh/filter controls; unsupported Merlin log-level backend controls deliberately excluded; guarded validation run 36370670710 |
 | M55 Dual-radio WiFi icon | **SUCCESS** | ASUS hardware-switch logic preserved; no-switch on/partial/off fallback plus minimal partial-state CSS validated in run 36370439356 |
+| M57 Advanced VPN Status | **IN PROGRESS** | ASUS 52334 retains `ajax_ipsec.asp` but lacks `ajax_vpn_status.asp`, Merlin OpenVPN status globals and the expected vpn_client1/2 status-NVRAM contract; source-side HTTPD/OpenVPN status integration required |
 | Merlin feature port | **IN PROGRESS** | DNS Director + image-safe JFFS/addon + ASUS-backed Other Settings + monthly traffic + local OUI + WiFi QR implemented; no unsafe core binary replacement |
 | Flashable firmware | **IN PROGRESS** | no flashability claim until repack + hardware/runtime gates pass |
 
