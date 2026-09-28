@@ -1,0 +1,98 @@
+name: Verify local NTP source/adaptation contract
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/local-ntp-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router/busybox release/src/router/rc release/src/router/config_base
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/busybox release/src/router/rc release/src/router/shared release/src/router/www release/src-rt
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify provenance and server-only capability
+        run: |
+          set -euo pipefail
+          A=work/asus
+          M=work/merlin
+          OUT=reports/local-ntp-source.txt
+          : > "$OUT"
+          pass(){ echo "PASS $*" | tee -a "$OUT"; }
+          fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have(){ grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+          lack(){ if grep -Fq "$2" "$1"; then fail "$3"; else pass "$3"; fi; }
+
+          AN="$A/release/src/router/busybox/networking/ntpd.c"
+          MN="$M/release/src/router/busybox/networking/ntpd.c"
+
+          echo '===== CLEAN ASUS SOURCE CAPABILITY =====' | tee -a "$OUT"
+          have "$A/release/src/router/busybox/config_base" '# CONFIG_NTPD is not set' "ASUS disables BusyBox NTPD"
+          have "$AN" 'IF_FEATURE_NTPD_SERVER("l -I IFACE")' "ASUS source contains server/interface options"
+          have "$AN" 'create_and_bind_dgram_or_die(NULL, 123)' "ASUS source contains UDP/123 server listener"
+          have "$AN" 'recv_and_process_client_pkt' "ASUS source contains NTP server reply path"
+          have "$AN" 'if (!(option_mask32 & OPT_w))' "ASUS -w skips local clock update"
+          have "$AN" 'if (G_listen_fd != -1)' "ASUS server listener remains in poll loop"
+
+          echo '===== MERLIN BUSYBOX PROVENANCE =====' | tee -a "$OUT"
+          have "$M/release/src/router/busybox/config_base" 'CONFIG_NTPD=y' "Merlin enables BusyBox NTPD"
+          have "$M/release/src/router/busybox/config_base" 'CONFIG_FEATURE_NTPD_SERVER=y' "Merlin enables BusyBox NTP server"
+          have "$M/release/src/router/busybox/include/applets.src.h" 'APPLET_ODDNAME(ntp, ntpd' "BusyBox defines ntp alias for ntpd"
+          have "$M/release/src-rt/Makefile" 'CONFIG_FEATURE_NTPD_NTP_ALIAS=y' "Merlin build forces ntp alias"
+          have "$M/release/src/router/rc/ntpd.c" '"/usr/sbin/ntp"' "Merlin rc launches BusyBox ntp alias"
+
+          echo '===== STOCK ASUS TIME OWNERSHIP =====' | tee -a "$OUT"
+          have "$A/release/src/router/rc/ntp.c" 'char *args[] = {"ntpclient"' "ASUS rc time client launches ntpclient"
+          have "$A/release/src/router/rc/ntp.c" 'nvram_set("ntp_ready", "0")' "ASUS rc owns ntp_ready state"
+          have "$A/release/src/router/rc/services.c" 'char *ntp_argv[] = {"ntp", NULL}' "ASUS starts rc ntp multicall"
+          have "$A/release/src/router/rc/services.c" 'if (!pids("ntp"))' "ASUS process matching reserves ntp name"
+
+          echo '===== DONOR CONTROL SURFACE =====' | tee -a "$OUT"
+          D="$M/release/src/router/shared/defaults.c"
+          W="$M/release/src/router/www/Advanced_System_Content.asp"
+          S="$M/release/src/router/rc/services.c"
+          F="$M/release/src/router/rc/firewall.c"
+          have "$D" '{ "ntpd_enable", "0"' "Donor defines ntpd_enable default"
+          have "$D" '{ "ntpd_server_redir", "0"' "Donor defines ntpd_server_redir default"
+          lack "$D" 'ntpd_server_trust' "Pinned donor has no ntpd_server_trust NVRAM key"
+          have "$S" 'dhcp-option=lan,42,%s' "Donor advertises IPv4 NTP DHCP option"
+          have "$S" 'dhcp-option=lan,option6:31,%s' "Donor advertises IPv6 SNTP option"
+          have "$S" 'dhcp-option=lan,option6:56,%s' "Donor advertises IPv6 NTP option"
+          have "$F" '--dport 123 -j REDIRECT --to-port 123' "Donor redirects client NTP when enabled"
+          have "$W" 'name="ntpd_enable"' "Donor UI exposes local server toggle"
+          have "$W" 'name="ntpd_server_redir"' "Donor UI exposes redirect toggle"
+
+          echo 'CLASSIFICATION NTP_ISOLATED_ASUS_SOURCE_DAEMON_AND_JFFS_ADAPTATION' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ntp-source
+          path: reports/local-ntp-source.txt
+          if-no-files-found: warn
+          retention-days: 30
