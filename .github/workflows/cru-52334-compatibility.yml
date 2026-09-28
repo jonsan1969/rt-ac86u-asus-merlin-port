@@ -60,6 +60,8 @@ jobs:
             stat -c 'size=%s mode=%a' "$P" >> "$OUT"
             strings -a "$P" | grep -Ei 'usage|add|delete|list|cron|lock|tmp|pid|already|collision|name|/var/spool' | sort -u >> "$OUT" || true
             qemu-arm-static -L "$R" "$P" 2>&1 | head -n 80 >> "$OUT" || true
+            echo '-- full script --' >> "$OUT"
+            cat "$P" >> "$OUT"
             echo >> "$OUT"
           done
 
