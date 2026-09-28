@@ -58,11 +58,14 @@ jobs:
               echo 'CLASSIFICATION=PATCH_CANDIDATE'
             fi
           } >> "$OUT"
+          cp "$P" reports/asus-state.js
           cat "$OUT"
       - name: Publish report
         uses: actions/upload-artifact@v4
         with:
           name: wifi-icon-52334-compatibility
-          path: reports/wifi-icon-52334-compatibility.txt
+          path: |
+            reports/wifi-icon-52334-compatibility.txt
+            reports/asus-state.js
           if-no-files-found: error
           retention-days: 14
