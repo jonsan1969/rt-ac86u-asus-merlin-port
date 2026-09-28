@@ -109,6 +109,47 @@ jobs:
             done
           done
 
+          echo '===== DECISION SIGNATURES =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side M37 exact ---" >> "$OUT"
+            for sig in vpn_server_ip6 vpn_server_nat6 vpn_server_sn6 vpn_server_local6 vpn_server_remote6; do
+              hits=''
+              for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+                if strings -a "$R/$rel" | grep -Fxq "$sig"; then hits="$hits $rel"; fi
+              done
+              echo "$sig:\${hits:- MISSING}" >> "$OUT"
+            done
+
+            echo "--- $side M38 exact ---" >> "$OUT"
+            for sig in vpn_client_adns ovpn_set_exclusive_dns ovpn_clear_exclusive_dns ovpn_update_exclusive_dns_rules; do
+              hits=''
+              for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+                if strings -a "$R/$rel" | grep -Fxq "$sig"; then hits="$hits $rel"; fi
+              done
+              echo "$sig:\${hits:- MISSING}" >> "$OUT"
+            done
+            grep -RIl --exclude='*.png' --exclude='*.gif' --exclude='*.jpg' 'vpn_client_adns' "$R/www" 2>/dev/null | sed "s#^$R/##" | sort | sed 's/^/page_adns=/' >> "$OUT" || true
+
+            echo "--- $side M65 exact ---" >> "$OUT"
+            for sig in ddns_ipv6_update ddns_ipv6_ipaddr ddns_ipv6_updated; do
+              hits=''
+              for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+                if strings -a "$R/$rel" | grep -Fxq "$sig"; then hits="$hits $rel"; fi
+              done
+              echo "$sig:\${hits:- MISSING}" >> "$OUT"
+            done
+
+            echo "--- $side M66 exact ---" >> "$OUT"
+            for sig in dnspriv_enable dnspriv_profile dnspriv_rulelist resolver.arpa use-application-dns.net mask.icloud.com mask-h2.icloud.com; do
+              hits=''
+              for rel in sbin/rc usr/sbin/dnsmasq usr/sbin/httpd usr/lib/libshared.so; do
+                if strings -a "$R/$rel" | grep -Fq "$sig"; then hits="$hits $rel"; fi
+              done
+              echo "$sig:\${hits:- MISSING}" >> "$OUT"
+            done
+          done
+
           echo '===== TOKEN COUNTS =====' >> "$OUT"
           for feat in M37 M38 M65 M66; do
             echo "$feat report_lines=$(grep -c "$feat" "$OUT" || true)" >> "$OUT"
