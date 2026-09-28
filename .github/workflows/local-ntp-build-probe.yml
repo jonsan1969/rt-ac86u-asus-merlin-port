@@ -22,7 +22,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross             qemu-user-static file make bc bzip2
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross \
+            qemu-user-static file make bc bzip2
 
       - name: Fetch pinned clean ASUS BusyBox source
         run: |
@@ -40,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           B=work/asus/release/src/router/busybox
-          OUT=reports/local-ntp-build.txt
+          OUT="$GITHUB_WORKSPACE/reports/local-ntp-build.txt"
 
           cd "$B"
           make distclean
@@ -49,10 +51,10 @@ jobs:
           set_cfg() {
             key="$1"
             val="$2"
-            if grep -q "^# ${key} is not set$" .config; then
-              sed -i "s/^# ${key} is not set$/${key}=${val}/" .config
-            elif grep -q "^${key}=" .config; then
-              sed -i "s#^${key}=.*#${key}=${val}#" .config
+            if grep -q "^# $key is not set$" .config; then
+              sed -i "s/^# $key is not set$/$key=$val/" .config
+            elif grep -q "^$key=" .config; then
+              sed -i "s#^$key=.*#$key=$val#" .config
             else
               printf '%s=%s\n' "$key" "$val" >> .config
             fi
@@ -69,18 +71,21 @@ jobs:
           set_cfg CONFIG_FEATURE_PIDFILE y
 
           set +e
+          set +o pipefail
           yes "" | make oldconfig CROSS_COMPILE=aarch64-linux-gnu- >/dev/null
-          oldconfig_rc=${PIPESTATUS[1]}
+          oldconfig_rc=$?
+          set -o pipefail
           set -e
-          [ "$oldconfig_rc" -eq 0 ] || {
-            echo "FAIL oldconfig rc=$oldconfig_rc" | tee -a "$GITHUB_WORKSPACE/$OUT"
+          if [ "$oldconfig_rc" -ne 0 ]; then
+            echo "FAIL oldconfig rc=$oldconfig_rc" | tee -a "$OUT"
             exit "$oldconfig_rc"
-          }
+          fi
 
-          echo '===== FINAL CONFIG =====' | tee -a "$GITHUB_WORKSPACE/$OUT"
-          grep -E '^(CONFIG_STATIC|CONFIG_NTPD|CONFIG_FEATURE_NTPD_SERVER|CONFIG_FEATURE_NTPD_CONF|CONFIG_FEATURE_IPV6|CONFIG_LONG_OPTS|CONFIG_CROSS_COMPILER_PREFIX)=' .config             | tee -a "$GITHUB_WORKSPACE/$OUT"
+          echo '===== FINAL CONFIG =====' | tee -a "$OUT"
+          grep -E '^(CONFIG_STATIC|CONFIG_NTPD|CONFIG_FEATURE_NTPD_SERVER|CONFIG_FEATURE_NTPD_CONF|CONFIG_FEATURE_IPV6|CONFIG_LONG_OPTS|CONFIG_CROSS_COMPILER_PREFIX)=' .config \
+            | tee -a "$OUT"
 
-      - name: Build candidate
+      - name: Build AArch64 static candidate
         run: |
           set -euo pipefail
           B=work/asus/release/src/router/busybox
@@ -108,9 +113,8 @@ jobs:
           if aarch64-linux-gnu-readelf -l artifacts/rtac86u-ntpd-static | grep -q 'INTERP'; then
             echo 'FAIL candidate has dynamic interpreter' | tee -a "$OUT"
             exit 1
-          else
-            echo 'PASS candidate is static/no PT_INTERP' | tee -a "$OUT"
           fi
+          echo 'PASS candidate is static AArch64 with no PT_INTERP' | tee -a "$OUT"
 
           sha256sum artifacts/rtac86u-ntpd-static | tee -a "$OUT"
           stat -c 'size=%s mode=%a' artifacts/rtac86u-ntpd-static | tee -a "$OUT"
@@ -120,54 +124,12 @@ jobs:
           set -euo pipefail
           BIN=artifacts/rtac86u-ntpd-static
           OUT=reports/local-ntp-build.txt
+          B=work/asus/release/src/router/busybox
 
           echo '===== SINGLE APPLET CONFIG =====' | tee -a "$OUT"
-          B=work/asus/release/src/router/busybox
           grep -Fxq 'CONFIG_NTPD=y' "$B/.config"
-          enabled_applets="$(grep -E '^CONFIG_[A-Z0-9_]+=y
-      - name: Root launch smoke on UDP 123
-        run: |
-          set -euo pipefail
-          BIN="$GITHUB_WORKSPACE/artifacts/rtac86u-ntpd-static"
-          OUT="$GITHUB_WORKSPACE/reports/local-ntp-build.txt"
-
-          echo '===== ROOT LAUNCH SMOKE =====' | tee -a "$OUT"
-          set +e
-          sudo timeout --signal=TERM 3             qemu-aarch64-static "$BIN" -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
-          rc=$?
-          set -e
-
-          cat reports/local-ntp-run.out | tee -a "$OUT" || true
-          cat reports/local-ntp-run.err | tee -a "$OUT" || true
-          echo "run_rc=$rc" | tee -a "$OUT"
-
-          if [ "$rc" -eq 124 ]; then
-            echo 'PASS ntpd stayed alive until timeout' | tee -a "$OUT"
-          else
-            echo 'FAIL ntpd exited before timeout' | tee -a "$OUT"
-            exit 1
-          fi
-
-          echo 'CLASSIFICATION STATIC_ASUS_LINEAGE_NTPD_BUILD_CANDIDATE' | tee -a "$OUT"
-
-      - name: Publish build evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: local-ntp-build-probe
-          path: |
-            artifacts/rtac86u-ntpd-static
-            reports/local-ntp-build.txt
-            reports/local-ntp-build.log
-            reports/local-ntp-applets.txt
-            reports/local-ntp-help.txt
-            reports/local-ntp-run.out
-            reports/local-ntp-run.err
-          if-no-files-found: warn
-          retention-days: 30
- "$B/.config" | grep -Ev '^CONFIG_(NTPD|FEATURE_NTPD_|STATIC|CROSS_COMPILER_PREFIX|FEATURE_IPV6|LONG_OPTS|SHOW_USAGE|FEATURE_PIDFILE)' || true)"
-          echo 'PASS ntpd is the only intentionally enabled functional applet' | tee -a "$OUT"
-          printf '%s\n' "$enabled_applets" > reports/local-ntp-applets.txt
+          grep -E '^CONFIG_[A-Z0-9_]+=y$' "$B/.config" > reports/local-ntp-applets.txt
+          echo 'PASS NTPD is enabled in an allnoconfig-derived build' | tee -a "$OUT"
 
           echo '===== NTPD HELP =====' | tee -a "$OUT"
           set +e
@@ -177,11 +139,16 @@ jobs:
           cat reports/local-ntp-help.txt | tee -a "$OUT"
           echo "help_rc=$help_rc" | tee -a "$OUT"
 
+          grep -Eiq 'ntpd|NTP' reports/local-ntp-help.txt
           for opt in '-w' '-l' '-I' '-p'; do
-            grep -Fq -- "$opt" reports/local-ntp-help.txt               && echo "PASS help contains $opt" | tee -a "$OUT"               || { echo "FAIL help missing $opt" | tee -a "$OUT"; exit 1; }
+            if grep -Fq -- "$opt" reports/local-ntp-help.txt; then
+              echo "PASS help contains $opt" | tee -a "$OUT"
+            else
+              echo "FAIL help missing $opt" | tee -a "$OUT"
+              exit 1
+            fi
           done
 
-          # ASUS-lineage ntpd.c carries trust-mode support; verify compiled surface.
           if grep -Fq -- '-t' reports/local-ntp-help.txt || strings "$BIN" | grep -Fqi 'trust'; then
             echo 'PASS trust-mode surface present' | tee -a "$OUT"
           else
@@ -197,7 +164,9 @@ jobs:
 
           echo '===== ROOT LAUNCH SMOKE =====' | tee -a "$OUT"
           set +e
-          sudo timeout --signal=TERM 3             qemu-aarch64-static "$BIN" ntpd -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
+          sudo timeout --signal=TERM 3 \
+            qemu-aarch64-static "$BIN" -w -l -I lo -p 192.0.2.1 \
+            > reports/local-ntp-run.out 2> reports/local-ntp-run.err
           rc=$?
           set -e
 
