@@ -431,6 +431,36 @@
       "sha256": "a6e28e7be5b00799f4492ab99baba31e9a9255ffd3e62bbb276270f5645c04f3",
       "mode": "0644",
       "policy": "add_only"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/usr/bin/nano",
+      "target": "/usr/bin/nano",
+      "sha256": "82e9e6d755fb779315d8a7b9f3530182456b9544f0e14216ac3ca3dd481db5e8",
+      "mode": "0755",
+      "policy": "add_only"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/usr/lib/libncurses.so.6.0",
+      "target": "/usr/lib/libncurses.so.6.0",
+      "sha256": "d7b57d0d6b327c11230793f58cc64327f6be7ce64ea9c1d2dbe4a39ac7387a0b",
+      "mode": "0644",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/usr/lib/libncurses.so.6",
+      "link_target": "libncurses.so.6.0",
+      "policy": "add_only"
+    },
+    {
+      "type": "symlink",
+      "target": "/usr/bin/rnano",
+      "link_target": "nano",
+      "policy": "add_only"
     }
   ]
 }
