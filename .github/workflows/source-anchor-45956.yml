@@ -1,0 +1,93 @@
+name: Probe clean ASUS 386.45956 source anchor
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/source-anchor-45956.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned clean ASUS and Merlin donor source
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git clone --filter=blob:none --no-checkout https://github.com/blackfuel/asuswrt-rt-ac86u.git work/asus-src
+          git -C work/asus-src checkout a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git clone --filter=blob:none --no-checkout https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          git -C work/merlin-src checkout 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+
+      - name: Measure source anchor
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/source-anchor-45956.txt
+          : > "$OUT"
+
+          echo '===== PINNING =====' >> "$OUT"
+          git -C "$A" show -s --format='ASUS %H %s' HEAD >> "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD >> "$OUT"
+
+          echo '===== REQUIRED SOURCE PATHS =====' >> "$OUT"
+          paths='release/src-rt-5.02hnd/router/shared/scripts.c
+          release/src-rt-5.02hnd/router/shared/shared.h
+          release/src-rt-5.02hnd/router/shared/defaults.c
+          release/src-rt-5.02hnd/router/rc/services.c
+          release/src-rt-5.02hnd/router/rc/firewall.c
+          release/src-rt-5.02hnd/router/rc/udhcpc.c
+          release/src-rt-5.02hnd/router/rc/qos.c
+          release/src-rt-5.02hnd/router/rc/usb.c
+          release/src-rt-5.02hnd/router/rc/wan.c
+          release/src-rt-5.02hnd/router/rc/init.c
+          release/src-rt-5.02hnd/router/httpd/web.c'
+          for p in $paths; do
+            [ -f "$A/$p" ] && ap=yes || ap=no
+            echo "$p ASUS=$ap" >> "$OUT"
+          done
+
+          echo '===== SOURCE TREE CANDIDATES =====' >> "$OUT"
+          find "$A/release" -maxdepth 3 -type f \( -path '*/router/rc/services.c' -o -path '*/router/shared/scripts.c' -o -path '*/router/httpd/web.c' \) -print | sed "s#^$A/##" | sort >> "$OUT" || true
+
+          echo '===== BUILD TARGET SURFACE =====' >> "$OUT"
+          grep -RinE 'RT-AC86U|RTAC86U|rt-ac86u|rtac86u' "$A/release" --include='Makefile' --include='*.mk' 2>/dev/null | head -n 160 >> "$OUT" || true
+
+          echo '===== MERLIN PRIMITIVES IN CLEAN ASUS =====' >> "$OUT"
+          for tok in run_custom_script run_postconf use_custom_config append_custom_config jffs2_scripts vpndirector_rulelist dnsfilter_custom61 ntpd_enable smbd_master smbd_simpler_naming; do
+            printf '%-28s ' "$tok" >> "$OUT"
+            if grep -RqsF "$tok" "$A/release" 2>/dev/null; then echo present >> "$OUT"; else echo absent >> "$OUT"; fi
+          done
+
+          echo '===== KERNEL / PLATFORM MARKERS =====' >> "$OUT"
+          find "$A/release" -maxdepth 5 -type f -name Makefile -o -name Kconfig 2>/dev/null | head -n 5 >/dev/null || true
+          grep -RhsE '^VERSION = 4$|^PATCHLEVEL = 1$|^SUBLEVEL = 27$' "$A/release/src-rt-5.02hnd/kernel/linux-4.1" 2>/dev/null | head -n 20 >> "$OUT" || true
+          find "$A" -type f -name '*RT-AC86U*' -o -name '*RTAC86U*' 2>/dev/null | sed "s#^$A/##" | head -n 100 >> "$OUT" || true
+
+          echo '===== SOURCE FILE HASHES =====' >> "$OUT"
+          for f in \
+            "$A/release/src-rt-5.02hnd/router/rc/services.c" \
+            "$A/release/src-rt-5.02hnd/router/rc/firewall.c" \
+            "$A/release/src-rt-5.02hnd/router/rc/udhcpc.c" \
+            "$A/release/src-rt-5.02hnd/router/shared/scripts.c"; do
+            [ -f "$f" ] && sha256sum "$f" >> "$OUT" || true
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-anchor-45956
+          path: reports/source-anchor-45956.txt
+          if-no-files-found: error
+          retention-days: 30
