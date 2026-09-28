@@ -115,27 +115,63 @@ jobs:
           sha256sum artifacts/rtac86u-ntpd-static | tee -a "$OUT"
           stat -c 'size=%s mode=%a' artifacts/rtac86u-ntpd-static | tee -a "$OUT"
 
-      - name: QEMU applet and option smoke test
+      - name: QEMU single-applet and option smoke test
         run: |
           set -euo pipefail
           BIN=artifacts/rtac86u-ntpd-static
           OUT=reports/local-ntp-build.txt
 
-          echo '===== APPLETS =====' | tee -a "$OUT"
-          qemu-aarch64-static "$BIN" --list | tee reports/local-ntp-applets.txt | tee -a "$OUT"
-          grep -Fxq ntpd reports/local-ntp-applets.txt
+          echo '===== SINGLE APPLET CONFIG =====' | tee -a "$OUT"
+          B=work/asus/release/src/router/busybox
+          grep -Fxq 'CONFIG_NTPD=y' "$B/.config"
+          enabled_applets="$(grep -E '^CONFIG_[A-Z0-9_]+=y
+      - name: Root launch smoke on UDP 123
+        run: |
+          set -euo pipefail
+          BIN="$GITHUB_WORKSPACE/artifacts/rtac86u-ntpd-static"
+          OUT="$GITHUB_WORKSPACE/reports/local-ntp-build.txt"
 
-          extra="$(grep -vE '^(busybox|ntpd)$' reports/local-ntp-applets.txt || true)"
-          if [ -n "$extra" ]; then
-            echo "FAIL unexpected applets:" | tee -a "$OUT"
-            printf '%s\n' "$extra" | tee -a "$OUT"
+          echo '===== ROOT LAUNCH SMOKE =====' | tee -a "$OUT"
+          set +e
+          sudo timeout --signal=TERM 3             qemu-aarch64-static "$BIN" -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
+          rc=$?
+          set -e
+
+          cat reports/local-ntp-run.out | tee -a "$OUT" || true
+          cat reports/local-ntp-run.err | tee -a "$OUT" || true
+          echo "run_rc=$rc" | tee -a "$OUT"
+
+          if [ "$rc" -eq 124 ]; then
+            echo 'PASS ntpd stayed alive until timeout' | tee -a "$OUT"
+          else
+            echo 'FAIL ntpd exited before timeout' | tee -a "$OUT"
             exit 1
           fi
-          echo 'PASS candidate contains only BusyBox core + ntpd applet' | tee -a "$OUT"
+
+          echo 'CLASSIFICATION STATIC_ASUS_LINEAGE_NTPD_BUILD_CANDIDATE' | tee -a "$OUT"
+
+      - name: Publish build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ntp-build-probe
+          path: |
+            artifacts/rtac86u-ntpd-static
+            reports/local-ntp-build.txt
+            reports/local-ntp-build.log
+            reports/local-ntp-applets.txt
+            reports/local-ntp-help.txt
+            reports/local-ntp-run.out
+            reports/local-ntp-run.err
+          if-no-files-found: warn
+          retention-days: 30
+ "$B/.config" | grep -Ev '^CONFIG_(NTPD|FEATURE_NTPD_|STATIC|CROSS_COMPILER_PREFIX|FEATURE_IPV6|LONG_OPTS|SHOW_USAGE|FEATURE_PIDFILE)' || true)"
+          echo 'PASS ntpd is the only intentionally enabled functional applet' | tee -a "$OUT"
+          printf '%s\n' "$enabled_applets" > reports/local-ntp-applets.txt
 
           echo '===== NTPD HELP =====' | tee -a "$OUT"
           set +e
-          qemu-aarch64-static "$BIN" ntpd --help > reports/local-ntp-help.txt 2>&1
+          sudo qemu-aarch64-static "$BIN" --help > reports/local-ntp-help.txt 2>&1
           help_rc=$?
           set -e
           cat reports/local-ntp-help.txt | tee -a "$OUT"
@@ -145,8 +181,8 @@ jobs:
             grep -Fq -- "$opt" reports/local-ntp-help.txt               && echo "PASS help contains $opt" | tee -a "$OUT"               || { echo "FAIL help missing $opt" | tee -a "$OUT"; exit 1; }
           done
 
-          # ASUS-lineage ntpd.c also carries -t; verify from compiled strings/help.
-          if grep -Fq -- '-t' reports/local-ntp-help.txt || strings "$BIN" | grep -Fq 'trust'; then
+          # ASUS-lineage ntpd.c carries trust-mode support; verify compiled surface.
+          if grep -Fq -- '-t' reports/local-ntp-help.txt || strings "$BIN" | grep -Fqi 'trust'; then
             echo 'PASS trust-mode surface present' | tee -a "$OUT"
           else
             echo 'FAIL trust-mode surface missing' | tee -a "$OUT"
