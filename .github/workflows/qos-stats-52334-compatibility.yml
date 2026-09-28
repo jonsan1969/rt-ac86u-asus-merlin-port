@@ -1,0 +1,94 @@
+name: Probe ASUS 52334 QoS Stats compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/qos-stats-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe QoS Stats backend
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/qos-stats-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'ASSETS'
+          for rel in js/chart.min.js js/table/table.js client_function.js; do
+            [ -f "$R/www/$rel" ] && echo "PRESENT /www/$rel" >> "$OUT" || echo "MISSING /www/$rel" >> "$OUT"
+          done
+
+          section 'AJAX ENDPOINT'
+          if [ -f "$R/www/ajax_gettcdata.asp" ]; then
+            echo 'PRESENT /www/ajax_gettcdata.asp' >> "$OUT"
+            sha256sum "$R/www/ajax_gettcdata.asp" >> "$OUT"
+            cat "$R/www/ajax_gettcdata.asp" >> "$OUT"
+          else
+            echo 'MISSING /www/ajax_gettcdata.asp' >> "$OUT"
+          fi
+
+          section 'HTTPD EJ HANDLERS'
+          for sig in get_ipv6clients_array get_tcfilter_array get_tcdata bwdpi_conntrack; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+            fi
+          done
+
+          section 'WEB SURFACE'
+          grep -RInaE --binary-files=without-match             'get_tcfilter_array|get_ipv6clients_array|ajax_gettcdata|bwdpi_conntrack'             "$R/www" 2>/dev/null | head -n 400 >> "$OUT" || true
+
+          section 'CLASSIFICATION'
+          missing=0
+          [ -f "$R/www/js/chart.min.js" ] || missing=$((missing+1))
+          [ -f "$R/www/js/table/table.js" ] || missing=$((missing+1))
+          [ -f "$R/www/ajax_gettcdata.asp" ] || missing=$((missing+1))
+          for sig in get_ipv6clients_array get_tcfilter_array; do
+            strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig" || missing=$((missing+1))
+          done
+          if [ "$missing" -eq 0 ]; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo "CLASSIFICATION=SOURCE_OR_ASSET_REQUIRED missing=$missing" >> "$OUT"
+          fi
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: qos-stats-52334-compatibility
+          path: reports/qos-stats-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
