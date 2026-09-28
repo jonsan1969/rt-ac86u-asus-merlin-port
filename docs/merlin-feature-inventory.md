@@ -78,8 +78,8 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M19 | Force SMB Master Browser | `smbd_master` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
 | M20 | WINS server | ASUS rc + libshared retain `smbd_wins`; generic Samba form/NVRAM apply handling was proven | **ADAPT** | A/C | implemented as one exact UI row in stock Samba page; guarded run 36382734032 validates WINS on/off controls, stock `restart_ftpsamba`, and absence of M18/M19 leakage |
 | M21 | Windows discovery via `wsdd2` | ASUS smbd/nmbd present; donor `wsdd2` ELF has all NEEDED libs in ASUS, but ASUS `rc` has no wsdd2 lifecycle | **PORT** | A/B/C | binary compatibility proven in 36382208517; source-side start/stop integration is still required, so no binary-only overlay |
-| M22 | NFS exports for USB storage | NFS page/daemon/modules absent | **PORT** | A/B/C | `nfsd`, `mountd`, `exportfs`, sunrpc/NFS modules + WebUI/config |
-| M23 | CIFS client support | mount points exist but CIFS kernel module absent | **PORT** | B/C | add source-compatible CIFS client support; no blind module transplant |
+| M22 | NFS exports for USB storage | ASUS image has no NFS userland or NFS/sunrpc kernel modules; Merlin has both | **PORT** | B/C | run 36383330681: donor modules report `4.1.27 SMP preempt mod_unload aarch64`, but matching vermagic is not kernel symbol/config ABI proof; rebuild/integrate against ASUS kernel source, then add userland/WebUI |
+| M23 | CIFS client support | ASUS lacks `cifs.ko`; Merlin donor has it | **PORT** | B/C | run 36383330681 confirms kernel component gap; source-build for ASUS kernel required, no donor `.ko` transplant |
 
 ## 4. VPN, DNS and routing
 
@@ -88,13 +88,13 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M24 | Advanced OpenVPN client/server integration | stock OpenVPN exists; Merlin advanced page absent | **ADAPT** | A/B/C | reconcile against later ASUS OpenVPN/security implementation |
 | M25 | VPN Director | page and `vpndirector_rulelist` backend absent | **PORT** | A/B/C | JFFS-backed rules, RPDB routing, kill-switch/DNS interaction |
 | M26 | DNS Director | ASUS has DNSFilter backend; Merlin page absent | **ADAPT** | A/C | retain ASUS backend, adapt Merlin UI/schema; verify IPv4/IPv6/custom providers |
-| M27 | ipset kernel/userspace support | absent | **PORT** | A/B | modules + `libipset` + userspace `ipset` |
+| M27 | ipset kernel/userspace support | ASUS lacks `ipset` userland and `ip_set*`/`xt_set` modules; Merlin contains them | **PORT** | B/C | run 36383330681: kernel/source build required first; do not overlay donor modules or userland alone |
 | M28 | TOR with per-client access control | ASUS lacks daemon/page and all `Tor_*`/`start_tor` lifecycle contract; donor ELF itself has all NEEDED libs in ASUS | **PORT** | A/B/C | run 36383112487 proves binary compatibility but also Merlin-only rc/libshared lifecycle; source integration required, no standalone-binary overlay |
 | M29 | Local NTP daemon | ASUS 52334 has no ntpd/chronyd and no `ntpd_enable` backend/default/UI contract | **PORT** | A/B/C | source/runtime integration required; not an image-only UI port |
 | M30 | Redirect client NTP queries to router | `ntpd_server_redir`/`ntpd_server_trust` and firewall redirect contract absent | **PORT** | C | source-side rc/firewall/default/UI integration tied to M29 |
 | M31 | TCP/UDP conntrack timeout tuning | backend keys already present; Merlin UI absent | **ADAPT** | A/C | reuse ASUS backend and add compatible controls |
-| M32 | Cake SQM QoS | cake module absent | **PORT** | B/C | requires kernel/source compatibility; hardware acceleration implications |
-| M33 | WireGuard kernel module/userspace tool | Merlin has `wireguard.ko` + `wg`; ASUS image lacks same runtime components but contains generic WG pages/libvpn | **REVIEW** | B/C/D | determine ASUS 52334 WireGuard capability path before any kernel/tool port |
+| M32 | Cake SQM QoS | ASUS lacks `sch_cake.ko`/`act_ctinfo.ko`; Merlin contains both | **PORT** | B/C | run 36383330681: ASUS-kernel-compatible build/integration required; preserve ASUS acceleration/runtime policy |
+| M33 | WireGuard kernel module/userspace tool | ASUS has no `wireguard.ko` or `wg`; Merlin has both, while ASUS still contains some generic WG UI/libvpn tokens | **PORT** | B/C/D | run 36383330681 closes binary-overlay path: kernel module must be built/integrated for ASUS 4.1.27 tree before userspace/UI capability is enabled; never transplant donor `.ko` |
 | M34 | Wireless Site Survey | page absent | **PORT** | A/C | AC86U-specific supported feature since Merlin 386.10 |
 | M35 | Detailed WiFi troubleshooting / WiFi Insight | launcher absent in ASUS; pinned Merlin image contains only a stale launcher and no visualization pages/backends | **NO PORT** | — | do not resurrect incomplete legacy WiFi Radar runtime; donor firmware lacks `visindex.asp`/capacity/metrics/config pages and `vis-datacollector`/`vis-dcon` |
 | M36 | IPv6-aware DNS Director | ASUS 52334 has IPv6 DNSFilter rule machinery but lacks Merlin `dnsfilter_custom61/62/63` backend/default/UI contract | **ADAPT** | C | built-in-mode IPv6 can reuse ASUS; full Custom 1–3 IPv6 parity needs source-side rc/httpd/defaults integration |
