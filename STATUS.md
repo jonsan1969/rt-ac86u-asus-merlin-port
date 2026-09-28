@@ -68,9 +68,9 @@ Only these project states are used:
 
 | M67 Speedtest VPN interface selector | **CANCELLED** | feature appears in later 3006 Merlin changelog; pinned 386.14_2 `internet_speed.html` has no VPN/interface selector, so it is outside this donor baseline |
 
-| M68 Outbound LAN allowed logging | **IN PROGRESS** | clean ASUS 45956 vs pinned Merlin proves the same one-token `ACCEPT` → `logaccept` substitution at two equivalent single-/multi-WAN LAN default-allow call sites; contract: `docs/outbound-lan-logging-source-contract.md`; later ASUS `rc` source still required |
+| M68 Outbound LAN allowed logging | **IN PROGRESS** | source-delta verification run `36478040973` is green: clean ASUS 45956 vs pinned Merlin proves the same one-token `ACCEPT` → `logaccept` substitution at two equivalent single-/multi-WAN LAN default-allow call sites; later ASUS `rc` source still required |
 
-| M66 Prevent Auto DoH / DDR / Private Relay | **IN PROGRESS** | donor Auto/Yes/No conditions and exact dnsmasq canaries are specified in `docs/prevent-auto-doh-source-contract.md`; source config-generation port only, with a targeted 52334 key/UI ownership check still required |
+| M66 Prevent Auto DoH / DDR / Private Relay | **IN PROGRESS** | run `36409047088` is green and proves ASUS 52334 has no `dns_priv_override` owner/UI/canaries; future source patch is definitively default + Auto/Yes/No UI + later-ASUS dnsmasq generator. Contract: `docs/prevent-auto-doh-source-contract.md` |
 
 | M64 Traditional QoS overhead/download stats | **IN PROGRESS** | donor overhead/framing behavior is source-bounded in `docs/qos-overhead-stats-source-contract.md`; download class counters are explicitly folded into future M46 QoS Stats HTTPD integration |
 
