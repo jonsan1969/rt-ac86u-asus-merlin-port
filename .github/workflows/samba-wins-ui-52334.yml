@@ -98,14 +98,17 @@ jobs:
             grep -nE 'start_apply|apply\.cgi|action_mode|action_script|restart_samba|restart_ftpsamba|applyRule|document\.form\.submit' "$P" | head -n 120 >> "$OUT" || true
           done
 
-          echo '===== ASUS SAMBA PAGE NVRAM KEYS =====' >> "$OUT"
-          grep -oE 'smbd_[A-Za-z0-9_]+' "$AP" | sort -u > reports/asus-samba-page-keys.txt || true
+          echo '===== ASUS SAMBA PAGE FORM FIELDS =====' >> "$OUT"
+          grep -oE 'name="[A-Za-z0-9_.-]+"' "$AP" | sed 's/^name="//; s/"$//' | sort -u > reports/asus-samba-page-keys.txt || true
           cat reports/asus-samba-page-keys.txt >> "$OUT"
 
           echo '===== GENERIC TOKENLESS-PAGE EVIDENCE =====' >> "$OUT"
           tokenless=0
           while read -r key; do
             [ -n "$key" ] || continue
+            case "$key" in
+              action_mode|action_script|action_wait|current_page|next_page|productid|flag|preferred_lang|firmver) continue ;;
+            esac
             in_shared=no
             in_httpd=no
             strings -a "$A/usr/lib/libshared.so" | grep -Fxq "$key" && in_shared=yes || true
@@ -115,7 +118,7 @@ jobs:
               tokenless=$((tokenless+1))
             fi
           done < reports/asus-samba-page-keys.txt
-          echo "page_keys_present_in_libshared_but_absent_httpd=$tokenless" >> "$OUT"
+          echo "page_fields_present_in_libshared_but_absent_httpd=$tokenless" >> "$OUT"
 
           echo '===== PAGE DIFF =====' >> "$OUT"
           diff -u "$AP" "$MP" > reports/samba-page.diff || true
