@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ARM cross-build and smoke-test tools
+      - name: Install AArch64 cross-build and smoke-test tools
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi             qemu-user-static file make bc bzip2
+          sudo apt-get install -y --no-install-recommends             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross             qemu-user-static file make bc bzip2
 
       - name: Fetch pinned clean ASUS BusyBox source
         run: |
@@ -44,7 +44,7 @@ jobs:
 
           cd "$B"
           make distclean
-          make allnoconfig CROSS_COMPILE=arm-linux-gnueabi-
+          make allnoconfig CROSS_COMPILE=aarch64-linux-gnu-
 
           set_cfg() {
             key="$1"
@@ -59,6 +59,7 @@ jobs:
           }
 
           set_cfg CONFIG_STATIC y
+          set_cfg CONFIG_CROSS_COMPILER_PREFIX '"aarch64-linux-gnu-"'
           set_cfg CONFIG_NTPD y
           set_cfg CONFIG_FEATURE_NTPD_SERVER y
           set_cfg CONFIG_FEATURE_NTPD_CONF y
@@ -68,7 +69,7 @@ jobs:
           set_cfg CONFIG_FEATURE_PIDFILE y
 
           set +e
-          yes "" | make oldconfig CROSS_COMPILE=arm-linux-gnueabi- >/dev/null
+          yes "" | make oldconfig CROSS_COMPILE=aarch64-linux-gnu- >/dev/null
           oldconfig_rc=${PIPESTATUS[1]}
           set -e
           [ "$oldconfig_rc" -eq 0 ] || {
@@ -86,7 +87,7 @@ jobs:
           OUT=reports/local-ntp-build.txt
 
           set +e
-          make -C "$B" -j2 CROSS_COMPILE=arm-linux-gnueabi- V=1 > reports/local-ntp-build.log 2>&1
+          make -C "$B" -j2 CROSS_COMPILE=aarch64-linux-gnu- V=1 > reports/local-ntp-build.log 2>&1
           build_rc=$?
           set -e
           if [ "$build_rc" -ne 0 ]; then
@@ -100,11 +101,11 @@ jobs:
 
           echo '===== ELF =====' | tee -a "$OUT"
           file artifacts/rtac86u-ntpd-static | tee -a "$OUT"
-          arm-linux-gnueabi-readelf -h artifacts/rtac86u-ntpd-static | tee -a "$OUT"
-          arm-linux-gnueabi-readelf -l artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+          aarch64-linux-gnu-readelf -h artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+          aarch64-linux-gnu-readelf -l artifacts/rtac86u-ntpd-static | tee -a "$OUT"
 
-          file artifacts/rtac86u-ntpd-static | grep -Eq 'ARM'
-          if arm-linux-gnueabi-readelf -l artifacts/rtac86u-ntpd-static | grep -q 'INTERP'; then
+          file artifacts/rtac86u-ntpd-static | grep -Eq 'ELF 64-bit.*ARM aarch64|ELF 64-bit.*AArch64'
+          if aarch64-linux-gnu-readelf -l artifacts/rtac86u-ntpd-static | grep -q 'INTERP'; then
             echo 'FAIL candidate has dynamic interpreter' | tee -a "$OUT"
             exit 1
           else
@@ -121,7 +122,7 @@ jobs:
           OUT=reports/local-ntp-build.txt
 
           echo '===== APPLETS =====' | tee -a "$OUT"
-          qemu-arm-static "$BIN" --list | tee reports/local-ntp-applets.txt | tee -a "$OUT"
+          qemu-aarch64-static "$BIN" --list | tee reports/local-ntp-applets.txt | tee -a "$OUT"
           grep -Fxq ntpd reports/local-ntp-applets.txt
 
           extra="$(grep -vE '^(busybox|ntpd)$' reports/local-ntp-applets.txt || true)"
@@ -134,7 +135,7 @@ jobs:
 
           echo '===== NTPD HELP =====' | tee -a "$OUT"
           set +e
-          qemu-arm-static "$BIN" ntpd --help > reports/local-ntp-help.txt 2>&1
+          qemu-aarch64-static "$BIN" ntpd --help > reports/local-ntp-help.txt 2>&1
           help_rc=$?
           set -e
           cat reports/local-ntp-help.txt | tee -a "$OUT"
@@ -160,7 +161,7 @@ jobs:
 
           echo '===== ROOT LAUNCH SMOKE =====' | tee -a "$OUT"
           set +e
-          sudo timeout --signal=TERM 3             qemu-arm-static "$BIN" ntpd -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
+          sudo timeout --signal=TERM 3             qemu-aarch64-static "$BIN" ntpd -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
           rc=$?
           set -e
 
