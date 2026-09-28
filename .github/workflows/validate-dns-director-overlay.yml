@@ -409,6 +409,12 @@ jobs:
           if menu.count('{url: "Advanced_PerformanceTuning_Content.asp", tabName: "<#2069#>"}') != 1:
               raise SystemExit("stock ASUS temperature menu slot not present exactly once")
 
+          system_log=(root/"www/Main_LogStatus_Content.asp").read_text(encoding="utf-8")
+          wireless_log=(root/"www/Main_WStatus_Content.asp").read_text(encoding="utf-8")
+          for label,content in [("System Log",system_log),("Wireless Log",wireless_log)]:
+              if content.count("AUTOLOGOUT_MAX_MINUTE = 0;") != 1:
+                  raise SystemExit(f"{label} disable-autologout contract not present exactly once")
+
           survey=(root/"www/Advanced_Wireless_Survey.asp").read_text(encoding="utf-8")
           survey_required=[
               '/apscan.asp',

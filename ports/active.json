@@ -356,6 +356,26 @@
       "sha256": "a4d4391781bd9a1cb8c0d93cb6f0abca1b1d7f96809231ecdd233394a931fe9a",
       "mode": "0644",
       "policy": "add_only"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/Main_LogStatus_Content.asp",
+      "target_sha256": "e482da4f74b37856cf45291175aa75edc69defbbcac60f6987e631c73521c228",
+      "find": "<script>\nfunction showclock(){",
+      "replace": "<script>\n// disable auto log out\nAUTOLOGOUT_MAX_MINUTE = 0;\nfunction showclock(){",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/Main_WStatus_Content.asp",
+      "target_sha256": "23cf280ce5ee5bb7f25c276ebc41405952bb780cbd4ad3227233656a0ce784e3",
+      "find": "<script>\nvar classObj= {",
+      "replace": "<script>\n// disable auto log out\nAUTOLOGOUT_MAX_MINUTE = 0;\nvar classObj= {",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
     }
   ]
 }
