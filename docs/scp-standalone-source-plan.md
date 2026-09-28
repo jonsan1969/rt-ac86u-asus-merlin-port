@@ -132,3 +132,23 @@ Do not weaken shell restrictions, root login policy or key permissions merely to
 **B — ADD-ONLY SOURCE-BUILT STANDALONE SCP**
 
 This supersedes the earlier vague B/C classification. No ASUS Dropbear core replacement is required.
+
+
+## Reproducible build evidence
+
+GitHub Actions run `36466679828` built the pinned Merlin Dropbear 2022.83 standalone SCP target with server password authentication disabled only in a local build override (SCP does not use Dropbear server authentication).
+
+Verified artifact:
+
+- ELF64 little-endian AArch64;
+- statically linked;
+- no PT_INTERP;
+- size: 663424 bytes;
+- SHA-256: `d47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851`;
+- embeds `/usr/bin/dbclient` as the SSH transport;
+- QEMU usage path works;
+- QEMU local-to-local copy with spaces in filenames works;
+- remote path honors `-S` override and fails closed with a failing transport;
+- a clean rebuild is byte-identical.
+
+The build path is therefore no longer the M16 blocker. Remaining work is guarded add-only image integration and target-router SCP interoperability testing.
