@@ -96,9 +96,7 @@ jobs:
           # sysoptions.h still validates default server auth at compile time.
           # Disable only password auth through Dropbear's supported local
           # override mechanism; do not alter the donor source/defaults.
-          cat > localoptions.h <<'EOF'
-#define DROPBEAR_SVR_PASSWORD_AUTH 0
-EOF
+          printf '%s\n' '#define DROPBEAR_SVR_PASSWORD_AUTH 0' > localoptions.h
           grep -Fxq '#define DROPBEAR_SVR_PASSWORD_AUTH 0' localoptions.h
           echo 'PASS standalone build disables irrelevant Dropbear server password auth' >> "$GITHUB_WORKSPACE/reports/scp-standalone-source.txt"
 
