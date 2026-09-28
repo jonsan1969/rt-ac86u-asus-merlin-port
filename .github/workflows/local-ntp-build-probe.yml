@@ -209,7 +209,27 @@ jobs:
           else
             echo 'FAIL clean rebuild differs' | tee -a "$OUT"
             cmp -l artifacts/rtac86u-ntpd-static artifacts/rtac86u-ntpd-static-rebuild \
-              | head -n 100 > reports/local-ntp-binary-diff.txt || true
+              | head -n 100 | tee reports/local-ntp-binary-diff.txt | tee -a "$OUT" || true
+
+            echo '===== BUILD-ID / SECTION DIAGNOSTIC =====' | tee -a "$OUT"
+            aarch64-linux-gnu-readelf -n artifacts/rtac86u-ntpd-static | tee reports/local-ntp-notes-first.txt | tee -a "$OUT"
+            aarch64-linux-gnu-readelf -n artifacts/rtac86u-ntpd-static-rebuild | tee reports/local-ntp-notes-second.txt | tee -a "$OUT"
+
+            cp artifacts/rtac86u-ntpd-static reports/ntpd-no-buildid-first
+            cp artifacts/rtac86u-ntpd-static-rebuild reports/ntpd-no-buildid-second
+            aarch64-linux-gnu-objcopy --remove-section .note.gnu.build-id reports/ntpd-no-buildid-first
+            aarch64-linux-gnu-objcopy --remove-section .note.gnu.build-id reports/ntpd-no-buildid-second
+
+            if cmp -s reports/ntpd-no-buildid-first reports/ntpd-no-buildid-second; then
+              echo 'DIAG difference is limited to .note.gnu.build-id' | tee -a "$OUT"
+            else
+              echo 'DIAG differences remain after removing .note.gnu.build-id' | tee -a "$OUT"
+              for sec in .text .rodata .data .data.rel.ro .got .got.plt; do
+                h1="$(aarch64-linux-gnu-objcopy -O binary --only-section="$sec" artifacts/rtac86u-ntpd-static /dev/stdout 2>/dev/null | sha256sum | awk '{print $1}' || true)"
+                h2="$(aarch64-linux-gnu-objcopy -O binary --only-section="$sec" artifacts/rtac86u-ntpd-static-rebuild /dev/stdout 2>/dev/null | sha256sum | awk '{print $1}' || true)"
+                echo "SECTION $sec first=$h1 second=$h2" | tee -a "$OUT"
+              done
+            fi
             exit 1
           fi
 
@@ -225,6 +245,8 @@ jobs:
             reports/local-ntp-config
             reports/local-ntp-rebuild.log
             reports/local-ntp-binary-diff.txt
+            reports/local-ntp-notes-first.txt
+            reports/local-ntp-notes-second.txt
             reports/local-ntp-build.log
             reports/local-ntp-applets.txt
             reports/local-ntp-help.txt
