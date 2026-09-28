@@ -41,11 +41,11 @@
 | M47 Traffic history persistence controls | **SUCCESS** | ASUS `rstats`/libshared backend verified and safe controls exposed in Other Settings |
 | M48 Per-IP traffic monitoring | **IN PROGRESS** | ASUS 52334 lacks `cstats`, `ipt_bandwidth`, cstats NVRAM/backend keys and all three device traffic pages; source-side daemon/HTTPD integration required |
 | M49 Global monthly traffic history | **SUCCESS** | ASUS history spool contains monthly data; adapted Merlin page + add-only Chart.js validated in run 36334016748 |
-| M59 Local OUI database | **SUCCESS** | verified Merlin OUI DB add-only; exactly three ASUS remote OUI lookups redirected locally; guarded validation run 36336834393 |
+| M59 Local OUI database | **SUCCESS** | verified Merlin OUI DB add-only; exactly three ASUS remote OUI lookups redirected locally; guarded validation run 36336834393 |\n| M69 WebUI diagnostics umbrella | **SUCCESS** | no separate port: constituent QR/OUI/log diagnostics work is already tracked under M53/M54/M58/M59 |
 | M58 QR codes for WiFi/Guest Network | **SUCCESS** | add-only pinned QR library + exact multi-patches of ASUS Guest Network/router pages; validation run 36337583899 |
 | M43 System Info page | **IN PROGRESS** | stock `httpd` has generic `sysinfo` dispatcher but lacks Merlin `cpu.model`, `cpu.freq`, `conn.max`, `nvram.total`; source-side HTTPD work required |
 | M46 QoS Stats / Classification page | **IN PROGRESS** | ASUS 52334 lacks `ajax_gettcdata.asp`, `get_ipv6clients_array`, `get_tcfilter_array`, `get_tcdata`/conntrack data handlers; source-side HTTPD/QoS integration required |
-| M45 Temperature/performance page | **SUCCESS** | ASUS-native `/ajax_coretmp.asp` backend reused; guarded validation run 36338181498 |
+| M44 Other Settings page | **SUCCESS** | add-only page exposes only ASUS-backed conntrack, traffic-history persistence, and shell-timeout controls; unsupported Merlin-only settings are omitted |\n| M45 Temperature/performance page | **SUCCESS** | ASUS-native `/ajax_coretmp.asp` backend reused; guarded validation run 36338181498 |
 | M51 Wireless ACL/client-name display | **SUCCESS** | NO PORT: ASUS 52334 already resolves/stores client names through its newer `clientList` model and ACL page logic; compatibility run 36373415595 |
 | M52 Auto-refreshing wireless client list | **IN PROGRESS** | stock page + `wl_log.asp` exist, but Merlin's `ajax_wificlients.asp` endpoint depends on `get_wl_status`, absent from ASUS 52334 `httpd`; source-side HTTPD work required for full feature |
 | M53 System/Wireless Log no-auto-logout | **SUCCESS** | two SHA-locked page-only patches validated by guarded overlay run 36369816037; no backend/core changes |
