@@ -1,0 +1,170 @@
+name: Probe optional kernel symbol CRC ABI on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/optional-kernel-symbol-crc-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction and module tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils kmod
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then
+              echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Compare imported symbol version CRCs
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"
+          M="$MERLIN_ROOT"
+          OUT=reports/optional-kernel-symbol-crc-52334.txt
+          : > "$OUT"
+
+          dump_versions() {
+            local mod="$1"
+            modprobe --show-modversions "$mod" 2>/dev/null               || modprobe --dump-modversions "$mod" 2>/dev/null               || true
+          }
+
+          echo '===== KERNEL MODULE ABI CRC PROBE =====' | tee -a "$OUT"
+
+          : > reports/asus-symbol-crcs.txt
+          while IFS= read -r -d '' mod; do
+            dump_versions "$mod"
+          done < <(find "$A/lib/modules" -type f -name '*.ko' -print0 2>/dev/null)             | awk 'NF >= 2 && $1 ~ /^0x[0-9a-fA-F]+$/ {print $2, tolower($1)}'             | sort -u > reports/asus-symbol-crcs.txt
+
+          asus_pairs="$(wc -l < reports/asus-symbol-crcs.txt)"
+          asus_symbols="$(awk '{print $1}' reports/asus-symbol-crcs.txt | sort -u | wc -l)"
+          echo "ASUS observed pairs=$asus_pairs unique_symbols=$asus_symbols" | tee -a "$OUT"
+          test "$asus_pairs" -gt 0
+
+          classify_module() {
+            local feature="$1" mod="$2"
+            local base req=0 observed=0 matched=0 mismatched=0 unobserved=0
+            base="$(basename "$mod")"
+            echo "--- $feature :: $base" | tee -a "$OUT"
+            echo "path=${mod#"$M/"}" | tee -a "$OUT"
+            echo "vermagic=$(modinfo -F vermagic "$mod" 2>/dev/null || true)" | tee -a "$OUT"
+            echo "depends=$(modinfo -F depends "$mod" 2>/dev/null || true)" | tee -a "$OUT"
+
+            dump_versions "$mod"               | awk 'NF >= 2 && $1 ~ /^0x[0-9a-fA-F]+$/ {print $2, tolower($1)}'               | sort -u > reports/donor-module-crcs.tmp
+
+            while read -r sym crc; do
+              [ -n "$sym" ] || continue
+              req=$((req + 1))
+              if grep -Fq "$sym " reports/asus-symbol-crcs.txt; then
+                observed=$((observed + 1))
+                if grep -Fxq "$sym $crc" reports/asus-symbol-crcs.txt; then
+                  matched=$((matched + 1))
+                else
+                  mismatched=$((mismatched + 1))
+                  echo "MISMATCH symbol=$sym donor=$crc asus=$(awk -v s="$sym" '$1==s {printf "%s%s", sep, $2; sep=","}' reports/asus-symbol-crcs.txt)" | tee -a "$OUT"
+                fi
+              else
+                unobserved=$((unobserved + 1))
+              fi
+            done < reports/donor-module-crcs.tmp
+
+            echo "summary required=$req observed=$observed match=$matched mismatch=$mismatched unobserved=$unobserved" | tee -a "$OUT"
+            if [ "$mismatched" -gt 0 ]; then
+              echo "classification=DEFINITE_BINARY_ABI_MISMATCH_SOURCE_BUILD_REQUIRED" | tee -a "$OUT"
+            elif [ "$req" -eq 0 ]; then
+              echo "classification=NO_MODVERSION_DATA_SOURCE_BUILD_REQUIRED" | tee -a "$OUT"
+            else
+              echo "classification=NO_OBSERVED_MISMATCH_BUT_STILL_SOURCE_BUILD_REQUIRED" | tee -a "$OUT"
+            fi
+          }
+
+          while IFS='|' read -r feature rx; do
+            mapfile -t mods < <(find "$M/lib/modules" -type f -name '*.ko' 2>/dev/null | grep -E "$rx" || true)
+            if [ "${#mods[@]}" -eq 0 ]; then
+              echo "--- $feature :: NONE" | tee -a "$OUT"
+              continue
+            fi
+            for mod in "${mods[@]}"; do
+              classify_module "$feature" "$mod"
+            done
+          done <<'EOF'
+          M22_NFS|/(nfs|nfsd|sunrpc|lockd|grace).ko$
+          M23_CIFS|/cifs.ko$
+          M27_IPSET|/(ip_set|xt_set|ip_set_[^/]+).ko$
+          M32_CAKE|/(sch_cake|act_ctinfo).ko$
+          M33_WIREGUARD|/wireguard.ko$
+          EOF
+
+          echo '===== COMMON MODULE SANITY =====' | tee -a "$OUT"
+          find "$A/lib/modules" -type f -name '*.ko' -printf '%f|%p
+' 2>/dev/null | sort -u > reports/asus-module-basenames.txt
+          common=0; checked=0; hard_mismatch=0
+          while IFS= read -r mmod; do
+            base="$(basename "$mmod")"
+            aline="$(grep -F -m1 "$base|" reports/asus-module-basenames.txt || true)"
+            [ -n "$aline" ] || continue
+            amod="${aline#*|}"
+            common=$((common + 1))
+            dump_versions "$amod" | awk 'NF >= 2 && $1 ~ /^0x[0-9a-fA-F]+$/ {print $2, tolower($1)}' | sort -u > reports/a.tmp
+            dump_versions "$mmod" | awk 'NF >= 2 && $1 ~ /^0x[0-9a-fA-F]+$/ {print $2, tolower($1)}' | sort -u > reports/m.tmp
+            [ -s reports/a.tmp ] && [ -s reports/m.tmp ] || continue
+            checked=$((checked + 1))
+            mismatch="$(join -j1 reports/a.tmp reports/m.tmp | awk '$2 != $3 {c++} END {print c+0}')"
+            if [ "$mismatch" -gt 0 ]; then
+              hard_mismatch=$((hard_mismatch + 1))
+              echo "COMMON_MISMATCH module=$base differing_shared_symbols=$mismatch" | tee -a "$OUT"
+            fi
+          done < <(find "$M/lib/modules" -type f -name '*.ko' 2>/dev/null | sort)
+
+          echo "common_basenames=$common checked=$checked modules_with_crc_mismatch=$hard_mismatch" | tee -a "$OUT"
+          echo 'CRC_MATCH_IS_DIAGNOSTIC_ONLY' | tee -a "$OUT"
+          echo 'M22_M23_M27_M32_M33=SOURCE_BUILD_REQUIRED' | tee -a "$OUT"
+          echo 'NO_DONOR_KO_TRANSPLANT_AUTHORIZED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: optional-kernel-symbol-crc-52334
+          path: |
+            reports/optional-kernel-symbol-crc-52334.txt
+            reports/asus-symbol-crcs.txt
+          if-no-files-found: warn
+          retention-days: 30
