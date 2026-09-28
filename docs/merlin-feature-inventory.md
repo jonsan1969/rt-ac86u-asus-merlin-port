@@ -97,7 +97,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M33 | WireGuard kernel module/userspace tool | Merlin has `wireguard.ko` + `wg`; ASUS image lacks same runtime components but contains generic WG pages/libvpn | **REVIEW** | B/C/D | determine ASUS 52334 WireGuard capability path before any kernel/tool port |
 | M34 | Wireless Site Survey | page absent | **PORT** | A/C | AC86U-specific supported feature since Merlin 386.10 |
 | M35 | Detailed WiFi troubleshooting / WiFi Insight | launcher absent in ASUS; pinned Merlin image contains only a stale launcher and no visualization pages/backends | **NO PORT** | — | do not resurrect incomplete legacy WiFi Radar runtime; donor firmware lacks `visindex.asp`/capacity/metrics/config pages and `vis-datacollector`/`vis-dcon` |
-| M36 | IPv6-aware DNS Director | ASUS backend overlap exists | **ADAPT** | C | preserve Merlin IPv6/custom resolver behavior only where missing |
+| M36 | IPv6-aware DNS Director | ASUS 52334 has IPv6 DNSFilter rule machinery but lacks Merlin `dnsfilter_custom61/62/63` backend/default/UI contract | **ADAPT** | C | built-in-mode IPv6 can reuse ASUS; full Custom 1–3 IPv6 parity needs source-side rc/httpd/defaults integration |
 | M37 | IPv6 OpenVPN server + optional IPv6 NAT | stock support must be verified | **REVIEW** | B/C | part of advanced OpenVPN block |
 | M38 | OpenVPN DNS Exclusive behavior | shared OpenVPN/dnsmasq stack differs | **REVIEW** | B/C | preserve later ASUS security; port behavior only if missing |
 | M39 | OpenVPN custom options stored in JFFS / expanded storage | Merlin behavior; stock equivalence unverified | **PORT/REVIEW** | B/C | source-level comparison required |
