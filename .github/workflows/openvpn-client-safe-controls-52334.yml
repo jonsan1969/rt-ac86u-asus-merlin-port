@@ -56,8 +56,7 @@ jobs:
           keys='vpn_client_verb vpn_client_reneg vpn_client_cn vpn_client_digest vpn_client_comp vpn_client_nat vpn_client_cipher vpn_client_hmac'
 
           echo '===== ASUS CLIENT UI FILES =====' >> "$OUT"
-          find "$A/www" -maxdepth 3 -type f ( -iname '*vpn*' -o -iname '*openvpn*' ) -printf '%P
-' | sort >> "$OUT" || true
+          { find "$A/www" -maxdepth 3 -type f -iname '*vpn*' -print; find "$A/www" -maxdepth 3 -type f -iname '*openvpn*' -print; } | sed "s#^$A/www/##" | sort -u >> "$OUT" || true
 
           echo '===== CANDIDATE KEY SURFACE =====' >> "$OUT"
           for key in $keys; do
