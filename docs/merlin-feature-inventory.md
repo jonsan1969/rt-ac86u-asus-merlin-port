@@ -134,14 +134,14 @@ These are feature-bearing behavior changes rather than standalone pages.
 
 | ID | Function | Decision | Notes |
 |---|---|---|---|
-| M61 | QoS Classification resolves local IPv6 addresses | **REVIEW** | compare divergent QoS pages/backend |
-| M62 | Show tracked connections even without Adaptive QoS | **REVIEW** | user-visible diagnostics enhancement |
-| M63 | Basic IPv6 support for Traditional QoS | **REVIEW** | preserve only if ASUS 52334 lacks equivalent |
-| M64 | Traditional QoS overhead accuracy/download statistics improvements | **REVIEW** | do not replace later ASUS QoS code wholesale |
+| M61 | QoS Classification resolves local IPv6 addresses | **PORT** | run 36383630066: ASUS lacks `QoS_Stats.asp` and the Merlin classification/conntrack httpd datapath; implement only with M46 source-side QoS Stats handlers |
+| M62 | Show tracked connections even without Adaptive QoS | **PORT** | run 36383630066: donor page depends on Merlin `bwdpi_conntrack`/`/proc/bw_cte_dump` httpd path absent in ASUS; fold into M46 source integration, not an isolated page overlay |
+| M63 | Basic IPv6 support for Traditional QoS | **NO PORT** | run 36383630066: ASUS `rc` already contains the core IPv6 TQoS runtime signatures `mangle_rules_ipv6`, `ip6tables-restore` and `QOSO`, matching donor surface; preserve newer ASUS implementation |
+| M64 | Traditional QoS overhead accuracy/download statistics improvements | **PORT** | run 36383630066: ASUS `rc` lacks donor `qos_overhead`, `qos_atm` and `overhead %d %s`; ASUS httpd also lacks donor `tc -s class show dev br0`. Requires narrow rc/httpd source integration; never replace ASUS QoS wholesale |
 | M65 | IPv6 DDNS support | **REVIEW** | compare current ASUS DDNS behavior first |
 | M66 | Prevent Auto DoH also handles DDR / Private Relay interactions | **REVIEW** | security-sensitive behavior; ASUS 52334 wins unless missing and safely portable |
 | M67 | OpenVPN client selection for Ookla Speedtest | not present in pinned 386.14_2 donor; appears in later 3006 changelog | **N/A** | — | outside this project's pinned Merlin donor baseline |
-| M68 | Outbound LAN connection logging when allowed-connection logging is enabled | **REVIEW** | firewall/logging behavior |
+| M68 | Outbound LAN connection logging when allowed-connection logging is enabled | **PORT/VERIFY SOURCE** | run 36383630066 finds `fw_log_x`, `logaccept` and the same `-A FORWARD -i %s -j %s` format in ASUS `rc`, but binary strings cannot prove the rule's runtime target argument; verify/reconcile in ASUS firewall source rather than patching the binary |
 | M69 | Local QR/OUI and WebUI diagnostics additions | **PORT/REVIEW** | grouped supporting WebUI assets |
 
 ## 7. Items deliberately not treated as Merlin feature ports
