@@ -1,0 +1,179 @@
+name: Build isolated ASUS-lineage NTPD candidate
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/local-ntp-build-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM cross-build and smoke-test tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi             qemu-user-static file make bc bzip2
+
+      - name: Fetch pinned clean ASUS BusyBox source
+        run: |
+          set -euo pipefail
+          mkdir -p work reports artifacts
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router/busybox
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+          git -C work/asus show -s --format='%H %s' HEAD | tee reports/local-ntp-build.txt
+
+      - name: Configure minimal static ntpd-only BusyBox
+        run: |
+          set -euo pipefail
+          B=work/asus/release/src/router/busybox
+          OUT=reports/local-ntp-build.txt
+
+          cd "$B"
+          make distclean
+          make allnoconfig CROSS_COMPILE=arm-linux-gnueabi-
+
+          set_cfg() {
+            key="$1"
+            val="$2"
+            if grep -q "^# ${key} is not set$" .config; then
+              sed -i "s/^# ${key} is not set$/${key}=${val}/" .config
+            elif grep -q "^${key}=" .config; then
+              sed -i "s#^${key}=.*#${key}=${val}#" .config
+            else
+              printf '%s=%s\n' "$key" "$val" >> .config
+            fi
+          }
+
+          set_cfg CONFIG_STATIC y
+          set_cfg CONFIG_NTPD y
+          set_cfg CONFIG_FEATURE_NTPD_SERVER y
+          set_cfg CONFIG_FEATURE_NTPD_CONF y
+          set_cfg CONFIG_FEATURE_IPV6 y
+          set_cfg CONFIG_LONG_OPTS y
+          set_cfg CONFIG_SHOW_USAGE y
+          set_cfg CONFIG_FEATURE_PIDFILE y
+
+          yes "" | make oldconfig CROSS_COMPILE=arm-linux-gnueabi- >/dev/null
+
+          echo '===== FINAL CONFIG =====' | tee -a "$GITHUB_WORKSPACE/$OUT"
+          grep -E '^(CONFIG_STATIC|CONFIG_NTPD|CONFIG_FEATURE_NTPD_SERVER|CONFIG_FEATURE_NTPD_CONF|CONFIG_FEATURE_IPV6|CONFIG_LONG_OPTS|CONFIG_CROSS_COMPILER_PREFIX)=' .config             | tee -a "$GITHUB_WORKSPACE/$OUT"
+
+      - name: Build candidate
+        run: |
+          set -euo pipefail
+          B=work/asus/release/src/router/busybox
+          OUT=reports/local-ntp-build.txt
+
+          make -C "$B" -j2 CROSS_COMPILE=arm-linux-gnueabi- V=1 > reports/local-ntp-build.log 2>&1
+
+          cp "$B/busybox" artifacts/rtac86u-ntpd-static
+          chmod 0755 artifacts/rtac86u-ntpd-static
+
+          echo '===== ELF =====' | tee -a "$OUT"
+          file artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+          arm-linux-gnueabi-readelf -h artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+          arm-linux-gnueabi-readelf -l artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+
+          file artifacts/rtac86u-ntpd-static | grep -Eq 'ARM'
+          if arm-linux-gnueabi-readelf -l artifacts/rtac86u-ntpd-static | grep -q 'INTERP'; then
+            echo 'FAIL candidate has dynamic interpreter' | tee -a "$OUT"
+            exit 1
+          else
+            echo 'PASS candidate is static/no PT_INTERP' | tee -a "$OUT"
+          fi
+
+          sha256sum artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+          stat -c 'size=%s mode=%a' artifacts/rtac86u-ntpd-static | tee -a "$OUT"
+
+      - name: QEMU applet and option smoke test
+        run: |
+          set -euo pipefail
+          BIN=artifacts/rtac86u-ntpd-static
+          OUT=reports/local-ntp-build.txt
+
+          echo '===== APPLETS =====' | tee -a "$OUT"
+          qemu-arm-static "$BIN" --list | tee reports/local-ntp-applets.txt | tee -a "$OUT"
+          grep -Fxq ntpd reports/local-ntp-applets.txt
+
+          extra="$(grep -vE '^(busybox|ntpd)$' reports/local-ntp-applets.txt || true)"
+          if [ -n "$extra" ]; then
+            echo "FAIL unexpected applets:" | tee -a "$OUT"
+            printf '%s\n' "$extra" | tee -a "$OUT"
+            exit 1
+          fi
+          echo 'PASS candidate contains only BusyBox core + ntpd applet' | tee -a "$OUT"
+
+          echo '===== NTPD HELP =====' | tee -a "$OUT"
+          set +e
+          qemu-arm-static "$BIN" ntpd --help > reports/local-ntp-help.txt 2>&1
+          help_rc=$?
+          set -e
+          cat reports/local-ntp-help.txt | tee -a "$OUT"
+          echo "help_rc=$help_rc" | tee -a "$OUT"
+
+          for opt in '-w' '-l' '-I' '-p'; do
+            grep -Fq -- "$opt" reports/local-ntp-help.txt               && echo "PASS help contains $opt" | tee -a "$OUT"               || { echo "FAIL help missing $opt" | tee -a "$OUT"; exit 1; }
+          done
+
+          # ASUS-lineage ntpd.c also carries -t; verify from compiled strings/help.
+          if grep -Fq -- '-t' reports/local-ntp-help.txt || strings "$BIN" | grep -Fq 'trust'; then
+            echo 'PASS trust-mode surface present' | tee -a "$OUT"
+          else
+            echo 'FAIL trust-mode surface missing' | tee -a "$OUT"
+            exit 1
+          fi
+
+      - name: Root launch smoke on UDP 123
+        run: |
+          set -euo pipefail
+          BIN="$GITHUB_WORKSPACE/artifacts/rtac86u-ntpd-static"
+          OUT="$GITHUB_WORKSPACE/reports/local-ntp-build.txt"
+
+          echo '===== ROOT LAUNCH SMOKE =====' | tee -a "$OUT"
+          set +e
+          sudo timeout --signal=TERM 3             qemu-arm-static "$BIN" ntpd -w -l -I lo -p 192.0.2.1             > reports/local-ntp-run.out 2> reports/local-ntp-run.err
+          rc=$?
+          set -e
+
+          cat reports/local-ntp-run.out | tee -a "$OUT" || true
+          cat reports/local-ntp-run.err | tee -a "$OUT" || true
+          echo "run_rc=$rc" | tee -a "$OUT"
+
+          if [ "$rc" -eq 124 ]; then
+            echo 'PASS ntpd stayed alive until timeout' | tee -a "$OUT"
+          else
+            echo 'FAIL ntpd exited before timeout' | tee -a "$OUT"
+            exit 1
+          fi
+
+          echo 'CLASSIFICATION STATIC_ASUS_LINEAGE_NTPD_BUILD_CANDIDATE' | tee -a "$OUT"
+
+      - name: Publish build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ntp-build-probe
+          path: |
+            artifacts/rtac86u-ntpd-static
+            reports/local-ntp-build.txt
+            reports/local-ntp-build.log
+            reports/local-ntp-applets.txt
+            reports/local-ntp-help.txt
+            reports/local-ntp-run.out
+            reports/local-ntp-run.err
+          if-no-files-found: warn
+          retention-days: 30
