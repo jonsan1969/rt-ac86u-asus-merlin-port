@@ -157,3 +157,12 @@ Until that happens, every build/source claim must explicitly distinguish:
 - Merlin source delta applied,
 - any retained 52334 prebuilt/proprietary component.
 
+
+
+## Late 386.51997 triangulation
+
+The clean 386.45956 mirror remains the clean ASUS archaeology anchor, but it is no longer the only structural reference.
+
+Merlin `386.12_x` is pinned at `5b47ec64ce58d23c591e809d4cbad09d1121c4ea`; its changelog records a merge with ASUS GPL `386_51997`. SWRT independently documents its Broadcom AC line as merged with `386_51997`.
+
+Both are modified firmware trees, so neither is treated as clean ASUS source. They are used only to understand late-386 file/function shape and likely merge conflicts. The full rules are in `docs/source-anchor-51997-triangulation.md`.
