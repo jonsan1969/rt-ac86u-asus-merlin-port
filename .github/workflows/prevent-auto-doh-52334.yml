@@ -1,0 +1,147 @@
+name: Probe M66 Prevent Auto DoH on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/prevent-auto-doh-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch ASUS 52334 runtime and pinned source anchors
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus-fw work/artifacts work/asus-src work/merlin-src reports
+
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus-fw
+          (
+            cd work/asus-fw
+            FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+            test -n "$FW"
+            binwalk -Me "$FW" >/dev/null
+          )
+          ASUS_ROOT="$(find work/asus-fw -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+          git -C work/asus-src init
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router/rc release/src/router/shared release/src/router/www
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git -C work/merlin-src init
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router/rc release/src/router/shared release/src/router/www
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify target ownership and donor contract
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"
+          AS=work/asus-src
+          M=work/merlin-src
+          OUT=reports/prevent-auto-doh-52334.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C "$AS" show -s --format='ASUS_SOURCE %H %s' HEAD | tee -a "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          echo '===== ASUS 52334 RUNTIME OWNERSHIP =====' | tee -a "$OUT"
+          key_binary=no
+          for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+            [ -f "$A/$rel" ] || continue
+            if strings -a "$A/$rel" | grep -Fq 'dns_priv_override'; then
+              echo "ASUS52334 KEY_BINARY $rel yes" | tee -a "$OUT"
+              key_binary=yes
+            else
+              echo "ASUS52334 KEY_BINARY $rel no" | tee -a "$OUT"
+            fi
+          done
+
+          key_ui=no
+          if grep -RqsF 'dns_priv_override' "$A/www" 2>/dev/null; then
+            key_ui=yes
+            echo 'ASUS52334 KEY_UI yes' | tee -a "$OUT"
+            grep -RinF 'dns_priv_override' "$A/www" 2>/dev/null | head -n 80 | sed "s#^$A/www/##" | tee -a "$OUT" || true
+          else
+            echo 'ASUS52334 KEY_UI no' | tee -a "$OUT"
+          fi
+
+          for token in 'use-application-dns.net' '_dns.resolver.arpa' 'mask.icloud.com' 'mask-h2.icloud.com'; do
+            found=no
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              [ -f "$A/$rel" ] || continue
+              strings -a "$A/$rel" | grep -Fq "$token" && found=yes || true
+            done
+            grep -RqsF "$token" "$A/www" 2>/dev/null && found=yes || true
+            echo "ASUS52334 CANARY $token $found" | tee -a "$OUT"
+          done
+
+          echo "ASUS52334 CLASS key_binary=$key_binary key_ui=$key_ui" | tee -a "$OUT"
+
+          echo '===== CLEAN ASUS 45956 LINEAGE =====' | tee -a "$OUT"
+          for token in 'dns_priv_override' 'use-application-dns.net' '_dns.resolver.arpa' 'mask.icloud.com' 'mask-h2.icloud.com'; do
+            if grep -RqsF "$token" "$AS/release/src/router" 2>/dev/null; then
+              fail "Clean ASUS 45956 unexpectedly contains $token"
+            else
+              pass "Clean ASUS 45956 lacks $token"
+            fi
+          done
+
+          echo '===== PINNED MERLIN CONTRACT =====' | tee -a "$OUT"
+          S="$M/release/src/router/rc/services.c"
+          D="$M/release/src/router/shared/defaults.c"
+          W="$M/release/src/router/www/Advanced_WAN_Content.asp"
+
+          grep -Fq '{ "dns_priv_override", "0"' "$D" && pass "Merlin default is Auto=0" || fail "Merlin default missing"
+          grep -Fq 'option value="0"' "$W" && grep -Fq 'name="dns_priv_override"' "$W"             && pass "Merlin UI exposes dns_priv_override selector"             || fail "Merlin UI selector missing"
+          grep -Fq 'option value="1"' "$W" && grep -Fq 'option value="2"' "$W"             && pass "Merlin UI includes Yes/No values"             || fail "Merlin Yes/No values missing"
+
+          grep -Fq 'n = nvram_get_int("dns_priv_override")' "$S" && pass "Merlin reads override mode" || fail "Merlin mode read missing"
+          grep -Fq 'n == 1' "$S" && pass "Merlin forced-Yes condition present" || fail "Merlin forced condition missing"
+          grep -Fq 'n == 0' "$S" && pass "Merlin Auto condition present" || fail "Merlin Auto condition missing"
+          grep -Fq 'nvram_get_int("dnspriv_enable")' "$S" && pass "Merlin Auto checks DNS Privacy" || fail "Merlin DNS Privacy Auto condition missing"
+          grep -Fq 'nvram_get_int("dnsfilter_enable_x") && nvram_get_int("dnsfilter_mode")' "$S"             && pass "Merlin Auto checks global DNSFilter"             || fail "Merlin DNSFilter Auto condition missing"
+
+          for line in             'address=/use-application-dns.net/'             'address=/_dns.resolver.arpa/'             'address=/mask.icloud.com/mask-h2.icloud.com/'; do
+            grep -Fq "$line" "$S" && pass "Merlin emits $line" || fail "Merlin canary missing: $line"
+          done
+
+          echo 'CLASSIFICATION M66_CONFIG_GENERATION_SOURCE_REQUIRED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prevent-auto-doh-52334
+          path: reports/prevent-auto-doh-52334.txt
+          if-no-files-found: warn
+          retention-days: 30
