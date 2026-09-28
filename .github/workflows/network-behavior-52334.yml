@@ -1,0 +1,125 @@
+name: Probe later ASUS network behavior vs Merlin 386
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/network-behavior-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Compare runtime behavior tokens
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/network-behavior-52334.txt
+          : > "$OUT"
+
+          dump_bin_matches() {
+            local R="$1" side="$2" rel="$3" rx="$4" label="$5"
+            echo "### $label / $side / $rel" >> "$OUT"
+            if [ -f "$R/$rel" ]; then
+              strings -a "$R/$rel" | grep -Ei "$rx" | sort -u | head -n 260 >> "$OUT" || true
+            else
+              echo MISSING >> "$OUT"
+            fi
+          }
+
+          echo '===== M37 OPENVPN IPV6/NAT6 =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            dump_bin_matches "$R" "$side" sbin/rc 'vpn_.*(ipv6|nat6)|ipv6.*vpn|tun.*ipv6|server-ipv6|route-ipv6|ifconfig-ipv6' M37
+            dump_bin_matches "$R" "$side" usr/sbin/httpd 'vpn_.*(ipv6|nat6)|ipv6.*vpn' M37
+            for p in "$R"/www/*VPN* "$R"/www/*vpn*; do
+              [ -f "$p" ] || continue
+              hits="$(grep -Ein 'ipv6|nat6' "$p" | head -n 80 || true)"
+              [ -n "$hits" ] && { echo "--- ${p#"$R/"} ---" >> "$OUT"; printf '%s\n' "$hits" >> "$OUT"; }
+            done
+          done
+
+          echo '===== M38 OPENVPN DNS EXCLUSIVE =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            dump_bin_matches "$R" "$side" sbin/rc 'vpn_client.*adns|adns.*vpn|exclusive.*dns|strict-order|dhcp-option.*DNS|DNS.*exclusive' M38
+            dump_bin_matches "$R" "$side" usr/sbin/httpd 'vpn_client.*adns|exclusive.*dns' M38
+            for p in "$R"/www/*VPN* "$R"/www/*vpn*; do
+              [ -f "$p" ] || continue
+              hits="$(grep -Ein 'exclusive|Accept DNS|vpn_client.*adns|adns' "$p" | head -n 100 || true)"
+              [ -n "$hits" ] && { echo "--- ${p#"$R/"} ---" >> "$OUT"; printf '%s\n' "$hits" >> "$OUT"; }
+            done
+          done
+
+          echo '===== M65 IPV6 DDNS =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            dump_bin_matches "$R" "$side" sbin/rc 'ddns.*ipv6|ipv6.*ddns|ddns_ipv6|ddns.*v6' M65
+            dump_bin_matches "$R" "$side" usr/sbin/httpd 'ddns.*ipv6|ipv6.*ddns|ddns_ipv6' M65
+            for p in "$R"/www/*DDNS* "$R"/www/*ddns*; do
+              [ -f "$p" ] || continue
+              hits="$(grep -Ein 'ipv6|ddns_ipv6' "$p" | head -n 100 || true)"
+              [ -n "$hits" ] && { echo "--- ${p#"$R/"} ---" >> "$OUT"; printf '%s\n' "$hits" >> "$OUT"; }
+            done
+          done
+
+          echo '===== M66 AUTO DOH DDR PRIVATE RELAY =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            for rel in sbin/rc usr/sbin/dnsmasq usr/sbin/httpd usr/lib/libshared.so; do
+              dump_bin_matches "$R" "$side" "$rel" 'dnspriv|DoH|DDR|resolver\.arpa|Private Relay|private_relay|icloud|canary|use-application-dns|doh' M66
+            done
+          done
+
+          echo '===== TOKEN COUNTS =====' >> "$OUT"
+          for feat in M37 M38 M65 M66; do
+            echo "$feat report_lines=$(grep -c "$feat" "$OUT" || true)" >> "$OUT"
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-behavior-52334
+          path: reports/network-behavior-52334.txt
+          if-no-files-found: error
+          retention-days: 14
