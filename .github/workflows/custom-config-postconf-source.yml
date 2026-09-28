@@ -1,0 +1,115 @@
+name: Verify M04 custom config/postconf source contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/custom-config-postconf-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source references
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router/shared release/src/router/rc release/src/router/libdisk
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+          git init work/m12
+          git -C work/m12 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/m12 sparse-checkout init --cone
+          git -C work/m12 sparse-checkout set release/src/router/shared release/src/router/rc release/src/router/libdisk
+          git -C work/m12 fetch --depth=1 --filter=blob:none origin 5b47ec64ce58d23c591e809d4cbad09d1121c4ea
+          git -C work/m12 checkout --detach FETCH_HEAD
+
+          git init work/m14
+          git -C work/m14 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/m14 sparse-checkout init --cone
+          git -C work/m14 sparse-checkout set release/src/router/shared release/src/router/rc release/src/router/libdisk release/src/router/libovpn
+          git -C work/m14 fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/m14 checkout --detach FETCH_HEAD
+
+      - name: Verify helper and generator sequencing
+        run: |
+          set -euo pipefail
+          A=work/asus
+          M12=work/m12
+          M=work/m14
+          OUT=reports/custom-config-postconf-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+          lack() { if grep -Fq "$2" "$1"; then fail "$3"; else pass "$3"; fi; }
+
+          cmp -s "$A/release/src/router/shared/scripts.c" "$M/release/src/router/shared/scripts.c"             && pass "Helper implementation inherited unchanged from clean ASUS lineage"             || fail "Helper implementation drifted"
+
+          S="$M/release/src/router/shared/scripts.c"
+          have "$S" '/jffs/configs/%s.add' "Append helper uses /jffs/configs/<name>.add"
+          have "$S" '/jffs/configs/%s' "Replacement helper uses /jffs/configs/<name>"
+          have "$S" 'if (nvram_match("jffs2_scripts", "0"))' "Helpers honor jffs2_scripts disable gate"
+          have "$S" 'snprintf(filename, sizeof (filename), "%s.postconf", name);' "Postconf script name is <name>.postconf"
+          have "$S" 'run_custom_script(filename, 120, config, NULL);' "Postconf is blocking with 120s bound"
+
+          echo '===== TIER-1 DONOR CALL SITES =====' | tee -a "$OUT"
+          SV="$M/release/src/router/rc/services.c"
+          U="$M/release/src/router/rc/usb.c"
+          W="$M/release/src/router/rc/wan.c"
+          SMB="$M/release/src/router/libdisk/write_smb_conf.c"
+
+          for token in             'append_custom_config("hosts", fp)'             'use_custom_config("hosts", "/etc/hosts")'             'run_postconf("hosts","/etc/hosts")'             'append_custom_config("dnsmasq.conf",fp)'             'use_custom_config("dnsmasq.conf","/etc/dnsmasq.conf")'             'run_postconf("dnsmasq","/etc/dnsmasq.conf")'             'append_custom_config("inadyn.conf", fp)'             'use_custom_config("inadyn.conf", "/etc/inadyn.conf")'             'run_postconf("inadyn", "/etc/inadyn.conf")'; do
+            have "$SV" "$token" "services.c contains $token"
+          done
+
+          for token in             'append_custom_config("vsftpd.conf", fp)'             'use_custom_config("vsftpd.conf", "/etc/vsftpd.conf")'             'run_postconf("vsftpd", "/etc/vsftpd.conf")'; do
+            have "$U" "$token" "usb.c contains $token"
+          done
+
+          for token in             'append_custom_config("igmpproxy.conf", fp)'             'use_custom_config("igmpproxy.conf", igmpproxy_conf)'             'run_postconf("igmpproxy", igmpproxy_conf)'; do
+            have "$W" "$token" "wan.c contains $token"
+          done
+
+          for token in             'append_custom_config("smb.conf", fp)'             'use_custom_config("smb.conf", SAMBA_CONF)'             'run_postconf("smb", SAMBA_CONF)'; do
+            have "$SMB" "$token" "Samba generator contains $token"
+          done
+
+          echo '===== CLEAN ASUS ABSENCE =====' | tee -a "$OUT"
+          for pair in             'release/src/router/rc/services.c|append_custom_config("dnsmasq.conf"'             'release/src/router/rc/services.c|run_postconf("dnsmasq"'             'release/src/router/rc/usb.c|run_postconf("vsftpd"'             'release/src/router/rc/wan.c|run_postconf("igmpproxy"'             'release/src/router/libdisk/write_smb_conf.c|run_postconf("smb"'; do
+            path="${pair%%|*}"
+            token="${pair#*|}"
+            lack "$A/$path" "$token" "Clean ASUS lacks generator hook: $path :: $token"
+          done
+
+          echo '===== LATE 51997 STRUCTURAL RETENTION =====' | tee -a "$OUT"
+          for pair in             'release/src/router/rc/services.c|run_postconf("dnsmasq"'             'release/src/router/rc/usb.c|run_postconf("vsftpd"'             'release/src/router/rc/wan.c|run_postconf("igmpproxy"'             'release/src/router/libdisk/write_smb_conf.c|run_postconf("smb"'; do
+            path="${pair%%|*}"
+            token="${pair#*|}"
+            have "$M12/$path" "$token" "Merlin386.12 retains late-tree hook: $path"
+          done
+
+          echo 'CLASSIFICATION M04_PER_GENERATOR_SOURCE_PORT_VERIFIED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-config-postconf-source
+          path: reports/custom-config-postconf-source.txt
+          if-no-files-found: warn
+          retention-days: 30
