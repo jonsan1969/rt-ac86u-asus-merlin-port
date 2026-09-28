@@ -1,0 +1,80 @@
+name: Verify M43 System Info donor contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/system-info-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/httpd release/src/router/www
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify read-only sysinfo surface
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/system-info-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          S="$M/release/src/router/httpd/sysinfo.c"
+          H="$M/release/src/router/httpd/sysinfo.h"
+          W="$M/release/src/router/www/Tools_Sysinfo.asp"
+          A="$M/release/src/router/www/ajax_sysinfo.asp"
+
+          test -f "$S" && pass "Pinned donor has dedicated sysinfo.c" || fail "sysinfo.c missing"
+          test -f "$H" && pass "Pinned donor has sysinfo.h" || fail "sysinfo.h missing"
+          test -f "$W" && pass "Pinned donor has Tools_Sysinfo.asp" || fail "Tools_Sysinfo.asp missing"
+          test -f "$A" && pass "Pinned donor has ajax_sysinfo.asp" || fail "ajax_sysinfo.asp missing"
+
+          for key in             cpu.model cpu.freq memory.total memory.free memory.buffer memory.swap.total memory.swap.used memory.cache             cpu.load.1 cpu.load.5 cpu.load.15 nvram.total nvram.used jffs.usage jffs.free conn.total conn.active conn.max; do
+            have "$S" ""$key"" "sysinfo backend exposes $key"
+          done
+
+          for key in cpu.model cpu.freq conn.max nvram.total; do
+            have "$W" "sysinfo("$key")" "Tools page consumes $key"
+          done
+
+          have "$A" 'conn_stats_arr' "AJAX endpoint refreshes connection stats"
+          have "$A" 'sysinfo("conn.total")' "AJAX endpoint reads conn.total"
+          have "$A" 'sysinfo("conn.active")' "AJAX endpoint reads conn.active"
+
+          if grep -Eq 'nvram_set|nvram_commit|notify_rc|system\(' "$S"; then
+            fail "sysinfo.c unexpectedly contains write/service/shell side effects"
+          else
+            pass "sysinfo.c remains read-only at coarse side-effect check"
+          fi
+
+          echo 'CLASSIFICATION M43_SMALL_HTTPD_BACKEND_PLUS_ADD_ONLY_UI' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-info-source
+          path: reports/system-info-source.txt
+          if-no-files-found: warn
+          retention-days: 30
