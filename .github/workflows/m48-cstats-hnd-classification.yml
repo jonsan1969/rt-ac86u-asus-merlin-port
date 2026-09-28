@@ -47,7 +47,7 @@ jobs:
           grep -A10 -F '#if !defined(HND_ROUTER)' "$M/httpd/data_arrays.h" | grep -Fq 'ej_ipt_bandwidth'             && pass "Classic IP-traffic HTTPD handlers excluded on HND"             || fail "HTTPD HND exclusion missing"
 
           for p in Main_TrafficMonitor_devdaily.asp Main_TrafficMonitor_devmonthly.asp Main_TrafficMonitor_devrealtime.asp; do
-            grep -A5 -F 'ifeq ($(HND_ROUTER),y)' "$M/www/Makefile" | grep -Fq "rm -rf $(INSTALLDIR)/www/$p"               && pass "HND build removes $p"               || fail "HND page removal missing for $p"
+            grep -A5 -F 'ifeq ($(HND_ROUTER),y)' "$M/www/Makefile" | grep -Fq "rm -rf \$(INSTALLDIR)/www/$p"               && pass "HND build removes $p"               || fail "HND page removal missing for $p"
           done
 
           echo 'CLASSIFICATION M48_NO_PORT_DONOR_DISABLED_ON_HND' | tee -a "$OUT"
