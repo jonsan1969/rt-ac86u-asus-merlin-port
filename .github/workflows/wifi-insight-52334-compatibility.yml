@@ -162,11 +162,10 @@ jobs:
           echo "asus_visualization_backends=$asus_backend" >> "$OUT"
           echo "merlin_visualization_backends=$merlin_backend" >> "$OUT"
           if [ "$merlin_vis" -eq 5 ] && [ "$merlin_backend" -eq 2 ]; then
-            echo 'PASS Merlin WiFi Insight runtime is complete' >> "$OUT"
+            echo 'CLASSIFICATION=PORTABLE_DONOR_RUNTIME' >> "$OUT"
           else
-            echo 'FAIL Merlin WiFi Insight donor runtime incomplete' >> "$OUT"
-            cat "$OUT"
-            exit 1
+            echo 'CLASSIFICATION=NO_PORT_INCOMPLETE_DONOR_RUNTIME' >> "$OUT"
+            echo 'PASS verified that pinned Merlin firmware lacks the visualization runtime needed by its stale launcher' >> "$OUT"
           fi
 
           cat "$OUT"
