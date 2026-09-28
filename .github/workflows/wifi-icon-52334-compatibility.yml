@@ -55,6 +55,9 @@ jobs:
             grep -n -A35 -B25 'No HW switch' "$P" || true
             grep -n -A30 -B20 'wifi_hw_sw_status' "$P" | head -n 500 || true
             echo
+            echo '===== EXACT STOCK BLOCK 2948-2990 ====='
+            sed -n '2948,2990p' "$P"
+            echo
             echo '===== CLASSIFICATION ====='
             if grep -Fq 'wifihwswstatuspartial' "$P" &&
                grep -Eq 'radio_2.*&&.*radio_5|radio_2.*\|\|.*radio_5' "$P"; then
