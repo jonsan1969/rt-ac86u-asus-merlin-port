@@ -1,0 +1,90 @@
+name: Probe ASUS 52334 Samba Merlin controls
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/samba-controls-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe Samba control backend
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/samba-controls-52334.txt
+          : > "$OUT"
+          keys='smbd_simpler_naming smbd_master smbd_wins'
+          echo '===== KEY SURFACE =====' >> "$OUT"
+          for key in $keys; do
+            echo "--- $key ---" >> "$OUT"
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              [ -f "$R/$rel" ] || continue
+              if strings -a "$R/$rel" | grep -Fq "$key"; then
+                echo "PASS $rel::$key" >> "$OUT"
+              else
+                echo "MISSING $rel::$key" >> "$OUT"
+              fi
+            done
+            grep -RIna --binary-files=without-match -F "$key" "$R/www" 2>/dev/null | head -n 50 >> "$OUT" || true
+          done
+
+          echo '===== SAMBA RUNTIME =====' >> "$OUT"
+          for rel in usr/sbin/smbd usr/sbin/nmbd usr/sbin/wsdd2; do
+            [ -e "$R/$rel" ] && echo "PRESENT /$rel -> $(readlink "$R/$rel" || true)" >> "$OUT" || echo "MISSING /$rel" >> "$OUT"
+          done
+          find "$R/www" -maxdepth 1 -type f \( -iname '*samba*' -o -iname '*aicloud*' -o -iname '*usb*' \) -printf '%f\n' | sort >> "$OUT" || true
+
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          present=0
+          for key in $keys; do
+            found=0
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              [ -f "$R/$rel" ] || continue
+              strings -a "$R/$rel" | grep -Fq "$key" && found=1 || true
+            done
+            [ "$found" -eq 1 ] && present=$((present+1))
+          done
+          echo "backend_keys_present=$present/3" >> "$OUT"
+          if [ "$present" -eq 3 ]; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=SOURCE_BACKEND_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: samba-controls-52334
+          path: reports/samba-controls-52334.txt
+          if-no-files-found: error
+          retention-days: 14
