@@ -122,7 +122,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M53 | System Log / Wireless Log no-auto-logout behavior | shared pages differ | **PORT/REVIEW** | C | Merlin explicitly disables auto logout on these log pages |
 | M54 | System Log layout/filter/log-level enhancements | shared pages differ | **REVIEW** | C | port only demonstrably missing useful UI behavior |
 | M55 | WiFi icon reports both radios | shared UI; exact stock behavior unverified | **REVIEW** | C | small visual/behavioral delta |
-| M56 | Editable-entry WebUI enhancements | cross-cutting page differences | **REVIEW** | C | not a single transplantable file |
+| M56 | Editable-entry WebUI enhancements | ASUS 52334 already has editable-entry behavior on the main shared targets, including DHCP reservations and port forwarding; remaining Merlin-only edit surfaces map to separately gated NFS/OpenVPN/VPN Director features | **NO PORT** | — | run 36397818442: preserve newer ASUS table/edit implementations; do not apply a generic cross-page Merlin patch |
 | M57 | Advanced VPN status page | page absent; stock IPsec AJAX exists but Merlin OpenVPN status endpoint/globals are absent | **PORT** | C | do not add page alone; source-side HTTPD/OpenVPN status endpoint integration required before UI port |
 | M58 | QR codes for network/Guest Network | Merlin `qrcode.min.js` present; no same runtime asset in ASUS | **PORT/REVIEW** | A/C | verify ASUS has no alternative implementation before adding |
 | M59 | Local OUI database for WebUI/networkmap | Merlin `ajax/ouiDB.json` is runtime-only | **PORT/REVIEW** | A/C | enables local vendor lookup without remote query |
