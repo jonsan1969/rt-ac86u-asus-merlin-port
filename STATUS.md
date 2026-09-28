@@ -23,6 +23,7 @@
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
 | M13 Nano editor | **SUCCESS** | verified Merlin nano 5.7 + isolated add-only `libncurses.so.6.0` runtime executes against ASUS 52334 under qemu; four add-only overlay targets validated in run 36373879103 |
+| M11 Custom DDNS callback | **IN PROGRESS** | ASUS 52334 has normal DDNS but lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated`; restore only with source-side DDNS/JFFS hook integration |
 | M10 JFFS backup/restore | **IN PROGRESS** | ASUS 52334 stock settings backup page exists, but the build lacks JFFS backup/upload routes/tokens in `httpd/uploader`; source backend required before exposing Merlin UI |
 | JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
 | AMTM integration | **IN PROGRESS** | stock has required curl/core shell tools but lacks `dos2unix`/`unix2dos`; defer until utility + core-hook prerequisites are satisfied |
