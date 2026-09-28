@@ -1,0 +1,99 @@
+name: Verify late 386.51997 source triangulation
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/source-anchor-51997-triangulation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned references
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus45956
+          git -C work/asus45956 remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus45956 sparse-checkout init --cone
+          git -C work/asus45956 sparse-checkout set release/src/router/shared release/src/router/rc
+          git -C work/asus45956 fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus45956 checkout --detach FETCH_HEAD
+
+          git init work/merlin38612
+          git -C work/merlin38612 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin38612 sparse-checkout init --cone
+          git -C work/merlin38612 sparse-checkout set release/src/router/shared release/src/router/rc Changelog-386.txt
+          git -C work/merlin38612 fetch --depth=1 --filter=blob:none origin 5b47ec64ce58d23c591e809d4cbad09d1121c4ea
+          git -C work/merlin38612 checkout --detach FETCH_HEAD
+
+          git init work/merlin38614
+          git -C work/merlin38614 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin38614 sparse-checkout init --cone
+          git -C work/merlin38614 sparse-checkout set release/src/router/shared release/src/router/rc
+          git -C work/merlin38614 fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin38614 checkout --detach FETCH_HEAD
+
+          git init work/swrt
+          git -C work/swrt remote add origin https://github.com/SWRT-dev/asuswrt-bcm.git
+          git -C work/swrt sparse-checkout init --cone
+          git -C work/swrt sparse-checkout set release/src/router/shared release/src/router/rc
+          git -C work/swrt fetch --depth=1 --filter=blob:none origin 2f655d718a110f9b1a45fb1166d701ff2bce850c
+          git -C work/swrt checkout --detach FETCH_HEAD
+
+      - name: Verify triangulation invariants
+        run: |
+          set -euo pipefail
+          A=work/asus45956
+          M12=work/merlin38612
+          M14=work/merlin38614
+          S=work/swrt
+          OUT=reports/source-anchor-51997-triangulation.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+
+          for d in "$A" "$M12" "$M14" "$S"; do
+            git -C "$d" show -s --format='%H %s' HEAD | tee -a "$OUT"
+          done
+
+          grep -Fq 'Merged with GPL 386_51997.' "$M12/Changelog-386.txt"             && pass "Merlin 386.12_x explicitly records GPL 386_51997 merge"             || fail "Merlin 386.12_x 51997 changelog marker missing"
+
+          cmp -s "$A/release/src/router/shared/scripts.c" "$M12/release/src/router/shared/scripts.c"             && pass "shared/scripts.c ASUS45956 == Merlin386.12"             || fail "shared/scripts.c drift ASUS45956 vs Merlin386.12"
+
+          cmp -s "$M12/release/src/router/shared/scripts.c" "$M14/release/src/router/shared/scripts.c"             && pass "shared/scripts.c Merlin386.12 == Merlin386.14"             || fail "shared/scripts.c drift Merlin386.12 vs Merlin386.14"
+
+          cmp -s "$M12/release/src/router/shared/scripts.c" "$S/release/src/router/shared/scripts.c"             && pass "shared/scripts.c Merlin386.12 == SWRT pinned ref"             || fail "shared/scripts.c drift Merlin386.12 vs SWRT"
+
+          grep -Fq 'run_custom_script("services-start"' "$M12/release/src/router/rc/services.c"             && pass "Late Merlin tree retains services-start hook"             || fail "Late Merlin services-start hook missing"
+
+          grep -Fq 'run_custom_script("dhcpc-event"' "$M12/release/src/router/rc/udhcpc.c"             && pass "Late Merlin tree retains dhcpc-event hook"             || fail "Late Merlin dhcpc-event hook missing"
+
+          if grep -Fq 'run_custom_script("qos-start"' "$S/release/src/router/rc/qos.c"; then
+            fail "SWRT unexpectedly matches Merlin qos-start hook surface; re-review independence assumption"
+          else
+            pass "SWRT differs from Merlin qos-start hook surface"
+          fi
+
+          echo 'CLASSIFICATION LATE_51997_MODIFIED_SOURCE_TRIANGULATION_VERIFIED' | tee -a "$OUT"
+          echo 'CLEAN_LATE_ASUS_SOURCE_STILL_REQUIRED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-anchor-51997-triangulation
+          path: reports/source-anchor-51997-triangulation.txt
+          if-no-files-found: warn
+          retention-days: 30
