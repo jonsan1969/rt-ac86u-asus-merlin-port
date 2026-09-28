@@ -166,3 +166,20 @@ Before M21 becomes **SUCCESS**, prove:
 **B AFTER M01-M03 / NO M21-SPECIFIC CORE PATCH**
 
 M21 remains gated today because the generic JFFS lifecycle engine is not yet in the source build. Once that engine exists, wsdd2 can become an add-only binary + script adaptation instead of a dedicated `rc` source feature.
+
+
+## Dormant guarded-overlay foundation
+
+Staging run `36467874419` and guarded overlay run `36468235793` validate the inactive binary foundation:
+
+- target: `/usr/sbin/wsdd2`;
+- add-only provenance;
+- SHA-256: `89a4309ccbe6a33c74ac2ea971c91af1e753ca930c26767259594172189b94e0`;
+- ELF32 ARM EABI5;
+- interpreter: `/lib/ld-linux.so.3`;
+- exact DT_NEEDED set: `ld-linux.so.3`, `libc.so.6`;
+- both dependencies come from stock ASUS 52334;
+- QEMU loader smoke succeeds;
+- no other active overlay entry references or starts `wsdd2`.
+
+This does **not** complete M21. The binary remains dormant until M01-M03 provide the generic lifecycle hooks and the idempotent Samba-state reconcile wrapper is integrated and validated.
