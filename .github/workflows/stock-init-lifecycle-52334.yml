@@ -77,7 +77,7 @@ jobs:
           done
 
           section "RC DIRECTORIES"
-          for d in /etc/rc.d /etc/rcS.d /etc/rc0.d /etc/rc1.d /etc/rc2.d /etc/rc3.d /etc/rc4.d /etc/rc5.d /etc/rc6.d /rom/etc/rc.d; do
+          for d in /etc/rc.d /etc/rcS.d /etc/rc0.d /etc/rc1.d /etc/rc2.d /etc/rc3.d /etc/rc4.d /etc/rc5.d /etc/rc6.d /rom/etc/rc.d /rom/etc/rc3.d; do
             if [ -e "$A$d" ]; then
               echo "--- $d" | tee -a "$OUT"
               find "$A$d" -maxdepth 2 -printf '%y %m %p -> %l\n' 2>/dev/null |
@@ -96,6 +96,23 @@ jobs:
               fi
             done
 
+          section "BCM BOOT LAUNCHER"
+          launcher=""
+          for rel in /usr/sbin/bcm_boot_launcher /sbin/bcm_boot_launcher /bin/bcm_boot_launcher /usr/bin/bcm_boot_launcher; do
+            if [ -f "$A$rel" ]; then
+              launcher="$A$rel"
+              echo "--- $rel" | tee -a "$OUT"
+              file "$launcher" | sed "s#$A##" | tee -a "$OUT"
+              strings -a "$launcher" |
+                grep -E '/rom/etc/rc3\.d|/etc/rc3\.d|usage: bcm_boot_launcher|start|stop|^[SK][0-9][0-9]' |
+                sort -u | tee -a "$OUT" || true
+              break
+            fi
+          done
+          if [ -z "$launcher" ]; then
+            echo "bcm_boot_launcher binary not located" | tee -a "$OUT"
+          fi
+
           section "MAIN RC INIT STRINGS"
           if [ -f "$A/sbin/rc" ]; then
             strings -a "$A/sbin/rc" |
@@ -109,12 +126,16 @@ jobs:
           fi
 
           section "CLASSIFICATION"
-          if grep -RqsE 'run-parts[[:space:]].*/(rom/)?etc/init\.d|for .* /(rom/)?etc/init\.d'               "$A/etc" "$A/rom/etc" 2>/dev/null; then
-            echo 'POTENTIAL_GENERIC_INITD_RUNNER_FOUND_REVIEW_REQUIRED' | tee -a "$OUT"
+          if [ -d "$A/rom/etc/rc3.d" ] &&
+             find "$A/rom/etc/rc3.d" -maxdepth 1 -name 'S*' -print -quit | grep -q . &&
+             [ -n "$launcher" ] &&
+             strings -a "$launcher" | grep -Fq '/rom/etc/rc3.d'; then
+            echo 'STOCK_ROM_RC3_RUNNER_VERIFIED' | tee -a "$OUT"
+            echo 'ADD_ONLY_RC3_ENTRY_POTENTIALLY_AVAILABLE_REVIEW_ORDERING_BEFORE_USE' | tee -a "$OUT"
           else
-            echo 'NO_PROVEN_GENERIC_ADD_ONLY_INITD_RUNNER' | tee -a "$OUT"
+            echo 'NO_PROVEN_GENERIC_ADD_ONLY_RC3_RUNNER' | tee -a "$OUT"
           fi
-          echo 'DO_NOT_ACTIVATE_DAEMONS_FROM_THIS_REPORT_UNTIL_ORDERING_AND_RESTART_SEMANTICS_ARE_PROVEN' | tee -a "$OUT"
+          echo 'DO_NOT_ACTIVATE_DAEMONS_FROM_THIS REPORT UNTIL ORDERING AND RESTART SEMANTICS ARE PROVEN' | sed 's/THIS REPORT/THIS_REPORT/' | tee -a "$OUT"
 
       - name: Publish report
         if: always()
