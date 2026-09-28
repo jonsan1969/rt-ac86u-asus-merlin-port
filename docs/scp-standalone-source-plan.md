@@ -152,3 +152,18 @@ Verified artifact:
 - a clean rebuild is byte-identical.
 
 The build path is therefore no longer the M16 blocker. Remaining work is guarded add-only image integration and target-router SCP interoperability testing.
+
+
+## Active overlay validation
+
+Guarded overlay run `36467262213` validates the staged `/usr/bin/scp` against ASUS 52334:
+
+- manifest policy: add-only;
+- exact staged SHA-256: `d47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851`;
+- mode 0755;
+- static AArch64, no PT_INTERP;
+- embedded transport path remains `/usr/bin/dbclient`;
+- QEMU usage and local-copy smoke tests pass from the overlaid rootfs;
+- protected ASUS core/Dropbear paths remain unchanged.
+
+**M16 status: SUCCESS.**
