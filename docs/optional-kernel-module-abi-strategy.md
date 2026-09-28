@@ -130,3 +130,18 @@ A kernel feature may move beyond SOURCE_BUILD_REQUIRED only when all are true:
 ## Current classification
 
 **ABI DIAGNOSTIC IMPROVED; ALL FIVE FEATURES REMAIN SOURCE-BUILD REQUIRED.**
+
+
+## Firmware-image CRC probe result
+
+Run `36447256650` completed successfully after the module-selection probe was corrected.
+
+Observed result:
+
+- ASUS 52334 stock modules: `0` readable imported symbol/CRC pairs;
+- Merlin optional modules: present for NFS, CIFS, ipset, Cake and WireGuard, but `modprobe --show-modversions` likewise returns no usable per-symbol version table;
+- 132 module basenames exist in both images, but zero could be compared through MODVERSIONS CRCs.
+
+Therefore the firmware images do not expose enough symbol-version metadata to upgrade binary compatibility confidence. This is a diagnostic limitation, not evidence of ABI equality.
+
+The source-build requirement and no-donor-`.ko` rule remain unchanged.
