@@ -1,0 +1,100 @@
+name: Verify M64 QoS source delta
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/qos-overhead-source-45956.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router/rc release/src/router/shared release/src/router/httpd
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router/rc release/src/router/shared release/src/router/httpd
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify M64 donor boundaries
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/qos-overhead-source-45956.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+          lack() { if grep -Fq "$2" "$1"; then fail "$3"; else pass "$3"; fi; }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C "$A" show -s --format='ASUS %H %s' HEAD | tee -a "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          AQ="$A/release/src/router/rc/qos.c"
+          MQ="$M/release/src/router/rc/qos.c"
+          MD="$M/release/src/router/shared/defaults.c"
+
+          echo '===== CLEAN ASUS LINEAGE =====' | tee -a "$OUT"
+          lack "$AQ" 'qos_overhead' "Clean ASUS qos.c lacks qos_overhead"
+          lack "$AQ" 'qos_atm' "Clean ASUS qos.c lacks qos_atm"
+          lack "$AQ" 'overhead %d %s' "Clean ASUS qos.c lacks donor tc overhead syntax"
+
+          echo '===== DONOR DEFAULTS =====' | tee -a "$OUT"
+          have "$MD" '{ "qos_overhead", "0"' "Merlin defines qos_overhead default"
+          have "$MD" '{ "qos_atm", "0"' "Merlin defines qos_atm default"
+          have "$MD" '{ "qos_mpu", "0"' "Merlin defines qos_mpu default"
+
+          echo '===== DONOR SHAPER SEMANTICS =====' | tee -a "$OUT"
+          have "$MQ" 'overhead = overheaddl = nvram_get_int("qos_overhead")' "Donor applies overhead to paired directions"
+          have "$MQ" 'overhead -= 14' "Donor adjusts Ethernet-header overhead"
+          have "$MQ" 'overheaddl -= 14' "Donor adjusts download overhead where required"
+          have "$MQ" 'if (overhead < 0)' "Donor clamps negative upload overhead"
+          have "$MQ" 'if (overheaddl < 0)' "Donor clamps negative download overhead"
+          have "$MQ" 'overhead %d %s' "Donor generates tc overhead string"
+          have "$MQ" 'linklayer atm' "Donor supports ATM framing"
+          have "$MQ" 'linklayer ethernet' "Donor supports Ethernet framing"
+
+          echo '===== DONOR STATS SUBREQUIREMENT =====' | tee -a "$OUT"
+          T="$M/release/src/router/httpd/data_arrays.c"
+          test -f "$T" && pass "Merlin has QoS data-array backend" || fail "Merlin QoS data-array backend missing"
+          have "$T" 'tc -s class show dev br0' "Donor gathers LAN class statistics"
+          have "$T" 'tc -s class show dev imq0' "Donor gathers download IMQ statistics"
+          have "$T" 'tcdata_lan_array' "Donor emits LAN/download class array"
+          have "$T" 'tcdata_wan_array' "Donor emits WAN/upload class array"
+
+          test ! -f "$A/release/src/router/httpd/data_arrays.c"             && pass "Clean ASUS anchor lacks Merlin data_arrays.c backend layout"             || fail "Clean ASUS anchor unexpectedly has donor-style data_arrays.c; re-review M46/M64 merge"
+
+          echo 'CLASSIFICATION M64_SOURCE_REQUIRED_STATS_FOLDED_INTO_M46' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qos-overhead-source-45956
+          path: reports/qos-overhead-source-45956.txt
+          if-no-files-found: warn
+          retention-days: 30
