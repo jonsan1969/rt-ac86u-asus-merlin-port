@@ -1,0 +1,181 @@
+name: Probe ASUS 52334 WiFi Insight compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/wifi-insight-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and Merlin 386.14_2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/RT-AC86U_386.14_2.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/RT-AC86U_386.14_2.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          unzip -q work/artifacts/RT-AC86U_386.14_2.zip -d work/merlin
+
+      - name: Extract root filesystems
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then
+              echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+            else
+              echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Probe WiFi Insight runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=reports/wifi-insight-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'LAUNCHER AND VISUALIZATION PAGES'
+          pages='WiFi_Insight.asp visindex.asp channelcapacity.asp channels.asp configure.asp metrics.asp'
+          for rel in $pages; do
+            echo "--- $rel ---" >> "$OUT"
+            for side in ASUS MERLIN; do
+              if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
+              if [ -f "$R/www/$rel" ]; then
+                printf '%s PRESENT ' "$side" >> "$OUT"
+                sha256sum "$R/www/$rel" | awk '{print $1}' >> "$OUT"
+              else
+                echo "$side MISSING" >> "$OUT"
+              fi
+            done
+          done
+
+          section 'VISUALIZATION STATIC ASSETS'
+          assets='channelcapacity.js channels.js common.js configure.js main.js matrics.js visstyle.css'
+          for rel in $assets; do
+            echo "--- $rel ---" >> "$OUT"
+            for side in ASUS MERLIN; do
+              if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
+              if [ -f "$R/www/$rel" ]; then
+                printf '%s PRESENT ' "$side" >> "$OUT"
+                sha256sum "$R/www/$rel" | awk '{print $1}' >> "$OUT"
+              else
+                echo "$side MISSING" >> "$OUT"
+              fi
+            done
+          done
+
+          section 'VISUALIZATION BACKEND BINARIES'
+          for name in vis-datacollector vis-dcon; do
+            echo "--- $name ---" >> "$OUT"
+            for side in ASUS MERLIN; do
+              if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
+              p="$(find "$R" -type f -name "$name" -print -quit)"
+              if [ -n "$p" ]; then
+                echo "$side PRESENT $p" >> "$OUT"
+                file "$p" >> "$OUT"
+                sha256sum "$p" >> "$OUT"
+              else
+                echo "$side MISSING" >> "$OUT"
+              fi
+            done
+          done
+
+          section 'PAGE BACKEND REFERENCES'
+          for rel in visindex.asp channelcapacity.asp channels.asp configure.asp metrics.asp; do
+            [ -f "$MERLIN_ROOT/www/$rel" ] || continue
+            echo "--- $rel ---" >> "$OUT"
+            grep -nEi --binary-files=without-match \
+              'ajax|cgi|json|vis-|datacollector|dcon|nvram|wl |wl_|action=|start_apply|apply\.cgi|httpApi' \
+              "$MERLIN_ROOT/www/$rel" | head -n 300 >> "$OUT" || true
+          done
+          for rel in channelcapacity.js channels.js common.js configure.js main.js matrics.js; do
+            [ -f "$MERLIN_ROOT/www/$rel" ] || continue
+            echo "--- $rel ---" >> "$OUT"
+            grep -nEi --binary-files=without-match \
+              'ajax|cgi|json|vis-|datacollector|dcon|nvram|wl |wl_|action=|apply' \
+              "$MERLIN_ROOT/www/$rel" | head -n 300 >> "$OUT" || true
+          done
+
+          section 'ASUS GENERIC SUPPORT SIGNATURES'
+          for rel in usr/sbin/httpd sbin/rc usr/sbin/wl bin/wl; do
+            [ -f "$ASUS_ROOT/$rel" ] || continue
+            echo "--- $rel ---" >> "$OUT"
+            strings -a "$ASUS_ROOT/$rel" | grep -Ei 'vis-datacollector|vis-dcon|channelcapacity|wifi.*insight|visualization' | sort -u >> "$OUT" || true
+          done
+
+          section 'SUMMARY'
+          asus_vis=0
+          for rel in visindex.asp channelcapacity.asp channels.asp configure.asp metrics.asp; do
+            [ -f "$ASUS_ROOT/www/$rel" ] && asus_vis=$((asus_vis+1))
+          done
+          merlin_vis=0
+          for rel in visindex.asp channelcapacity.asp channels.asp configure.asp metrics.asp; do
+            [ -f "$MERLIN_ROOT/www/$rel" ] && merlin_vis=$((merlin_vis+1))
+          done
+          asus_backend=0
+          for name in vis-datacollector vis-dcon; do
+            find "$ASUS_ROOT" -type f -name "$name" -print -quit | grep -q . && asus_backend=$((asus_backend+1)) || true
+          done
+          merlin_backend=0
+          for name in vis-datacollector vis-dcon; do
+            find "$MERLIN_ROOT" -type f -name "$name" -print -quit | grep -q . && merlin_backend=$((merlin_backend+1)) || true
+          done
+          echo "asus_visualization_pages=$asus_vis" >> "$OUT"
+          echo "merlin_visualization_pages=$merlin_vis" >> "$OUT"
+          echo "asus_visualization_backends=$asus_backend" >> "$OUT"
+          echo "merlin_visualization_backends=$merlin_backend" >> "$OUT"
+          if [ "$merlin_vis" -eq 5 ] && [ "$merlin_backend" -eq 2 ]; then
+            echo 'PASS Merlin WiFi Insight runtime is complete' >> "$OUT"
+          else
+            echo 'FAIL Merlin WiFi Insight donor runtime incomplete' >> "$OUT"
+            cat "$OUT"
+            exit 1
+          fi
+
+          cat "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wifi-insight-52334-compatibility
+          path: reports/wifi-insight-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
