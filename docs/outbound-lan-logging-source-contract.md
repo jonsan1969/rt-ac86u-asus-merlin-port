@@ -35,21 +35,23 @@ Therefore using `logaccept` as a rule target preserves normal acceptance while a
 
 ## Exact source delta
 
-In the LAN-to-WAN default allow rule, clean ASUS 386.45956 has:
+Clean ASUS 386.45956 contains the same default LAN-to-WAN allow statement in two firewall-generation paths: the normal/single-WAN path and the multi-WAN path. Both call sites use the same target semantics.
+
+At each call site ASUS has:
 
 ```c
 if (nvram_get_int("fw_enable_x"))
     fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, "ACCEPT");
 ```
 
-Pinned Merlin 386.14_2 changes only the target:
+Pinned Merlin 386.14_2 changes only the target at both corresponding call sites:
 
 ```c
 if (nvram_get_int("fw_enable_x"))
     fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, logaccept);
 ```
 
-This is the M68 behavior.
+This duplicated one-token substitution is the M68 behavior. The surrounding single-/multi-WAN control flow remains unchanged.
 
 ## Why this is not an image-safe patch
 
@@ -61,11 +63,11 @@ Therefore:
 
 - do not binary-patch `rc`;
 - do not transplant Merlin `rc`;
-- apply the one-token source delta only to a sufficiently late ASUS-compatible `firewall.c` after reviewing the final call site.
+- apply the one-token target substitution only at every equivalent later-ASUS LAN default-allow call site after reviewing the final source shape.
 
 ## Scope boundary
 
-M68 changes only the default LAN-originated FORWARD accept target from literal `ACCEPT` to the already-derived `logaccept`.
+M68 changes only the default LAN-originated FORWARD accept target from literal `ACCEPT` to the already-derived `logaccept` in the equivalent firewall-generation paths.
 
 It does **not**:
 
@@ -97,6 +99,6 @@ Before M68 becomes **SUCCESS**, prove on the final ASUS-based source build:
 
 ## Current classification
 
-**SOURCE-REQUIRED — ONE-LINE BEHAVIOR DELTA VERIFIED**
+**SOURCE-REQUIRED — TWO CALL SITES / ONE-TOKEN BEHAVIOR DELTA VERIFIED**
 
 The behavior is precisely bounded; implementation waits for the later ASUS-compatible firewall source path.
