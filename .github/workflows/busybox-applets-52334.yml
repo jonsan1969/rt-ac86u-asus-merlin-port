@@ -1,0 +1,87 @@
+name: Probe ASUS 52334 BusyBox hidden applets
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/busybox-applets-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction and ARM execution tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip qemu-user-static file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Execute stock BusyBox applet listing
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/busybox-applets-52334.txt
+          : > "$OUT"
+          file "$R/bin/busybox" >> "$OUT"
+          sha256sum "$R/bin/busybox" >> "$OUT"
+
+          BB_LIST=reports/busybox-list.txt
+          if qemu-arm-static -L "$R" "$R/bin/busybox" --list > "$BB_LIST" 2>reports/qemu-busybox.err; then
+            echo 'QEMU_BUSYBOX_EXEC=PASS' >> "$OUT"
+          else
+            echo 'QEMU_BUSYBOX_EXEC=FAIL' >> "$OUT"
+            cat reports/qemu-busybox.err >> "$OUT"
+          fi
+
+          echo >> "$OUT"
+          echo '===== TARGET APPLETS =====' >> "$OUT"
+          targets='crontab diff dos2unix unix2dos hexdump xargs getopt hostname tee uniq'
+          for x in $targets; do
+            compiled=no
+            grep -Fxq "$x" "$BB_LIST" 2>/dev/null && compiled=yes || true
+            links=$(find "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$x" -print 2>/dev/null | wc -l)
+            printf '%-12s compiled=%s existing_paths=%s\n' "$x" "$compiled" "$links" >> "$OUT"
+          done
+
+          echo >> "$OUT"
+          echo '===== SAFE SYMLINK CANDIDATES =====' >> "$OUT"
+          for x in $targets; do
+            if grep -Fxq "$x" "$BB_LIST" 2>/dev/null &&
+               ! find "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$x" -print -quit 2>/dev/null | grep -q .; then
+              echo "$x" >> "$OUT"
+            fi
+          done
+          cat "$OUT"
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: busybox-applets-52334
+          path: |
+            reports/busybox-applets-52334.txt
+            reports/busybox-list.txt
+            reports/qemu-busybox.err
+          if-no-files-found: error
+          retention-days: 14
