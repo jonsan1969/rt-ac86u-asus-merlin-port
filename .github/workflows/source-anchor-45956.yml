@@ -40,17 +40,17 @@ jobs:
           git -C "$M" show -s --format='MERLIN %H %s' HEAD >> "$OUT"
 
           echo '===== REQUIRED SOURCE PATHS =====' >> "$OUT"
-          paths='release/src-rt-5.02hnd/router/shared/scripts.c
-          release/src-rt-5.02hnd/router/shared/shared.h
-          release/src-rt-5.02hnd/router/shared/defaults.c
-          release/src-rt-5.02hnd/router/rc/services.c
-          release/src-rt-5.02hnd/router/rc/firewall.c
-          release/src-rt-5.02hnd/router/rc/udhcpc.c
-          release/src-rt-5.02hnd/router/rc/qos.c
-          release/src-rt-5.02hnd/router/rc/usb.c
-          release/src-rt-5.02hnd/router/rc/wan.c
-          release/src-rt-5.02hnd/router/rc/init.c
-          release/src-rt-5.02hnd/router/httpd/web.c'
+          paths='release/src/router/shared/scripts.c
+          release/src/router/shared/shared.h
+          release/src/router/shared/defaults.c
+          release/src/router/rc/services.c
+          release/src/router/rc/firewall.c
+          release/src/router/rc/udhcpc.c
+          release/src/router/rc/qos.c
+          release/src/router/rc/usb.c
+          release/src/router/rc/wan.c
+          release/src/router/rc/init.c
+          release/src/router/httpd/web.c'
           for p in $paths; do
             [ -f "$A/$p" ] && ap=yes || ap=no
             echo "$p ASUS=$ap" >> "$OUT"
@@ -70,15 +70,15 @@ jobs:
 
           echo '===== KERNEL / PLATFORM MARKERS =====' >> "$OUT"
           find "$A/release" -maxdepth 5 -type f -name Makefile -o -name Kconfig 2>/dev/null | head -n 5 >/dev/null || true
-          grep -RhsE '^VERSION = 4$|^PATCHLEVEL = 1$|^SUBLEVEL = 27$' "$A/release/src-rt-5.02hnd/kernel/linux-4.1" 2>/dev/null | head -n 20 >> "$OUT" || true
+          find "$A/release" -maxdepth 5 -type f -path '*/kernel/*/Makefile' -print | head -n 20 | sed "s#^$A/##" >> "$OUT" || true
           find "$A" -type f -name '*RT-AC86U*' -o -name '*RTAC86U*' 2>/dev/null | sed "s#^$A/##" | head -n 100 >> "$OUT" || true
 
           echo '===== SOURCE FILE HASHES =====' >> "$OUT"
           for f in \
-            "$A/release/src-rt-5.02hnd/router/rc/services.c" \
-            "$A/release/src-rt-5.02hnd/router/rc/firewall.c" \
-            "$A/release/src-rt-5.02hnd/router/rc/udhcpc.c" \
-            "$A/release/src-rt-5.02hnd/router/shared/scripts.c"; do
+            "$A/release/src/router/rc/services.c" \
+            "$A/release/src/router/rc/firewall.c" \
+            "$A/release/src/router/rc/udhcpc.c" \
+            "$A/release/src/router/shared/scripts.c"; do
             [ -f "$f" ] && sha256sum "$f" >> "$OUT" || true
           done
 
