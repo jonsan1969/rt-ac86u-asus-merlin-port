@@ -112,7 +112,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M43 | System Info summary page | absent | **PORT** | A/C | `Tools_Sysinfo.asp` + httpd/sysinfo handlers |
 | M44 | Other Settings page | absent | **PORT/ADAPT** | A/C | umbrella page for traffic storage, conntrack and other controls |
 | M45 | Temperature/performance page | absent | **PORT** | A/C | AC86U temperature display from `Advanced_PerformanceTuning_Content.asp` |
-| M46 | QoS Stats page | absent | **PORT** | A/C | preserve compatible ASUS QoS backend |
+| M46 | QoS Stats page | page absent and ASUS 52334 lacks Merlin tc/IPv6/conntrack EJ data handlers plus `ajax_gettcdata.asp` | **PORT** | C | source-side HTTPD/QoS data integration required before UI port |
 | M47 | Save traffic history to USB/JFFS/NVRAM | `rstats_path` backend signature exists; Merlin UI absent | **ADAPT** | A/B/C | compare rstats semantics, then restore location/schedule controls |
 | M48 | Enhanced/per-IP traffic monitoring | only partial stock overlap | **PORT/ADAPT** | A/B/C | monthly page is Merlin-only; existing traffic pages are divergent |
 | M49 | Monthly traffic history page | absent | **PORT** | A/C | `Main_TrafficMonitor_monthly.asp` |
