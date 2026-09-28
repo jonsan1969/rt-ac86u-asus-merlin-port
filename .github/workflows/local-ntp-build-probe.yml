@@ -85,7 +85,15 @@ jobs:
           B=work/asus/release/src/router/busybox
           OUT=reports/local-ntp-build.txt
 
+          set +e
           make -C "$B" -j2 CROSS_COMPILE=arm-linux-gnueabi- V=1 > reports/local-ntp-build.log 2>&1
+          build_rc=$?
+          set -e
+          if [ "$build_rc" -ne 0 ]; then
+            echo "===== BUILD FAILURE rc=$build_rc =====" | tee -a "$OUT"
+            tail -n 240 reports/local-ntp-build.log | tee -a "$OUT"
+            exit "$build_rc"
+          fi
 
           cp "$B/busybox" artifacts/rtac86u-ntpd-static
           chmod 0755 artifacts/rtac86u-ntpd-static
