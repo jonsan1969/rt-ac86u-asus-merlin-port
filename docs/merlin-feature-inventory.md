@@ -50,7 +50,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M01 | JFFS user scripts under `/jffs/scripts/` | direct Merlin signature absent | **PORT** | C | restore shared script helper and individual event call sites |
 | M02 | `service-event` / `service-event-end` hooks | absent | **PORT** | C | source-level `rc/services.c` integration |
 | M03 | Event hooks: init/firewall/services/NAT/WAN/QoS/DDNS/USB/DHCP/update | most Merlin hook signatures absent | **PORT** | C | add only hook calls, never Merlin `rc` binary |
-| M04 | postconf/custom config framework | postconf signature absent | **PORT** | B/C | `run_postconf()`, `.add`, custom configs; preserve ASUS generators |
+| M04 | postconf/custom config framework | helper primitive exists in clean ASUS lineage but generator call sites are absent | **PORT** | B/C | exact append → replace → blocking postconf sequencing and Tier-1 generator targets are defined in `docs/custom-config-postconf-source-contract.md`; port per generator, never transplant donor rc/httpd files |
 | M05 | Addon helper API | stock helper absent; pinned Merlin `helper.sh` is now add-only in guarded overlay | **PORT** | A | image-safe foundation implemented; includes postconf helpers |
 | M06 | Addon custom-settings API | stock API absent; active pinned `helper.sh` already provides `am_settings_get/set` and `/jffs/addons/custom_settings.txt` | **PORT** | A | image-safe implementation already delivered as part of JFFS helper foundation |
 | M07 | 20 custom WebUI slots | stock aliases absent; 20 add-only `/www/userN.asp -> user/userN.asp` aliases are active | **PORT** | A/C | image-safe alias layer implemented; deeper addon/event behavior still follows JFFS source-hook dependency |
