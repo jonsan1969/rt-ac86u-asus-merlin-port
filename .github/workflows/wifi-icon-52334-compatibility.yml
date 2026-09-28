@@ -1,0 +1,68 @@
+name: Probe ASUS 52334 WiFi icon radio logic
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/wifi-icon-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe state.js WiFi icon logic
+        run: |
+          set -euo pipefail
+          P="$ASUS_ROOT/www/state.js"
+          OUT=reports/wifi-icon-52334-compatibility.txt
+          sha256sum "$P" > "$OUT"
+          {
+            echo
+            echo '===== RADIO STATUS CONTEXT ====='
+            grep -n -A35 -B25 'No HW switch' "$P" || true
+            grep -n -A30 -B20 'wifi_hw_sw_status' "$P" | head -n 500 || true
+            echo
+            echo '===== CLASSIFICATION ====='
+            if grep -Fq 'wifihwswstatuspartial' "$P" &&
+               grep -Eq 'radio_2.*&&.*radio_5|radio_2.*\|\|.*radio_5' "$P"; then
+              echo 'CLASSIFICATION=NO_PORT_STOCK_EQUIVALENT'
+            else
+              echo 'CLASSIFICATION=PATCH_CANDIDATE'
+            fi
+          } >> "$OUT"
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wifi-icon-52334-compatibility
+          path: reports/wifi-icon-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
