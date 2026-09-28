@@ -164,9 +164,26 @@ jobs:
           expected=sorted(e["target"].lstrip("/") for e in manifest["entries"])
           if len(expected) != len(set(expected)):
               raise SystemExit("manifest contains duplicate overlay targets")
+
+          # Add-only copies may need to create a previously absent parent
+          # directory (for example /usr/libexec). Permit only directory
+          # ancestors of explicit manifest targets, and only when those
+          # ancestors did not exist in the stock rootfs.
+          expected_dirs=set()
+          for rel in expected:
+              parent=Path(rel).parent
+              while str(parent) not in ("", "."):
+                  p=parent.as_posix()
+                  if p not in before:
+                      if after.get(p,["?"])[0]!="D":
+                          raise SystemExit(f"required new parent is not a directory: {p}")
+                      expected_dirs.add(p)
+                  parent=parent.parent
+
+          allowed=sorted(set(expected)|expected_dirs)
           Path("reports/changed-paths.txt").write_text("\n".join(changed)+"\n",encoding="utf-8")
-          if changed != expected:
-              raise SystemExit(f"unexpected rootfs changes: {changed!r}; expected {expected!r}")
+          if changed != allowed:
+              raise SystemExit(f"unexpected rootfs changes: {changed!r}; allowed {allowed!r}")
 
           sensitive_before={}
           for line in Path("reports/sensitive-before.tsv").read_text(encoding="utf-8").splitlines()[1:]:
