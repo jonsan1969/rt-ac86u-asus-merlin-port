@@ -82,7 +82,7 @@ jobs:
           if [ -n "$daemon" ] && strings -a "$R/usr/sbin/httpd" | grep -Fq 'ipt_bandwidth'; then
             echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
           else
-            echo 'CLASSIFICATION=SOURCE_BACKEND_REQUIRED' >> "$OUT"
+            echo 'CLASSIFICATION=ASUS_BACKEND_MISSING; DONOR_APPLICABILITY_DECIDED_BY_M48_HND_CLASSIFICATION' >> "$OUT"
           fi
           cat "$OUT"
       - name: Publish report
