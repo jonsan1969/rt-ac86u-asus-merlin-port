@@ -25,21 +25,21 @@ jobs:
           git init work/asus
           git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
           git -C work/asus sparse-checkout init --cone
-          git -C work/asus sparse-checkout set release/src/router release/src-rt
+          git -C work/asus sparse-checkout set release/src/router/tor release/src/router/rc release/src/router/shared release/src/router/www
           git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
           git -C work/asus checkout --detach FETCH_HEAD
 
           git init work/m12
           git -C work/m12 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
           git -C work/m12 sparse-checkout init --cone
-          git -C work/m12 sparse-checkout set release/src/router
+          git -C work/m12 sparse-checkout set release/src/router/tor
           git -C work/m12 fetch --depth=1 --filter=blob:none origin 5b47ec64ce58d23c591e809d4cbad09d1121c4ea
           git -C work/m12 checkout --detach FETCH_HEAD
 
           git init work/m14
           git -C work/m14 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
           git -C work/m14 sparse-checkout init --cone
-          git -C work/m14 sparse-checkout set release/src/router release/src-rt
+          git -C work/m14 sparse-checkout set release/src/router/tor release/src/router/rc release/src/router/www
           git -C work/m14 fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
           git -C work/m14 checkout --detach FETCH_HEAD
 
