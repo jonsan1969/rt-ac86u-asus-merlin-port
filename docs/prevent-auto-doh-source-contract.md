@@ -32,6 +32,14 @@ Pinned Merlin 386.14_2 adds the control/default/UI and emits the canary entries 
 
 ASUS 52334 runtime has later DNS Privacy functionality of its own, so the final merge must use the later ASUS dnsmasq generator and DNS Privacy state as authoritative. The 45956 tree is only a clean lineage anchor.
 
+Target ownership probe run `36409047088` definitively found that ASUS 52334 contains neither the donor control nor the canary behavior:
+
+- no `dns_priv_override` string in `sbin/rc`, `usr/sbin/httpd` or `usr/lib/libshared.so`;
+- no `dns_priv_override` WebUI control;
+- none of the four canary names in the probed core binaries/WebUI.
+
+Therefore M66 must add the control default, UI selector and dnsmasq config-generation behavior as one reviewed source feature; there is no existing ASUS 52334 owner to reuse for that key.
+
 ## NVRAM control
 
 Pinned Merlin defines:
@@ -102,9 +110,9 @@ Preserve both names.
 
 A later ASUS-compatible implementation is expected to touch only:
 
-1. the relevant defaults table, **if** `dns_priv_override` is not already present in that later source;
+1. the relevant defaults table with donor-compatible `dns_priv_override=0`;
 2. the current ASUS dnsmasq config generator;
-3. the current WAN/DNS settings UI, **if** the control is not already exposed.
+3. the current WAN/DNS settings UI with Auto/Yes/No values 0/1/2.
 
 Do not replace:
 
@@ -123,17 +131,15 @@ Full IPv6 DNS Director Custom 1–3 parity (M36) remains a separate source-requi
 
 ## WebUI gate
 
-Before adding a UI selector, verify whether ASUS 52334 already exposes or consumes `dns_priv_override`.
+ASUS 52334 target probe run `36409047088` found no existing `dns_priv_override` owner in the probed runtime or WebUI.
 
-If the later ASUS source/runtime already owns the key, reuse its semantics rather than creating a duplicate setting.
-
-If it does not, add the donor-compatible:
+The source port therefore adds the donor-compatible selector:
 
 - Auto = `0`;
 - Yes = `1`;
-- No = `2`;
+- No = `2`.
 
-and ensure a change causes dnsmasq configuration to be regenerated/restarted through the normal later ASUS apply path.
+A change must regenerate/restart dnsmasq through the normal later-ASUS apply path. The UI must be added only together with the backend/default integration; do not stage a dead generic-NVRAM row ahead of the generator support.
 
 ## Validation gate
 
@@ -158,4 +164,4 @@ Before M66 becomes **SUCCESS**, prove:
 
 **SOURCE-REQUIRED — CONFIG-GENERATION DELTA VERIFIED**
 
-The donor semantics are bounded. Final implementation waits for a later ASUS-compatible dnsmasq generator source path and a definitive check of whether ASUS 52334 already owns the `dns_priv_override` key/UI.
+The donor semantics and target ownership are both bounded. Run `36409047088` proves ASUS 52334 does not own the donor key/UI/canaries, so final implementation requires a narrow default + UI + dnsmasq-generator source patch against a later ASUS-compatible tree.
