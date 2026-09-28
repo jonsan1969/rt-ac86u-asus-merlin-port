@@ -1,0 +1,84 @@
+name: Probe ASUS 52334 log autologout behavior
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/log-autologout-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe log page autologout delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/log-autologout-52334-compatibility.txt
+          : > "$OUT"
+          for rel in Main_LogStatus_Content.asp Main_WStatus_Content.asp; do
+            echo "===== $rel =====" >> "$OUT"
+            test -f "$R/www/$rel"
+            sha256sum "$R/www/$rel" >> "$OUT"
+            if grep -Fq 'AUTOLOGOUT_MAX_MINUTE = 0;' "$R/www/$rel"; then
+              echo 'STOCK disable-autologout already present' >> "$OUT"
+            else
+              echo 'PATCH candidate: disable-autologout absent' >> "$OUT"
+            fi
+            echo '-- first script contexts --' >> "$OUT"
+            grep -n -A12 -B4 '<script' "$R/www/$rel" | head -n 120 >> "$OUT" || true
+            echo >> "$OUT"
+          done
+
+          if grep -Fq 'AUTOLOGOUT_MAX_MINUTE = 0;' "$R/www/Main_LogStatus_Content.asp" &&
+             grep -Fq 'AUTOLOGOUT_MAX_MINUTE = 0;' "$R/www/Main_WStatus_Content.asp"; then
+            echo 'CLASSIFICATION=NO_PORT_STOCK_EQUIVALENT' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=IMAGE_SAFE_EXACT_PATCH' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-autologout-52334-compatibility
+          path: reports/log-autologout-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
