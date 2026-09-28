@@ -1,0 +1,101 @@
+name: Probe ASUS 52334 System Log enhancements
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/system-log-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe System Log feature surface
+        run: |
+          set -euo pipefail
+          P="$ASUS_ROOT/www/Main_LogStatus_Content.asp"
+          OUT=reports/system-log-52334-compatibility.txt
+          test -f "$P"
+          sha256sum "$P" > "$OUT"
+          {
+            echo
+            echo '===== PAGE SIGNATURES ====='
+            for sig in               'appGet.cgi?hook=nvram_dump'               'auto_refresh'               'message_loglevel'               'name="log_level"'               '/ajax/logFilter.json'               'syslog.txt'               'Clear '; do
+              if grep -Fq "$sig" "$P"; then echo "PASS page::$sig"; else echo "MISSING page::$sig"; fi
+            done
+
+            echo
+            echo '===== LOCAL FILTER DATABASE ====='
+            if [ -f "$ASUS_ROOT/www/ajax/logFilter.json" ]; then
+              echo 'PRESENT /www/ajax/logFilter.json'
+              sha256sum "$ASUS_ROOT/www/ajax/logFilter.json"
+              stat -c 'size=%s mode=%a' "$ASUS_ROOT/www/ajax/logFilter.json"
+            else
+              echo 'MISSING /www/ajax/logFilter.json'
+            fi
+
+            echo
+            echo '===== NVRAM/BACKEND ====='
+            for sig in message_loglevel log_level; do
+              hits=0
+              for bin in "$ASUS_ROOT/usr/sbin/httpd" "$ASUS_ROOT/sbin/rc" "$ASUS_ROOT/usr/lib/libshared.so"; do
+                [ -f "$bin" ] || continue
+                strings -a "$bin" | grep -Fxq "$sig" && hits=$((hits+1)) || true
+              done
+              echo "$sig components=$hits"
+            done
+
+            echo
+            echo '===== RELEVANT PAGE CONTEXT ====='
+            grep -nEi -A8 -B5 'appGet.cgi|auto_refresh|message_loglevel|name="log_level"|logFilter.json|syslog.txt' "$P" | head -n 500 || true
+
+            echo
+            echo '===== CLASSIFICATION ====='
+            if grep -Fq 'appGet.cgi?hook=nvram_dump' "$P" &&
+               grep -Fq 'auto_refresh' "$P" &&
+               grep -Fq 'message_loglevel' "$P" &&
+               grep -Fq 'name="log_level"' "$P" &&
+               grep -Fq '/ajax/logFilter.json' "$P" &&
+               [ -f "$ASUS_ROOT/www/ajax/logFilter.json" ] &&
+               grep -Fq 'syslog.txt' "$P"; then
+              echo 'CLASSIFICATION=NO_PORT_STOCK_EQUIVALENT'
+            else
+              echo 'CLASSIFICATION=REVIEW_MISSING_SUBFEATURES'
+            fi
+          } >> "$OUT"
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-log-52334-compatibility
+          path: reports/system-log-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
