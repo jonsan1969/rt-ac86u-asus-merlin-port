@@ -435,6 +435,22 @@ jobs:
               if content.count("AUTOLOGOUT_MAX_MINUTE = 0;") != 1:
                   raise SystemExit(f"{label} disable-autologout contract not present exactly once")
 
+          logfilter_path=root/"www/ajax/logFilter.json"
+          if digest(logfilter_path) != "a6e28e7be5b00799f4492ab99baba31e9a9255ffd3e62bbb276270f5645c04f3":
+              raise SystemExit("local System Log filter database checksum mismatch")
+          if "https://nw-dlcdnet.asus.com/plugin/js/logFilter.json" in system_log:
+              raise SystemExit("System Log still depends on remote logFilter.json")
+          if system_log.count('$.getJSON("/ajax/logFilter.json"') != 1:
+              raise SystemExit("System Log local filter lookup not present exactly once")
+          if system_log.count('id="auto_refresh"') != 1:
+              raise SystemExit("System Log auto-refresh toggle not present exactly once")
+          refresh_guard='if((document.getElementById("auto_refresh").checked) && !(height > 0 && h < height)){'
+          if system_log.count(refresh_guard) != 1:
+              raise SystemExit("System Log auto-refresh guard missing or duplicated")
+          for unsupported in ['message_loglevel','name="log_level"']:
+              if unsupported in system_log:
+                  raise SystemExit(f"System Log exposes unsupported ASUS 52334 control: {unsupported}")
+
           survey=(root/"www/Advanced_Wireless_Survey.asp").read_text(encoding="utf-8")
           survey_required=[
               '/apscan.asp',

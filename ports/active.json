@@ -373,14 +373,34 @@
       "policy": "add_only"
     },
     {
-      "type": "text_replace",
+      "type": "text_replace_multi",
       "target": "/www/Main_LogStatus_Content.asp",
       "target_sha256": "e482da4f74b37856cf45291175aa75edc69defbbcac60f6987e631c73521c228",
-      "find": "<script>\nfunction showclock(){",
-      "replace": "<script>\n// disable auto log out\nAUTOLOGOUT_MAX_MINUTE = 0;\nfunction showclock(){",
-      "count": 1,
       "encoding": "utf-8",
-      "policy": "patch_exact"
+      "policy": "patch_exact",
+      "replacements": [
+        {
+          "find": "<script>\nfunction showclock(){",
+          "replace": "<script>\n// disable auto log out\nAUTOLOGOUT_MAX_MINUTE = 0;\nfunction showclock(){",
+          "count": 1
+        },
+        {
+          "find": "https://nw-dlcdnet.asus.com/plugin/js/logFilter.json",
+          "replace": "/ajax/logFilter.json",
+          "count": 1
+        },
+        {
+          "find": "if(!(height > 0 && h < height)){",
+          "replace": "if((document.getElementById(\"auto_refresh\").checked) && !(height > 0 && h < height)){",
+          "count": 1
+        },
+        {
+          "find": "<div style=\"margin-top: 5px; text-align: center;\"><input class=\"button_gen\" onclick=\"applySettings();\" type=\"button\" value=\"<#287#>\" /></div>\n<div style=\"margin-top:8px\">",
+          "replace": "<div style=\"margin-top: 5px; text-align: center;\"><input class=\"button_gen\" onclick=\"applySettings();\" type=\"button\" value=\"<#287#>\" /></div>\n<div style=\"color:#FFCC00;\"><input type=\"checkbox\" checked id=\"auto_refresh\">Auto refresh</div>\n<div style=\"margin-top:8px\">",
+          "count": 1
+        }
+      ],
+      "result_sha256": "825d44c33508ec61bd29eeca289e6b7a99b410fee89dc45a7df37985819a543a"
     },
     {
       "type": "text_replace",
@@ -402,6 +422,15 @@
       "encoding": "utf-8",
       "result_sha256": "ee285ad2592424074985ba6ed1d53e4ce1f1d75a8c27d2de9ab1922e1c0eb5d8",
       "policy": "patch_exact"
+    },
+    {
+      "type": "copy",
+      "source_kind": "repo",
+      "source": "ports/files/logFilter.json",
+      "target": "/www/ajax/logFilter.json",
+      "sha256": "a6e28e7be5b00799f4492ab99baba31e9a9255ffd3e62bbb276270f5645c04f3",
+      "mode": "0644",
+      "policy": "add_only"
     }
   ]
 }
