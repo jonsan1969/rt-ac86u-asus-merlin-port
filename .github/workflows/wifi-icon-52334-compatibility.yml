@@ -47,6 +47,8 @@ jobs:
           {
             echo
             echo '===== PARTIAL ICON CSS ====='
+            sha256sum "$ASUS_ROOT/www/form_style.css"
+            grep -n -A22 -B8 -E '\.wifihwswstatus(on|off|partial)' "$ASUS_ROOT/www/form_style.css" || true
             grep -RIna --include='*.css' 'wifihwswstatuspartial' "$ASUS_ROOT/www" 2>/dev/null || true
             echo
             echo '===== RADIO STATUS CONTEXT ====='
@@ -64,6 +66,7 @@ jobs:
             fi
           } >> "$OUT"
           cp "$P" reports/asus-state.js
+          cp "$ASUS_ROOT/www/form_style.css" reports/asus-form_style.css
           cat "$OUT"
       - name: Publish report
         uses: actions/upload-artifact@v4
@@ -72,5 +75,6 @@ jobs:
           path: |
             reports/wifi-icon-52334-compatibility.txt
             reports/asus-state.js
+            reports/asus-form_style.css
           if-no-files-found: error
           retention-days: 14
