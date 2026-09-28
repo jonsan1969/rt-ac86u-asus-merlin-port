@@ -1,0 +1,81 @@
+name: Probe ASUS 52334 Dropbear scp applet
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/dropbear-scp-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction and ARM execution tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip qemu-user-static file
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Test stock Dropbear multicall as scp
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/dropbear-scp-52334.txt
+          : > "$OUT"
+          P="$(find "$R/usr/bin" "$R/usr/sbin" "$R/bin" "$R/sbin" -maxdepth 1 -type f -name 'dropbearmulti' -print -quit 2>/dev/null || true)"
+          if [ -z "$P" ]; then
+            echo 'DROPBEARMULTI=MISSING' >> "$OUT"
+            cat "$OUT"
+            exit 0
+          fi
+          echo "DROPBEARMULTI=$P" >> "$OUT"
+          file "$P" >> "$OUT"
+          sha256sum "$P" >> "$OUT"
+          strings -a "$P" | grep -Ei '^scp$|usage: scp|secure copy|dbclient|dropbearkey' | sort -u >> "$OUT" || true
+
+          S=work/scp-stage
+          rm -rf "$S"
+          cp -a "$R" "$S"
+          mkdir -p "$S/usr/bin"
+          ln -sf dropbearmulti "$S/usr/bin/scp"
+          set +e
+          qemu-arm-static -L "$S" "$S/usr/bin/scp" -h > reports/scp-out.txt 2>&1
+          rc=$?
+          set -e
+          echo "scp_help_rc=$rc" >> "$OUT"
+          cat reports/scp-out.txt >> "$OUT"
+          if grep -Eiq 'usage:.*scp|scp.*usage' reports/scp-out.txt; then
+            echo 'CLASSIFICATION=SAFE_SYMLINK_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=NO_STOCK_SCP_APPLET' >> "$OUT"
+          fi
+          cat "$OUT"
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dropbear-scp-52334
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
