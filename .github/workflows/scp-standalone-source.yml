@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
@@ -176,6 +176,59 @@ jobs:
           cmp artifacts/rtac86u-scp artifacts/rtac86u-scp-rebuild
           echo 'PASS standalone SCP clean rebuild is byte-identical' | tee -a "$OUT"
           echo 'CLASSIFICATION M16_STATIC_AARCH64_ADD_ONLY_CANDIDATE' | tee -a "$OUT"
+
+      - name: Stage verified SCP in guarded overlay
+        run: |
+          set -euo pipefail
+          BIN=artifacts/rtac86u-scp
+          EXPECTED=d47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851
+
+          test -f "$BIN"
+          test "$(sha256sum "$BIN" | awk '{print $1}')" = "$EXPECTED"
+          test "$(stat -c '%a' "$BIN")" = "755"
+
+          mkdir -p ports/files/usr/bin
+          cp "$BIN" ports/files/usr/bin/scp
+          chmod 0755 ports/files/usr/bin/scp
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p=Path("ports/active.json")
+          d=json.loads(p.read_text(encoding="utf-8"))
+          expected={
+              "type":"copy",
+              "source_kind":"repo",
+              "source":"ports/files/usr/bin/scp",
+              "target":"/usr/bin/scp",
+              "sha256":"d47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851",
+              "mode":"0755",
+              "policy":"add_only",
+          }
+          matches=[e for e in d["entries"] if e.get("target")=="/usr/bin/scp"]
+          if not matches:
+              d["entries"].append(expected)
+          elif len(matches)!=1 or matches[0]!=expected:
+              raise SystemExit(f"existing /usr/bin/scp manifest entry differs: {matches!r}")
+          p.write_text(json.dumps(d,indent=2)+"\n",encoding="utf-8")
+          PY
+
+          python3 tools/check_port_overlay.py ports/active.json
+          test "$(sha256sum ports/files/usr/bin/scp | awk '{print $1}')" = "$EXPECTED"
+
+          if git diff --quiet -- ports/files/usr/bin/scp ports/active.json &&
+             git ls-files --error-unmatch ports/files/usr/bin/scp >/dev/null 2>&1; then
+            echo 'Verified SCP already staged in guarded overlay'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ports/files/usr/bin/scp ports/active.json
+          git commit -m 'port: stage reproducible standalone scp'
+          git pull --rebase origin asus-52334-merlin-port
+          git push origin HEAD:asus-52334-merlin-port
 
       - name: Publish report
         if: always()
