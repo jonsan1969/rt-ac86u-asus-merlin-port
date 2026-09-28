@@ -92,7 +92,80 @@ jobs:
 
           cat "$OUT"
 
+      - name: Verify JFFS source-lineage contract
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/source-anchor-45956.txt
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          must_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            grep -Fq "$token" "$root/$path" && pass "$label" || fail "$label"
+          }
+          must_not_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            if grep -Fq "$token" "$root/$path"; then fail "$label"; else pass "$label"; fi
+          }
+
+          echo '===== JFFS SOURCE-LINEAGE CONTRACT =====' | tee -a "$OUT"
+
+          cmp -s "$A/release/src/router/shared/scripts.c" "$M/release/src/router/shared/scripts.c" \
+            && pass "shared/scripts.c identical at pinned anchor" \
+            || fail "shared/scripts.c identical at pinned anchor"
+
+          [ "$(grep -Fc 'extern void run_custom_script' "$A/release/src/router/shared/shared.h")" -eq 1 ] \
+            && pass "ASUS shared.h exposes only TOR-gated helper declaration" \
+            || fail "ASUS shared.h exposes only TOR-gated helper declaration"
+          [ "$(grep -Fc 'extern void run_custom_script' "$M/release/src/router/shared/shared.h")" -ge 2 ] \
+            && pass "Merlin shared.h adds ungated helper declaration" \
+            || fail "Merlin shared.h adds ungated helper declaration"
+
+          grep -A1 -F 'ifeq ($(RTCONFIG_TOR),y)' "$A/release/src/router/shared/Makefile" | grep -Fq 'OBJS += scripts.o' \
+            && pass "ASUS scripts.o is TOR-gated" \
+            || fail "ASUS scripts.o is TOR-gated"
+          must_have "$A" release/src/router/config_base '# RTCONFIG_TOR is not set' "ASUS base config disables TOR"
+          must_not_have "$A" release/src/router/shared/defaults.c '"jffs2_scripts"' "ASUS defaults omit jffs2_scripts"
+          must_have "$M" release/src/router/shared/defaults.c '"jffs2_scripts"' "Merlin defaults add jffs2_scripts"
+
+          while IFS='|' read -r path token label; do
+            must_not_have "$A" "$path" "$token" "ASUS lacks $label"
+            must_have "$M" "$path" "$token" "Merlin has $label"
+          done <<'EOF'
+          release/src/router/rc/services.c|run_custom_script("services-start"|services-start hook
+          release/src/router/rc/services.c|run_custom_script("services-stop"|services-stop hook
+          release/src/router/rc/services.c|run_custom_script("service-event", 120|blocking service-event hook
+          release/src/router/rc/services.c|run_custom_script("service-event-end"|service-event-end hook
+          release/src/router/rc/services.c|run_custom_script("nat-start"|nat-start hook
+          release/src/router/rc/firewall.c|run_custom_script("firewall-start"|firewall-start hook
+          release/src/router/rc/udhcpc.c|run_custom_script("dhcpc-event", 0, argv[1], "4"|DHCPv4 protocol-4 hook
+          release/src/router/rc/udhcpc.c|run_custom_script("dhcpc-event", 0, argv[2], "6"|DHCPv6 protocol-6 hook
+          release/src/router/rc/udhcpc.c|run_custom_script("zcip-event"|zcip-event hook
+          release/src/router/rc/qos.c|run_custom_script("qos-start", 0, "rules"|QoS rules hook
+          release/src/router/rc/qos.c|run_custom_script("qos-start", 120, "init"|blocking QoS init hook
+          release/src/router/rc/usb.c|run_custom_script("pre-mount", 120|blocking pre-mount hook
+          release/src/router/rc/usb.c|run_custom_script("post-mount", 120|blocking post-mount hook
+          release/src/router/rc/usb.c|run_custom_script("unmount", 120|blocking unmount hook
+          release/src/router/rc/wan.c|run_custom_script("wan-event"|wan-event hook
+          release/src/router/rc/wan.c|run_custom_script("wan-start"|legacy wan-start hook
+          release/src/router/rc/init.c|run_custom_script("init-start"|init-start hook
+          release/src/router/rc/watchdog.c|run_custom_script("update-notification"|update-notification hook
+          EOF
+
+          for dir in scripts configs addons; do
+            must_not_have "$A" release/src/router/rc/ubifs.c "/jffs/$dir/" "ASUS UBIFS lacks /jffs/$dir bootstrap"
+            must_have "$M" release/src/router/rc/ubifs.c "/jffs/$dir/" "Merlin UBIFS adds /jffs/$dir bootstrap"
+          done
+
+          must_have "$A" release/src/router/rc/ubifs.c '#if 0 /* disable legacy & asus autoexec */' "ASUS legacy UBIFS autoexec remains disabled"
+          must_have "$M" release/src/router/rc/ubifs.c '#if 0 /* disable legacy & asus autoexec */' "Merlin legacy UBIFS autoexec remains disabled"
+
+          echo 'CLASSIFICATION SOURCE_LINEAGE_ANCHOR_VERIFIED' | tee -a "$OUT"
+
       - name: Publish report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: source-anchor-45956
