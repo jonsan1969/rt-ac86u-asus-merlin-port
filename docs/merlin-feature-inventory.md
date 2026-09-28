@@ -67,7 +67,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M13 | Nano editor | absent in ASUS; donor nano requires ncurses | **SUCCESS** | A/B | pinned nano 5.7 + isolated add-only `libncurses.so.6.0`, `libncurses.so.6` symlink and `rnano` symlink validated under qemu and guarded overlay run 36373879103 |
 | M14 | Enhanced CLI utility set | run 36382597888 found no Merlin-only BusyBox symlink command absent from ASUS; remaining standalone donor ELFs belong to separately tracked feature blocks | **NO PORT** | A/B | no generic CLI transplant. M13 Nano is the isolated proven exception; BusyBox remains ASUS-authoritative |
 | M15 | SSH public-key authentication | already present | **NO PORT** | C | ASUS `rc` already contains `authorized_keys` support |
-| M16 | Merlin SSH behavior / SCP | ASUS key/host-key behavior already overlaps sufficiently; missing parity is SCP | **PORT** | B | `docs/scp-standalone-source-plan.md`: build add-only standalone `/usr/bin/scp` from Dropbear SCP sources with `MULTI=0`; it delegates SSH transport to ASUS `/usr/bin/dbclient`, so no Dropbear core replacement is needed |
+| M16 | Merlin SSH behavior / SCP | ASUS key/host-key behavior already overlaps sufficiently; missing parity is SCP | **PORT** | B | run `36466679828` proves a byte-reproducible static AArch64 standalone candidate (`d47ec3eb...`) with QEMU smoke; add only `/usr/bin/scp`, delegating transport to ASUS `/usr/bin/dbclient`, never replace Dropbear core |
 | M17 | SNMP | not present in verified AC86U Merlin image | **N/A** | — | Merlin README says only some models; do not invent support |
 
 ## 3. SMB, disk sharing and filesystem services
