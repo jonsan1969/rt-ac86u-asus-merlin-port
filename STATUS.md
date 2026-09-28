@@ -22,6 +22,7 @@
 | Guarded Merlin overlay validation | **SUCCESS** | latest exact-change validation run 36370670710 passed; ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear hashes unchanged |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
+| M10 JFFS backup/restore | **IN PROGRESS** | ASUS 52334 stock settings backup page exists, but the build lacks JFFS backup/upload routes/tokens in `httpd/uploader`; source backend required before exposing Merlin UI |
 | JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
 | AMTM integration | **IN PROGRESS** | stock has required curl/core shell tools but lacks `dos2unix`/`unix2dos`; defer until utility + core-hook prerequisites are satisfied |
 | M31 Conntrack timeout tuning | **SUCCESS** | ASUS-backed UI adapter uses stock NVRAM keys and stock reboot apply path; no `rc` replacement |
