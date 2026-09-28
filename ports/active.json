@@ -461,6 +461,16 @@
       "target": "/usr/bin/rnano",
       "link_target": "nano",
       "policy": "add_only"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/Advanced_AiDisk_samba.asp",
+      "target_sha256": "3d10dc3226dbb69a348abdc56ac824f54163612b15449343fb80e0bc1806cff3",
+      "find": "<tr>\n<th>\n<a class=\"hintstyle\" href=\"javascript:void(0);\" onClick=\"openHint(17,1);\"><#3395#></a>\n</th>\n<td>\n<input type=\"text\" name=\"st_max_user\" class=\"input_3_table\" maxlength=\"2\" value=\"<% nvram_get(\"st_max_user\"); %>\" onKeyPress=\"return validator.isNumber(this, event);\" autocorrect=\"off\" autocapitalize=\"off\">\n</td>\n</tr>",
+      "replace": "<tr>\n<th>Set as WINS server</th>\n<td>\n<input type=\"radio\" name=\"smbd_wins\" class=\"input\" value=\"1\" <% nvram_match_x(\"\", \"smbd_wins\", \"1\", \"checked\"); %>><#277#>\n<input type=\"radio\" name=\"smbd_wins\" class=\"input\" value=\"0\" <% nvram_match_x(\"\", \"smbd_wins\", \"0\", \"checked\"); %>><#276#>\n</td>\n</tr>\n<tr>\n<th>\n<a class=\"hintstyle\" href=\"javascript:void(0);\" onClick=\"openHint(17,1);\"><#3395#></a>\n</th>\n<td>\n<input type=\"text\" name=\"st_max_user\" class=\"input_3_table\" maxlength=\"2\" value=\"<% nvram_get(\"st_max_user\"); %>\" onKeyPress=\"return validator.isNumber(this, event);\" autocorrect=\"off\" autocapitalize=\"off\">\n</td>\n</tr>",
+      "count": 1,
+      "encoding": "utf-8",
+      "policy": "patch_exact"
     }
   ]
 }
