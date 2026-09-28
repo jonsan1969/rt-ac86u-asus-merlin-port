@@ -1,0 +1,101 @@
+name: Probe image-safe OpenVPN client controls on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/openvpn-client-safe-controls-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Probe isolated client controls
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/openvpn-client-safe-controls-52334.txt
+          : > "$OUT"
+          keys='vpn_client_verb vpn_client_reneg vpn_client_cn vpn_client_digest vpn_client_comp vpn_client_nat vpn_client_cipher vpn_client_hmac'
+
+          echo '===== ASUS CLIENT UI FILES =====' >> "$OUT"
+          find "$A/www" -maxdepth 3 -type f ( -iname '*vpn*' -o -iname '*openvpn*' ) -printf '%P
+' | sort >> "$OUT" || true
+
+          echo '===== CANDIDATE KEY SURFACE =====' >> "$OUT"
+          for key in $keys; do
+            echo "=== $key ===" >> "$OUT"
+            for side in ASUS MERLIN; do
+              [ "$side" = ASUS ] && R="$A" || R="$M"
+              echo "--- $side binaries ---" >> "$OUT"
+              for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so usr/lib/libvpn.so usr/lib/libovpn.so; do
+                P="$R/$rel"; [ -f "$P" ] || continue
+                strings -a "$P" | grep -F "$key" | sort -u | head -n 40 | sed "s#^#[$rel] #" >> "$OUT" || true
+              done
+              echo "--- $side webui ---" >> "$OUT"
+              grep -RinF "$key" "$R/www" 2>/dev/null | head -n 80 | sed "s#^$R/www/##" >> "$OUT" || true
+            done
+          done
+
+          echo '===== ASUS APPLY/OPENVPN ACTION SURFACE =====' >> "$OUT"
+          grep -RinE 'start_apply\.htm|restart_vpn|restart_openvpn|start_vpn|stop_vpn|vpn_client_unit|apply.*vpn' "$A/www" 2>/dev/null             | grep -Ei 'VPN|OpenVPN|vpn_client' | head -n 260 >> "$OUT" || true
+
+          echo '===== MERLIN VALUE BLOCKS =====' >> "$OUT"
+          for key in $keys; do
+            echo "=== $key ===" >> "$OUT"
+            grep -RinF "$key" "$M/www" 2>/dev/null | head -n 50 | sed "s#^$M/www/##" >> "$OUT" || true
+          done
+
+          echo '===== ASUS GENERIC FORM HANDLING TOKENS =====' >> "$OUT"
+          for rel in usr/sbin/httpd usr/lib/libshared.so; do
+            P="$A/$rel"; [ -f "$P" ] || continue
+            echo "[$rel]" >> "$OUT"
+            strings -a "$P" | grep -E 'start_apply\.htm|nvram_set|action_script|restart_vpn|vpn_client' | sort -u | head -n 300 >> "$OUT" || true
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvpn-client-safe-controls-52334
+          path: reports/openvpn-client-safe-controls-52334.txt
+          if-no-files-found: error
+          retention-days: 14
