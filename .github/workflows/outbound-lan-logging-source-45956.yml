@@ -1,0 +1,89 @@
+name: Verify M68 outbound LAN logging source delta
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/outbound-lan-logging-source-45956.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router/rc
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router/rc
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify one-line behavior delta
+        run: |
+          set -euo pipefail
+          A=work/asus-src/release/src/router/rc/firewall.c
+          M=work/merlin-src/release/src/router/rc/firewall.c
+          OUT=reports/outbound-lan-logging-source-45956.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C work/asus-src show -s --format='ASUS %H %s' HEAD | tee -a "$OUT"
+          git -C work/merlin-src show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          echo '===== SHARED LOG TARGET CONTRACT =====' | tee -a "$OUT"
+          grep -Fq 'nvram_match("fw_log_x", "accept") || nvram_match("fw_log_x", "both")' "$A"             && pass "ASUS derives logaccept from fw_log_x"             || fail "ASUS logaccept derivation missing"
+          grep -Fq 'strcpy(logaccept, "logaccept")' "$A"             && pass "ASUS maps allowed logging to logaccept chain"             || fail "ASUS logaccept mapping missing"
+          grep -Fq 'strcpy(logaccept, "ACCEPT")' "$A"             && pass "ASUS maps disabled allowed logging to ACCEPT"             || fail "ASUS ACCEPT fallback missing"
+
+          echo '===== EXACT LAN TO WAN DEFAULT RULE =====' | tee -a "$OUT"
+          asus='fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, "ACCEPT");'
+          merlin='fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, logaccept);'
+
+          [ "$(grep -Fc "$asus" "$A")" -eq 1 ]             && pass "Clean ASUS has exactly one literal-ACCEPT LAN default rule"             || fail "Clean ASUS literal-ACCEPT rule count changed"
+
+          [ "$(grep -Fc "$merlin" "$M")" -eq 1 ]             && pass "Pinned Merlin has exactly one logaccept LAN default rule"             || fail "Pinned Merlin logaccept rule count changed"
+
+          if grep -Fq "$merlin" "$A"; then
+            fail "Clean ASUS unexpectedly already contains Merlin M68 rule"
+          else
+            pass "Clean ASUS lacks Merlin M68 target"
+          fi
+
+          if grep -Fq "$asus" "$M"; then
+            fail "Pinned Merlin still contains ASUS literal-ACCEPT M68 rule"
+          else
+            pass "Pinned Merlin replaces ASUS target rather than duplicating rule"
+          fi
+
+          echo 'CLASSIFICATION M68_ONE_LINE_SOURCE_DELTA_VERIFIED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outbound-lan-logging-source-45956
+          path: reports/outbound-lan-logging-source-45956.txt
+          if-no-files-found: warn
+          retention-days: 30
