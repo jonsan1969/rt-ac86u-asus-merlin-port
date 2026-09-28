@@ -85,7 +85,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
-| M24 | Advanced OpenVPN client/server integration | ASUS 52334 has its own later client/server UI and OpenVPN lifecycle; Merlin exposes additional legacy client controls, but focused run 36398402429 finds the candidate keys only in ASUS `libshared`/default surface, not proven consumed by ASUS `rc`/`libvpn` and not exposed by stock UI | **ADAPT** | C | no monolithic Merlin page port and no UI-only controls from unproven NVRAM keys. Preserve ASUS UI/OpenVPN; implement only independently proven behavior deltas such as M38/M40 through source integration |
+| M24 | Advanced OpenVPN client/server integration | ASUS 52334 has its own later client/server UI/lifecycle; focused probing found no safe monolithic donor page/backend to port | **NO PORT (umbrella)** | — | preserve newer ASUS OpenVPN. Independently proven missing behavior is tracked under M38 DNS Exclusive, M40/VPN Director routing and M57 Advanced VPN Status; do not expose unproven legacy NVRAM controls |
 | M25 | VPN Director | page and `vpndirector_rulelist` backend absent | **PORT** | C | shared routing contract with M40 in `docs/vpn-director-routing-source-contract.md`: validated JFFS-backed rule store, deterministic RPDB/table ownership, per-client killswitch, and shared parser for M38 DNS policy |
 | M26 | DNS Director phase 1 | ASUS DNSFilter backend already provides the usable IPv4 enforcement engine; Merlin page absent | **SUCCESS** | A | guarded overlay ships adapted `DNSFilter.asp` + exact `state.js` enablement; validation run 36121711046. Remaining IPv6 Custom 1–3 parity is tracked separately as M36 |
 | M27 | ipset kernel/userspace support | ASUS lacks `ipset` userland and `ip_set*`/`xt_set` modules; Merlin contains them | **PORT** | B/C | run 36383330681: kernel/source build required first; do not overlay donor modules or userland alone; ABI diagnostics: `docs/optional-kernel-module-abi-strategy.md`. |
@@ -134,8 +134,8 @@ These are feature-bearing behavior changes rather than standalone pages.
 
 | ID | Function | Decision | Notes |
 |---|---|---|---|
-| M61 | QoS Classification resolves local IPv6 addresses | **PORT** | run 36383630066: ASUS lacks `QoS_Stats.asp` and the Merlin classification/conntrack httpd datapath; implement only with M46 source-side QoS Stats handlers |
-| M62 | Show tracked connections even without Adaptive QoS | **PORT** | run 36383630066: donor page depends on Merlin `bwdpi_conntrack`/`/proc/bw_cte_dump` httpd path absent in ASUS; fold into M46 source integration, not an isolated page overlay |
+| M61 | QoS Classification resolves local IPv6 addresses | **FOLDED INTO M46** | — | not a standalone port: IPv6 client/name handling is part of the M46 QoS Stats backend/UI contract |
+| M62 | Show tracked connections even without Adaptive QoS | **FOLDED INTO M46** | — | not a standalone port: BWDPI connection visibility/degradation semantics are part of `docs/qos-stats-source-contract.md` |
 | M63 | Basic IPv6 support for Traditional QoS | **NO PORT** | run 36383630066: ASUS `rc` already contains the core IPv6 TQoS runtime signatures `mangle_rules_ipv6`, `ip6tables-restore` and `QOSO`, matching donor surface; preserve newer ASUS implementation |
 | M64 | Traditional QoS overhead accuracy/download statistics improvements | **PORT** | clean ASUS 45956 source confirms no `qos_overhead`/`qos_atm`; donor shaping/framing rules and the M46-owned download tc-class datapath are bounded in `docs/qos-overhead-stats-source-contract.md`; narrow source integration only |
 | M65 | IPv6 DDNS support | ASUS already contains `ddns_ipv6_update`, `ddns_ipv6_ipaddr`, `ddns_ipv6_updated` runtime/default contract and stock IPv6 DDNS UI | **NO PORT** | — | run 36383666065: later ASUS already provides the donor feature; preserve stock implementation |
