@@ -119,13 +119,13 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M50 | DHCP reservation hostname field | already present in ASUS page | **NO PORT** | — | stock page contains `dhcp_hostname_x_0`; compare only semantics |
 | M51 | Wireless ACL/client-name display enhancement | ASUS 52334 already has client-name resolution and a newer shared `clientList` model | **NO PORT** | — | verified runtime page equivalence; preserve later ASUS implementation |
 | M52 | Wireless client auto-refresh | stock Wireless Log exists but ASUS 52334 lacks Merlin structured `get_wl_status` AJAX contract | **PORT** | C backend + A UI | small read-only Broadcom/HND HTTPD handler + add-only AJAX/exact page adaptation; contract in `docs/wireless-client-refresh-source-contract.md`; preserve M53 patch |
-| M53 | System Log / Wireless Log no-auto-logout behavior | shared pages differ | **PORT/REVIEW** | C | Merlin explicitly disables auto logout on these log pages |
-| M54 | System Log layout/filter/log-level enhancements | shared pages differ | **REVIEW** | C | port only demonstrably missing useful UI behavior |
-| M55 | WiFi icon reports both radios | shared UI; exact stock behavior unverified | **REVIEW** | C | small visual/behavioral delta |
+| M53 | System Log / Wireless Log no-auto-logout behavior | ASUS pages lacked Merlin session override | **SUCCESS** | A | two SHA-locked page-only patches validated by guarded overlay run 36369816037; no backend/core changes |
+| M54 | System Log layout/filter/log-level enhancements | ASUS lacked only the safe UI subset selected for this project | **SUCCESS** | A | local logFilter database + auto-refresh/filter controls validated by run 36370670710; unsupported Merlin backend log-level controls deliberately excluded |
+| M55 | WiFi icon reports both radios | stock single-state presentation adapted without replacing hardware-switch logic | **SUCCESS** | A | no-switch on/partial/off fallback + minimal partial-state CSS validated by run 36370439356 |
 | M56 | Editable-entry WebUI enhancements | ASUS 52334 already has editable-entry behavior on the main shared targets, including DHCP reservations and port forwarding; remaining Merlin-only edit surfaces map to separately gated NFS/OpenVPN/VPN Director features | **NO PORT** | — | run 36397818442: preserve newer ASUS table/edit implementations; do not apply a generic cross-page Merlin patch |
 | M57 | Advanced VPN status page | page absent; stock IPsec AJAX exists but Merlin OpenVPN status endpoint/globals are absent | **PORT** | C | do not add page alone; source-side HTTPD/OpenVPN status endpoint integration required before UI port |
-| M58 | QR codes for network/Guest Network | Merlin `qrcode.min.js` present; no same runtime asset in ASUS | **PORT/REVIEW** | A/C | verify ASUS has no alternative implementation before adding |
-| M59 | Local OUI database for WebUI/networkmap | Merlin `ajax/ouiDB.json` is runtime-only | **PORT/REVIEW** | A/C | enables local vendor lookup without remote query |
+| M58 | QR codes for network/Guest Network | ASUS lacked equivalent runtime asset on target pages | **SUCCESS** | A | add-only pinned QR library + exact page patches validated by run 36337583899 |
+| M59 | Local OUI database for WebUI/networkmap | ASUS used remote OUI lookups on three target surfaces | **SUCCESS** | A | pinned local OUI DB added and exactly three ASUS remote lookups redirected locally; guarded validation run 36336834393 |
 | M60 | JFFS upload/restore page | same backend dependency as M10 | **PORT** | C | folded into M10; one hardened backend contract in `docs/jffs-backup-restore-source-contract.md`, no duplicate implementation |
 
 ## 6. QoS and networking refinements from the 386 changelog
