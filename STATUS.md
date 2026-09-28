@@ -95,5 +95,5 @@ Only these project states are used:
 
 | Optional kernel module ABI CRC probe | **SUCCESS / DIAGNOSTIC LIMIT** | run `36447256650`: Merlin image contains NFS stack, CIFS, full ipset family, `sch_cake` and WireGuard modules, but stock ASUS and donor modules expose no readable MODVERSIONS CRC table (`required=0`, ASUS observed pairs=0); binary ABI cannot be proven from images, so M22/M23/M27/M32/M33 remain source-build-only and donor `.ko` transplant stays forbidden |
 
-| M29 isolated local NTP daemon build | **SUCCESS / REPRODUCIBLE CANDIDATE** | run `36466577777`: clean ASUS-lineage BusyBox NTPD built twice byte-identically as static ELF64 AArch64 single-applet (925720 bytes), no PT_INTERP, correct `-w/-t/-l/-I/-p` surface, qemu root launch stayed alive to timeout; SHA-256 `6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb`. Remaining M29 work is add-only lifecycle/dnsmasq integration after M01-M04 |
+| M29 isolated local NTP daemon foundation | **SUCCESS / DORMANT FOUNDATION** | reproducible build run `36466577777`; guarded overlay run `36468186414`: add-only `/usr/libexec/rtac86u-ntpd`, static AArch64/no PT_INTERP, SHA-256 `6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb`, QEMU option-surface PASS, and no overlay startup/config reference. M29 feature remains IN PROGRESS until M01-M04 lifecycle/dnsmasq integration |
 
