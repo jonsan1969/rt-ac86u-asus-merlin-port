@@ -81,6 +81,12 @@ jobs:
             exit "$oldconfig_rc"
           fi
 
+          # Old BusyBox bakes the current time into AUTOCONF_TIMESTAMP/BB_BT.
+          # Normalize it so clean rebuilds test source/config reproducibility,
+          # not wall-clock time.
+          sed -i 's/^#define AUTOCONF_TIMESTAMP .*/#define AUTOCONF_TIMESTAMP "1970-01-01 00:00:00 UTC"/' include/autoconf.h
+          grep -Fx '#define AUTOCONF_TIMESTAMP "1970-01-01 00:00:00 UTC"' include/autoconf.h
+
           echo '===== FINAL CONFIG =====' | tee -a "$OUT"
           grep -E '^(CONFIG_STATIC|CONFIG_NTPD|CONFIG_FEATURE_NTPD_SERVER|CONFIG_FEATURE_NTPD_CONF|CONFIG_FEATURE_IPV6|CONFIG_LONG_OPTS|CONFIG_CROSS_COMPILER_PREFIX)=' .config \
             | tee -a "$OUT"
@@ -201,6 +207,9 @@ jobs:
           set -o pipefail
           set -e
           [ "$oldconfig_rc" -eq 0 ]
+
+          sed -i 's/^#define AUTOCONF_TIMESTAMP .*/#define AUTOCONF_TIMESTAMP "1970-01-01 00:00:00 UTC"/' "$B/include/autoconf.h"
+          grep -Fx '#define AUTOCONF_TIMESTAMP "1970-01-01 00:00:00 UTC"' "$B/include/autoconf.h"
 
           make -C "$B" -j2 CROSS_COMPILE=aarch64-linux-gnu- V=1 > reports/local-ntp-rebuild.log 2>&1
           cp "$B/busybox" artifacts/rtac86u-ntpd-static-rebuild
