@@ -1,0 +1,64 @@
+name: Verify M48 cstats is non-HND in pinned donor
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/m48-cstats-hnd-applicability.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/Makefile release/src/router/httpd
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify non-HND gating
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/m48-cstats-hnd-applicability.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+
+          MK="$M/release/src/router/Makefile"
+          H="$M/release/src/router/httpd/data_arrays.h"
+          C="$M/release/src/router/httpd/data_arrays.c"
+
+          line="$(grep -n 'obj-y += cstats' "$MK" | cut -d: -f1 | head -n1)"
+          test -n "$line" || fail "cstats build line missing"
+          start=$((line-2))
+          sed -n "${start},${line}p" "$MK" | grep -Fq 'ifneq ($(HND_ROUTER),y)'             && pass "cstats build is gated by HND_ROUTER != y"             || fail "cstats is no longer non-HND gated"
+
+          grep -Fq '#if !defined(HND_ROUTER)' "$H"             && grep -Fq 'extern int ej_iptmon' "$H"             && grep -Fq 'extern int ej_ipt_bandwidth' "$H"             && grep -Fq 'extern int ej_iptraffic' "$H"             && pass "Per-IP HTTPD declarations are non-HND only"             || fail "Per-IP HTTPD declaration gating changed"
+
+          grep -Fq '#if !defined(HND_ROUTER)' "$C"             && grep -Fq 'int ej_iptmon' "$C"             && grep -Fq 'int ej_ipt_bandwidth' "$C"             && grep -Fq 'int ej_iptraffic' "$C"             && pass "Per-IP HTTPD implementations live in non-HND section"             || fail "Per-IP HTTPD implementation gating changed"
+
+          echo 'CLASSIFICATION M48_NO_PORT_RT_AC86U_HND' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m48-cstats-hnd-applicability
+          path: reports/m48-cstats-hnd-applicability.txt
+          if-no-files-found: warn
+          retention-days: 30
