@@ -1,0 +1,80 @@
+name: Probe ASUS 52334 Merlin NTP server backend
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/ntp-server-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe NTP server and redirect backend
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/ntp-server-52334.txt
+          : > "$OUT"
+          echo '===== RUNTIME =====' >> "$OUT"
+          for name in ntpd chronyd; do
+            p="$(find "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$name" -print -quit 2>/dev/null || true)"
+            [ -n "$p" ] && echo "PRESENT $p -> $(readlink "$p" || true)" >> "$OUT" || echo "MISSING $name" >> "$OUT"
+          done
+
+          echo '===== NVRAM / RC =====' >> "$OUT"
+          for sig in ntpd_enable ntpd_server_redir ntpd_server_trust; do
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              [ -f "$R/$rel" ] || continue
+              if strings -a "$R/$rel" | grep -Fq "$sig"; then echo "PASS $rel::$sig" >> "$OUT"; else echo "MISSING $rel::$sig" >> "$OUT"; fi
+            done
+          done
+
+          echo '===== FIREWALL REDIRECT =====' >> "$OUT"
+          strings -a "$R/sbin/rc" | grep -Ei 'dport 123|udp.*123|ntpd.*redir|NTP.*REDIR' | sort -u >> "$OUT" || true
+
+          echo '===== WEB =====' >> "$OUT"
+          grep -RInaE --binary-files=without-match 'ntpd_enable|ntpd_server_redir|ntpd_server_trust' "$R/www" 2>/dev/null | head -n 300 >> "$OUT" || true
+
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          daemon="$(find "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 -type f -name ntpd -print -quit 2>/dev/null || true)"
+          if [ -n "$daemon" ] && strings -a "$R/sbin/rc" | grep -Fq ntpd_enable; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=SOURCE_BACKEND_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ntp-server-52334
+          path: reports/ntp-server-52334.txt
+          if-no-files-found: error
+          retention-days: 14
