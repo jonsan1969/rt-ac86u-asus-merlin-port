@@ -19,7 +19,7 @@
 | JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series + pinned source contract documented in `docs/jffs-custom-script-port-plan.md` and `docs/jffs-custom-script-source-contract.md` |
 | ASUS 52334 DNSFilter runtime map | **SUCCESS** | Action 35993309478 verified retained stock backend/UI-support pieces |
 | DNS Director phase-1 overlay implementation | **SUCCESS** | guarded overlay changes only `DNSFilter.asp` + exact-patched `state.js`; validation run 36121711046 passed |
-| Guarded Merlin overlay validation | **SUCCESS** | latest exact-change validation run 36370439356 passed; ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear hashes unchanged |
+| Guarded Merlin overlay validation | **SUCCESS** | latest exact-change validation run 36370670710 passed; ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear hashes unchanged |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
 | JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
@@ -35,7 +35,7 @@
 | M45 Temperature/performance page | **SUCCESS** | ASUS-native `/ajax_coretmp.asp` backend reused; guarded validation run 36338181498 |
 | M52 Auto-refreshing wireless client list | **IN PROGRESS** | stock page + `wl_log.asp` exist, but Merlin's `ajax_wificlients.asp` endpoint depends on `get_wl_status`, absent from ASUS 52334 `httpd`; source-side HTTPD work required for full feature |
 | M53 System/Wireless Log no-auto-logout | **SUCCESS** | two SHA-locked page-only patches validated by guarded overlay run 36369816037; no backend/core changes |
-| M54 System Log enhancements | **IN PROGRESS** | safe subset isolated: local logFilter database + auto-refresh toggle; Merlin log-level controls excluded because ASUS 52334 lacks their backend keys |
+| M54 System Log enhancements | **SUCCESS** | safe UI-only subset implemented: local logFilter database + auto-refresh/filter controls; unsupported Merlin log-level backend controls deliberately excluded; guarded validation run 36370670710 |
 | M55 Dual-radio WiFi icon | **SUCCESS** | ASUS hardware-switch logic preserved; no-switch on/partial/off fallback plus minimal partial-state CSS validated in run 36370439356 |
 | Merlin feature port | **IN PROGRESS** | DNS Director + image-safe JFFS/addon + ASUS-backed Other Settings + monthly traffic + local OUI + WiFi QR implemented; no unsafe core binary replacement |
 | Flashable firmware | **IN PROGRESS** | no flashability claim until repack + hardware/runtime gates pass |
