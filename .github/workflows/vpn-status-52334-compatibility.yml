@@ -1,0 +1,111 @@
+name: Probe ASUS 52334 Advanced VPN Status compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/vpn-status-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30             -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe VPN status surface
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/vpn-status-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'STATUS ENDPOINTS'
+          for rel in ajax_vpn_status.asp ajax_ipsec.asp Advanced_VPNStatus.asp; do
+            if [ -f "$R/www/$rel" ]; then
+              echo "PRESENT /www/$rel" >> "$OUT"
+              sha256sum "$R/www/$rel" >> "$OUT"
+              case "$rel" in
+                ajax_vpn_status.asp|ajax_ipsec.asp) cat "$R/www/$rel" >> "$OUT" ;;
+              esac
+            else
+              echo "MISSING /www/$rel" >> "$OUT"
+            fi
+          done
+
+          section 'HTTPD STATUS SIGNATURES'
+          for sig in             vpn_server1_status vpn_server2_status vpn_client1_status vpn_client2_status             pptp_connected ipsec_connect_status openvpn; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+            fi
+          done
+
+          section 'NVRAM/RC SUPPORT'
+          for sig in             vpn_client1_addr vpn_client1_proto vpn_client1_port vpn_client1_desc             vpn_client2_addr vpn_client2_proto vpn_client2_port vpn_client2_desc             vpnc_clientlist vpnc_proto ipsec_server_enable; do
+            n=0
+            strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig" && n=$((n+1)) || true
+            strings -a "$R/sbin/rc" | grep -Fq "$sig" && n=$((n+1)) || true
+            printf '%s components=%d\n' "$sig" "$n" >> "$OUT"
+          done
+
+          section 'OPENVPN RUNTIME'
+          for rel in usr/sbin/openvpn usr/sbin/openvpn-event.sh etc/openvpn; do
+            if [ -e "$R/$rel" ]; then
+              echo "PRESENT /$rel" >> "$OUT"
+            else
+              echo "MISSING /$rel" >> "$OUT"
+            fi
+          done
+
+          section 'CLASSIFICATION'
+          missing=0
+          for rel in ajax_vpn_status.asp ajax_ipsec.asp; do
+            [ -f "$R/www/$rel" ] || missing=$((missing+1))
+          done
+          if [ "$missing" -eq 0 ]; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=SOURCE_OR_ENDPOINT_REQUIRED' >> "$OUT"
+          fi
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-status-52334-compatibility
+          path: reports/vpn-status-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
