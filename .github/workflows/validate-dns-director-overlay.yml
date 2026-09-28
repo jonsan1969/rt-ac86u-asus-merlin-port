@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip binutils qemu-user-static file
           python3 -m pip install --user --break-system-packages ubi-reader
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
@@ -548,6 +548,46 @@ jobs:
           cat reports/port-overlay-provenance.tsv
           cat reports/menuTree.patch.diff
 
+      - name: Verify standalone SCP overlay candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          S="$ASUS_ROOT/usr/bin/scp"
+          OUT=reports/scp-overlay-validation.txt
+          : > "$OUT"
+
+          test -f "$S"
+          test "$(sha256sum "$S" | awk '{print $1}')" = 'd47ec3eba8bde2e244b96feb47ed0fc26d4556de5aebfd3771822970c5754851'
+          test "$(stat -c '%a' "$S")" = '755'
+          file "$S" | tee -a "$OUT"
+          file "$S" | grep -Eq 'ELF 64-bit.*ARM aarch64|ELF 64-bit.*AArch64'
+
+          if readelf -l "$S" | grep -q 'INTERP'; then
+            echo 'FAIL SCP has PT_INTERP' | tee -a "$OUT"
+            exit 1
+          fi
+          echo 'PASS static AArch64/no PT_INTERP' | tee -a "$OUT"
+
+          strings -a "$S" | grep -Fxq '/usr/bin/dbclient'
+          echo 'PASS delegates SSH transport to ASUS /usr/bin/dbclient' | tee -a "$OUT"
+
+          set +e
+          qemu-aarch64-static "$S" > reports/scp-overlay-usage.txt 2>&1
+          usage_rc=$?
+          set -e
+          test "$usage_rc" -ne 0
+          grep -Fq 'usage: scp' reports/scp-overlay-usage.txt
+          echo 'PASS QEMU usage path' | tee -a "$OUT"
+
+          T=work/scp-overlay-smoke
+          rm -rf "$T"
+          mkdir -p "$T/src dir" "$T/dst dir"
+          printf 'guarded-overlay-scp-smoke\n' > "$T/src dir/file one.txt"
+          qemu-aarch64-static "$S" "$T/src dir/file one.txt" "$T/dst dir/copied file.txt"
+          cmp "$T/src dir/file one.txt" "$T/dst dir/copied file.txt"
+          echo 'PASS QEMU local copy path' | tee -a "$OUT"
+          echo 'CLASSIFICATION=M16_GUARDED_ADD_ONLY_SCP_PASS' | tee -a "$OUT"
+
       - name: Publish text reports only
         uses: actions/upload-artifact@v4
         with:
@@ -558,5 +598,7 @@ jobs:
             reports/sensitive-before.tsv
             reports/sensitive-after.tsv
             reports/menuTree.patch.diff
+            reports/scp-overlay-validation.txt
+            reports/scp-overlay-usage.txt
           if-no-files-found: error
           retention-days: 14
