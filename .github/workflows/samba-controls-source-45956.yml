@@ -1,0 +1,104 @@
+name: Probe Samba M18 M19 source delta on ASUS 386.45956
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/samba-controls-source-45956.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus-src sparse-checkout init --cone
+          git -C work/asus-src sparse-checkout set release/src/router
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin-src sparse-checkout init --cone
+          git -C work/merlin-src sparse-checkout set release/src/router
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
+
+      - name: Verify M18 M19 donor boundaries
+        run: |
+          set -euo pipefail
+          A=work/asus-src
+          M=work/merlin-src
+          OUT=reports/samba-controls-source-45956.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          must_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            grep -Fq "$token" "$root/$path" && pass "$label" || fail "$label"
+          }
+          must_not_have() {
+            local root="$1" path="$2" token="$3" label="$4"
+            if grep -Fq "$token" "$root/$path"; then fail "$label"; else pass "$label"; fi
+          }
+
+          echo '===== PINNING =====' | tee -a "$OUT"
+          git -C "$A" show -s --format='ASUS %H %s' HEAD | tee -a "$OUT"
+          git -C "$M" show -s --format='MERLIN %H %s' HEAD | tee -a "$OUT"
+
+          echo '===== CLEAN ASUS LINEAGE =====' | tee -a "$OUT"
+          must_not_have "$A" release/src/router/libdisk/write_smb_conf.c 'smbd_simpler_naming' "45956 generator lacks M18 backend"
+          must_not_have "$A" release/src/router/libdisk/write_smb_conf.c 'smbd_master' "45956 generator lacks M19 backend"
+          must_not_have "$A" release/src/router/libdisk/write_smb_conf.c 'wins support = yes' "45956 generator predates later WINS config path"
+          must_have "$A" release/src/router/shared/defaults.c '{ "smbd_wins", "1"' "45956 defaults retain a WINS key"
+          must_have "$A" release/src/router/shared/defaults.c '//	{ "smbd_master", "1" }' "45956 retains only a commented historical master key"
+
+          echo '===== M18 SIMPLER NAMING =====' | tee -a "$OUT"
+          must_have "$M" release/src/router/shared/defaults.c '{ "smbd_simpler_naming", "0"' "Merlin adds M18 default disabled"
+          must_have "$M" release/src/router/libdisk/write_smb_conf.c 'get_list_strings_count(folder_list, sh_num, folder_list[n])' "Merlin checks duplicate folder names"
+          must_have "$M" release/src/router/libdisk/write_smb_conf.c 'nvram_safe_get("smbd_simpler_naming")' "Merlin gates simpler naming by NVRAM"
+          must_have "$M" release/src/router/libdisk/write_smb_conf.c 'fprintf(fp, "[%s (at %s)]' "Merlin retains disambiguated fallback names"
+          simpler="$(grep -Fc 'nvram_safe_get("smbd_simpler_naming")' "$M/release/src/router/libdisk/write_smb_conf.c")"
+          [ "$simpler" -ge 3 ] \
+            && pass "Merlin applies M18 naming logic across all share-generation branches ($simpler)" \
+            || fail "Merlin M18 naming call-site count too small ($simpler)"
+
+          echo '===== M19 MASTER BROWSER =====' | tee -a "$OUT"
+          must_have "$M" release/src/router/shared/defaults.c '{ "smbd_master", "0"' "Merlin adds active M19 default disabled"
+          must_have "$M" release/src/router/libdisk/write_smb_conf.c 'if (nvram_get_int("smbd_master"))' "Merlin gates forced master config"
+          for token in 'os level = 255' 'domain master = yes' 'local master = yes' 'preferred master = yes'; do
+            must_have "$M" release/src/router/libdisk/write_smb_conf.c "$token" "Merlin emits $token"
+          done
+          must_have "$M" release/src/router/rc/usb.c 'nvram_match("smbd_master", "0")' "Merlin no-disk early-return accounts for M19"
+          must_have "$M" release/src/router/rc/usb.c 'nvram_get_int("smbd_master") || nvram_get_int("smbd_wins")' "Merlin can start Samba for master/WINS service without normal share path"
+
+          echo '===== UI =====' | tee -a "$OUT"
+          must_not_have "$A" release/src/router/www/Advanced_AiDisk_samba.asp 'name="smbd_simpler_naming"' "45956 UI lacks M18"
+          must_not_have "$A" release/src/router/www/Advanced_AiDisk_samba.asp 'name="smbd_master"' "45956 UI lacks M19"
+          must_have "$M" release/src/router/www/Advanced_AiDisk_samba.asp 'name="smbd_simpler_naming"' "Merlin UI exposes M18"
+          must_have "$M" release/src/router/www/Advanced_AiDisk_samba.asp 'name="smbd_master"' "Merlin UI exposes M19"
+
+          echo 'CLASSIFICATION M18_M19_SOURCE_REQUIRED_LATER_ASUS_GENERATOR_NEEDED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: samba-controls-source-45956
+          path: reports/samba-controls-source-45956.txt
+          if-no-files-found: warn
+          retention-days: 30
