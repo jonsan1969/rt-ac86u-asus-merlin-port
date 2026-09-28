@@ -1,0 +1,104 @@
+name: Verify JFFS core lifecycle API stability
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/jffs-core-lifecycle-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch clean and late donor references
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router/shared release/src/router/rc
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+          for v in m12 m14; do
+            git init "work/$v"
+            git -C "work/$v" remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+            git -C "work/$v" sparse-checkout init --cone
+            git -C "work/$v" sparse-checkout set release/src/router/shared release/src/router/rc
+          done
+          git -C work/m12 fetch --depth=1 --filter=blob:none origin 5b47ec64ce58d23c591e809d4cbad09d1121c4ea
+          git -C work/m12 checkout --detach FETCH_HEAD
+          git -C work/m14 fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/m14 checkout --detach FETCH_HEAD
+
+      - name: Verify stable lifecycle signatures
+        run: |
+          set -euo pipefail
+          A=work/asus
+          X=work/m12
+          Y=work/m14
+          OUT=reports/jffs-core-lifecycle-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          stable_line() {
+            local path="$1" line="$2" label="$3"
+            [ "$(grep -Fc "$line" "$X/$path")" -ge 1 ] || fail "M12 missing $label"
+            [ "$(grep -Fc "$line" "$Y/$path")" -ge 1 ] || fail "M14 missing $label"
+            pass "$label stable across M12/M14"
+          }
+          absent_asus() {
+            local path="$1" token="$2" label="$3"
+            if grep -Fq "$token" "$A/$path"; then fail "Clean ASUS unexpectedly has $label"; else pass "Clean ASUS lacks $label"; fi
+          }
+
+          cmp -s "$A/release/src/router/shared/scripts.c" "$X/release/src/router/shared/scripts.c"             && cmp -s "$X/release/src/router/shared/scripts.c" "$Y/release/src/router/shared/scripts.c"             && pass "Shared helper implementation is identical across ASUS45956/M12/M14"             || fail "Shared helper implementation drift"
+
+          stable_line release/src/router/rc/init.c             'run_custom_script("init-start", 0, NULL, NULL);' 'init-start'
+          stable_line release/src/router/rc/services.c             'run_custom_script("services-start", 0, NULL, NULL);' 'services-start'
+          stable_line release/src/router/rc/services.c             'run_custom_script("services-stop", 0, NULL, NULL);' 'services-stop'
+          stable_line release/src/router/rc/services.c             'run_custom_script("service-event", 120, actionstr, script);' 'service-event blocking'
+          stable_line release/src/router/rc/services.c             'run_custom_script("service-event-end", 0, actionstr, script);' 'service-event-end'
+          stable_line release/src/router/rc/services.c             'run_custom_script("nat-start", 0, NULL, NULL);' 'nat-start'
+          stable_line release/src/router/rc/firewall.c             'run_custom_script("firewall-start", 0, wan_if, NULL);' 'firewall-start'
+          stable_line release/src/router/rc/wan.c             'run_custom_script("wan-event", 0, tmp, tmp1);' 'wan-event'
+          stable_line release/src/router/rc/wan.c             'run_custom_script("wan-start", 0, tmp, NULL);' 'wan-start'
+          stable_line release/src/router/rc/udhcpc.c             'run_custom_script("dhcpc-event", 0, argv[1], "4");' 'WAN DHCPv4 event+4'
+          stable_line release/src/router/rc/udhcpc.c             'run_custom_script("dhcpc-event", 0, argv[1], NULL);' 'LAN DHCP event-only'
+          stable_line release/src/router/rc/udhcpc.c             'if (argv[2]) run_custom_script("dhcpc-event", 0, argv[2], "6");' 'WAN DHCPv6 event+6'
+          stable_line release/src/router/rc/udhcpc.c             'run_custom_script("zcip-event", 0, argv[1], NULL);' 'zcip-event'
+          stable_line release/src/router/rc/usb.c             'run_custom_script("pre-mount", 120, dev_name, type);' 'pre-mount'
+          stable_line release/src/router/rc/usb.c             'run_custom_script("post-mount", 120, mountpoint, NULL);' 'post-mount'
+          stable_line release/src/router/rc/usb.c             'run_custom_script("unmount", 120, mnt->mnt_dir, NULL);' 'unmount'
+          stable_line release/src/router/rc/qos.c             'run_custom_script("qos-start", 0, "rules", NULL);' 'qos-start rules'
+          stable_line release/src/router/rc/qos.c             'run_custom_script("qos-start", 120, "init", NULL);' 'qos-start init'
+          stable_line release/src/router/rc/watchdog.c             'run_custom_script("update-notification", 0, NULL, NULL);' 'update-notification'
+
+          [ "$(grep -Fc 'run_custom_script("qos-start", 120, "init", NULL);' "$X/release/src/router/rc/qos.c")" -eq 2 ]             && [ "$(grep -Fc 'run_custom_script("qos-start", 120, "init", NULL);' "$Y/release/src/router/rc/qos.c")" -eq 2 ]             && pass "Both late donor refs retain two blocking qos-start init call sites"             || fail "qos-start init call-site count drift"
+
+          absent_asus release/src/router/rc/services.c 'run_custom_script("service-event"' 'service-event'
+          absent_asus release/src/router/rc/udhcpc.c 'run_custom_script("dhcpc-event"' 'dhcpc-event'
+          absent_asus release/src/router/rc/usb.c 'run_custom_script("pre-mount"' 'pre-mount'
+          absent_asus release/src/router/rc/qos.c 'run_custom_script("qos-start"' 'qos-start'
+
+          echo 'CLASSIFICATION JFFS_CORE_LIFECYCLE_API_STABLE_LATE_386' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jffs-core-lifecycle-source
+          path: reports/jffs-core-lifecycle-source.txt
+          if-no-files-found: warn
+          retention-days: 30
