@@ -1,0 +1,185 @@
+#!/bin/sh
+# RT-AC86U local NTP server reconcile helper.
+# Dormant until invoked by the JFFS lifecycle integration.
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+
+DAEMON=/usr/libexec/rtac86u-ntpd
+PIDFILE=/var/run/rtac86u-ntpd.pid
+LOCKDIR=/tmp/rtac86u-local-ntp.lock
+STOPFILE=/tmp/rtac86u-local-ntp.stop
+WAIT_MAX=60
+
+log() {
+    if command -v logger >/dev/null 2>&1; then
+        logger -t local-ntp-reconcile -- "$*"
+    fi
+}
+
+nvget() {
+    nvram get "$1" 2>/dev/null || true
+}
+
+unlock() {
+    rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
+lock() {
+    n=0
+    while ! mkdir "$LOCKDIR" 2>/dev/null; do
+        n=$((n + 1))
+        [ "$n" -lt 10 ] || return 1
+        sleep 1
+    done
+    trap 'unlock' EXIT HUP INT TERM
+}
+
+valid_pid() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "$1" -gt 1 ] 2>/dev/null || return 1
+    [ -d "/proc/$1" ] || return 1
+    exe="$(readlink "/proc/$1/exe" 2>/dev/null || true)"
+    [ "$exe" = "$DAEMON" ]
+}
+
+stop_daemon() {
+    if [ -r "$PIDFILE" ]; then
+        pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+        if valid_pid "$pid"; then
+            kill "$pid" 2>/dev/null || true
+            n=0
+            while kill -0 "$pid" 2>/dev/null; do
+                n=$((n + 1))
+                [ "$n" -lt 10 ] || break
+                sleep 1
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
+        fi
+    fi
+    rm -f "$PIDFILE"
+}
+
+valid_iface() {
+    case "$1" in
+        ''|*[!A-Za-z0-9_.:-]*) return 1 ;;
+    esac
+    [ -d "/sys/class/net/$1" ]
+}
+
+valid_peer() {
+    peer="$1"
+    [ -n "$peer" ] || return 1
+    [ "${#peer}" -le 253 ] || return 1
+    case "$peer" in
+        -*|*[!A-Za-z0-9._:-]*) return 1 ;;
+    esac
+    return 0
+}
+
+start_now() {
+    [ ! -e "$STOPFILE" ] || {
+        stop_daemon
+        return 0
+    }
+
+    [ "$(nvget ntpd_enable)" = "1" ] || {
+        stop_daemon
+        return 0
+    }
+
+    [ "$(nvget ntp_ready)" = "1" ] || {
+        stop_daemon
+        log 'not starting: ASUS ntp_ready is not 1'
+        return 0
+    }
+
+    [ -x "$DAEMON" ] || {
+        stop_daemon
+        log "not starting: missing $DAEMON"
+        return 1
+    }
+
+    lan_if="$(nvget lan_ifname)"
+    if ! valid_iface "$lan_if"; then
+        stop_daemon
+        log "not starting: invalid LAN interface '$lan_if'"
+        return 1
+    fi
+
+    if [ -r "$PIDFILE" ]; then
+        pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+        if valid_pid "$pid"; then
+            return 0
+        fi
+        rm -f "$PIDFILE"
+    fi
+
+    set -- "$DAEMON" -w -t -l -I "$lan_if"
+    peer0="$(nvget ntp_server0)"
+    peer1="$(nvget ntp_server1)"
+    if valid_peer "$peer0"; then
+        set -- "$@" -p "$peer0"
+    fi
+    if valid_peer "$peer1" && [ "$peer1" != "$peer0" ]; then
+        set -- "$@" -p "$peer1"
+    fi
+
+    "$@" >/dev/null 2>&1 &
+    pid=$!
+    printf '%s\n' "$pid" > "$PIDFILE"
+    sleep 1
+    if ! valid_pid "$pid"; then
+        rm -f "$PIDFILE"
+        log 'failed to start isolated local NTP server'
+        return 1
+    fi
+    log "started isolated local NTP server on $lan_if"
+}
+
+wait_ready() {
+    elapsed=0
+    while [ "$elapsed" -lt "$WAIT_MAX" ]; do
+        [ ! -e "$STOPFILE" ] || { stop_daemon; return 0; }
+        [ "$(nvget ntpd_enable)" = "1" ] || { stop_daemon; return 0; }
+        if [ "$(nvget ntp_ready)" = "1" ]; then
+            start_now
+            return $?
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    stop_daemon
+    log "not starting: ASUS ntp_ready timeout after ${WAIT_MAX}s"
+    return 0
+}
+
+mode=${1:-now}
+case "$mode" in
+    stop)
+        # Signal any in-flight wait before contending for its lock.
+        : > "$STOPFILE"
+        ;;
+    now|reconcile|wait)
+        rm -f "$STOPFILE"
+        ;;
+    *)
+        echo "usage: $0 [now|wait|stop]" >&2
+        exit 2
+        ;;
+esac
+
+lock || {
+    log 'another reconcile instance holds the lock'
+    exit 0
+}
+
+case "$mode" in
+    now|reconcile) start_now ;;
+    wait) wait_ready ;;
+    stop) stop_daemon ;;
+esac
