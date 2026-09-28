@@ -125,16 +125,15 @@ jobs:
               classify_module "$feature" "$mod"
             done
           done <<'EOF'
-          M22_NFS|/(nfs|nfsd|sunrpc|lockd|grace).ko$
-          M23_CIFS|/cifs.ko$
-          M27_IPSET|/(ip_set|xt_set|ip_set_[^/]+).ko$
-          M32_CAKE|/(sch_cake|act_ctinfo).ko$
-          M33_WIREGUARD|/wireguard.ko$
+          M22_NFS|/(nfs|nfsd|sunrpc|lockd|grace)\\.ko$
+          M23_CIFS|/cifs\\.ko$
+          M27_IPSET|/(ip_set|xt_set|ip_set_[^/]+)\\.ko$
+          M32_CAKE|/(sch_cake|act_ctinfo)\\.ko$
+          M33_WIREGUARD|/wireguard\\.ko$
           EOF
 
           echo '===== COMMON MODULE SANITY =====' | tee -a "$OUT"
-          find "$A/lib/modules" -type f -name '*.ko' -printf '%f|%p
-' 2>/dev/null | sort -u > reports/asus-module-basenames.txt
+          find "$A/lib/modules" -type f -name '*.ko' -printf '%f|%p\\n' 2>/dev/null | sort -u > reports/asus-module-basenames.txt
           common=0; checked=0; hard_mismatch=0
           while IFS= read -r mmod; do
             base="$(basename "$mmod")"
