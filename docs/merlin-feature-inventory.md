@@ -57,7 +57,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M08 | AMTM management interface | absent; donor `usr/sbin/amtm` is a standalone shell script (run 36382931979) | **PORT** | A/C | do not expose yet: AMTM-managed addons depend on JFFS lifecycle hooks ASUS `rc` lacks; revisit after M01–M03 source integration |
 | M09 | Entware/addon friendliness | both images have `/opt -> tmp/opt`, but ASUS lacks Merlin `services-start`/`post-mount` rc hooks | **PORT** | A/C | dependency-blocked by JFFS event-hook integration; avoid a partial addon environment |
 | M10 | JFFS backup/restore/upload WebUI | stock settings-backup page exists, but JFFS-specific upload/backup handlers are absent from ASUS 52334 | **PORT** | C | source-side HTTPD/uploader integration required; do not expose dead UI |
-| M11 | Custom DDNS user-script callback | ASUS 52334 lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated` | **PORT** | C | source-side DDNS + JFFS hook integration required; stock DDNS path remains authoritative |
+| M11 | Custom DDNS user-script callback | ASUS 52334 lacks Merlin `CUSTOM` script provider, `ddns-start` hook and `ddns_custom_updated` callback | **PORT** | C | exact source contract in `docs/custom-ddns-source-contract.md`; preserve stock DDNS/Inadyn and ASUS `WWW.DYNDNS.ORG(CUSTOM)` while adding the separate script-driven provider after JFFS core hooks exist |
 | M12 | Scheduled jobs / `cru` | ASUS has a functional native `cru`; Merlin's material delta is fd-based `flock` locking | **NO PORT** | B | keep ASUS `cru`/crond/BusyBox. QEMU cannot execute this ASUS BusyBox reliably enough to prove the fd-278 delta (run 36383042773), so no unproven lock patch is justified |
 
 ## 2. Shell, SSH and administration
