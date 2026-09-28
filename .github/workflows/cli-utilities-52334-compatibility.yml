@@ -1,0 +1,136 @@
+name: Probe Merlin CLI utilities on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/cli-utilities-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction and ARM execution tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip qemu-user-static file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Inventory CLI delta
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/cli-utilities-52334.txt
+          : > "$OUT"
+
+          echo '===== ASUS BUSYBOX SANITY =====' >> "$OUT"
+          BB="$A/bin/busybox"
+          file "$BB" >> "$OUT"
+          sha256sum "$BB" >> "$OUT"
+          for args in '' '--help' '--list' '--list-full' 'flock --help' 'vi --help' 'awk --help'; do
+            set +e
+            if [ -n "$args" ]; then
+              qemu-arm-static -L "$A" "$BB" $args > reports/busybox-test.txt 2>&1
+            else
+              qemu-arm-static -L "$A" "$BB" > reports/busybox-test.txt 2>&1
+            fi
+            rc=$?
+            set -e
+            echo "busybox [$args] rc=$rc" >> "$OUT"
+            head -n 25 reports/busybox-test.txt >> "$OUT" || true
+          done
+          echo '-- static flock strings --' >> "$OUT"
+          strings -a "$BB" | grep -Ei '^flock$|flock|applet not found|multi-call' | head -n 40 >> "$OUT" || true
+
+          echo '===== MERLIN BUSYBOX SYMLINKS ABSENT IN ASUS =====' >> "$OUT"
+          : > reports/merlin-busybox-only.tsv
+          for base in bin sbin usr/bin usr/sbin; do
+            [ -d "$M/$base" ] || continue
+            find "$M/$base" -maxdepth 1 -type l -print0 | while IFS= read -r -d '' p; do
+              rel="${p#"$M/"}"
+              target="$(readlink "$p")"
+              resolved="$(readlink -f "$p" || true)"
+              case "$resolved" in
+                "$M/bin/busybox"|"$M"/*/busybox)
+                  if [ ! -e "$A/$rel" ] && [ ! -L "$A/$rel" ]; then
+                    name="$(basename "$rel")"
+                    static=no
+                    strings -a "$BB" | grep -Fxq "$name" && static=yes || true
+                    printf '%s\t%s\tasus_busybox_string=%s\n' "$rel" "$target" "$static" >> reports/merlin-busybox-only.tsv
+                  fi
+                  ;;
+              esac
+            done
+          done
+          sort -u reports/merlin-busybox-only.tsv -o reports/merlin-busybox-only.tsv
+          cat reports/merlin-busybox-only.tsv >> "$OUT"
+
+          echo '===== MERLIN STANDALONE ELF ABSENT IN ASUS =====' >> "$OUT"
+          : > reports/merlin-standalone-only.tsv
+          for base in bin sbin usr/bin usr/sbin; do
+            [ -d "$M/$base" ] || continue
+            find "$M/$base" -maxdepth 1 -type f -print0 | while IFS= read -r -d '' p; do
+              rel="${p#"$M/"}"
+              [ -e "$A/$rel" ] && continue
+              if file "$p" | grep -q 'ELF .* ARM'; then
+                needed="$(readelf -d "$p" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p' | paste -sd, -)"
+                missing=0
+                while read -r lib; do
+                  [ -n "$lib" ] || continue
+                  find "$A/lib" "$A/usr/lib" -maxdepth 2 \( -type f -o -type l \) -name "$lib" -print -quit 2>/dev/null | grep -q . || missing=$((missing+1))
+                done < <(readelf -d "$p" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p')
+                printf '%s\tsha256=%s\tneeded=%s\tmissing=%s\n' "$rel" "$(sha256sum "$p" | cut -d' ' -f1)" "$needed" "$missing" >> reports/merlin-standalone-only.tsv
+              fi
+            done
+          done
+          sort -u reports/merlin-standalone-only.tsv -o reports/merlin-standalone-only.tsv
+          cat reports/merlin-standalone-only.tsv >> "$OUT"
+
+          echo '===== SAFE NEXT FILTER =====' >> "$OUT"
+          echo 'BusyBox symlinks are NOT candidates unless ASUS runtime invocation is proven.' >> "$OUT"
+          echo 'Standalone ELFs with missing=0 are dependency candidates only; lifecycle/config semantics still require review.' >> "$OUT"
+          cat "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-utilities-52334
+          path: |
+            reports/cli-utilities-52334.txt
+            reports/merlin-busybox-only.tsv
+            reports/merlin-standalone-only.tsv
+          if-no-files-found: error
+          retention-days: 14
