@@ -63,7 +63,7 @@ jobs:
           for x in $targets; do
             tmp="reports/applet-$x.txt"
             set +e
-            qemu-arm-static -L "$R" "$R/bin/busybox" "$x" --help > "$tmp" 2>&1
+            qemu-arm-static -0 "$x" -L "$R" "$R/bin/busybox" --help > "$tmp" 2>&1
             rc=$?
             set -e
             if grep -Eiq 'applet not found|unknown applet|not found' "$tmp"; then
