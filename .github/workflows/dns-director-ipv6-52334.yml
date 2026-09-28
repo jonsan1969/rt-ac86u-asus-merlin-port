@@ -1,0 +1,126 @@
+name: Probe ASUS 52334 IPv6 DNS Director compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/dns-director-ipv6-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe IPv6 DNSFilter runtime
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/dns-director-ipv6-52334.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'RC IPV6 DNSFILTER TOKENS'
+          for sig in dnsfilter_custom61 dnsfilter_custom62 dnsfilter_custom63                      nat_rules_ipv6.dnsfilter DNSFILTERI DNSFILTERF 'option6:23'                      dnsfilter_rulelist; do
+            if strings -a "$R/sbin/rc" | grep -Fq "$sig"; then
+              echo "PASS rc::$sig" >> "$OUT"
+            else
+              echo "MISSING rc::$sig" >> "$OUT"
+            fi
+          done
+
+          section 'HTTPD IPV6 DNSFILTER TOKENS'
+          for sig in dnsfilter_custom61 dnsfilter_custom62 dnsfilter_custom63 dnsfilter_modes_list; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+            fi
+          done
+
+          section 'DEFAULTS / SHARED'
+          for lib in "$R/usr/lib/libshared.so" "$R/lib/libshared.so"; do
+            [ -f "$lib" ] || continue
+            echo "--- $lib ---" >> "$OUT"
+            for sig in dnsfilter_custom61 dnsfilter_custom62 dnsfilter_custom63; do
+              if strings -a "$lib" | grep -Fq "$sig"; then
+                echo "PASS libshared::$sig" >> "$OUT"
+              else
+                echo "MISSING libshared::$sig" >> "$OUT"
+              fi
+            done
+          done
+
+          section 'IPV6 FIREWALL USERSPACE'
+          for rel in usr/sbin/ip6tables sbin/ip6tables usr/sbin/ip6tables-restore sbin/ip6tables-restore; do
+            if [ -e "$R/$rel" ]; then
+              echo "PRESENT /$rel -> $(readlink "$R/$rel" || true)" >> "$OUT"
+            else
+              echo "MISSING /$rel" >> "$OUT"
+            fi
+          done
+
+          section 'CURRENT STOCK DNSFILTER WEB REFERENCES'
+          grep -RInaE --binary-files=without-match             'dnsfilter_custom6[123]|dnsfilter_custom[123]|dnsfilter_rulelist|dnsfilter_modes_list'             "$R/www" 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'CLASSIFICATION'
+          core=0
+          for sig in dnsfilter_custom61 dnsfilter_custom62 dnsfilter_custom63; do
+            strings -a "$R/sbin/rc" | grep -Fq "$sig" && core=$((core+1)) || true
+          done
+          ipv6rules=0
+          for sig in nat_rules_ipv6.dnsfilter DNSFILTERI DNSFILTERF; do
+            strings -a "$R/sbin/rc" | grep -Fq "$sig" && ipv6rules=$((ipv6rules+1)) || true
+          done
+          web=0
+          for sig in dnsfilter_custom61 dnsfilter_custom62 dnsfilter_custom63; do
+            strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig" && web=$((web+1)) || true
+          done
+          echo "ipv6_custom_keys_in_rc=$core" >> "$OUT"
+          echo "ipv6_rule_signatures_in_rc=$ipv6rules" >> "$OUT"
+          echo "ipv6_custom_keys_in_httpd=$web" >> "$OUT"
+          if [ "$core" -eq 3 ] && [ "$ipv6rules" -ge 2 ] && [ "$web" -eq 3 ]; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          elif [ "$core" -eq 3 ] && [ "$ipv6rules" -ge 2 ]; then
+            echo 'CLASSIFICATION=HTTPD_UI_SOURCE_GAP' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=RC_SOURCE_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-director-ipv6-52334
+          path: reports/dns-director-ipv6-52334.txt
+          if-no-files-found: error
+          retention-days: 14
