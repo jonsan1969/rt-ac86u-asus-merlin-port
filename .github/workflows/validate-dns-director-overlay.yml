@@ -679,6 +679,73 @@ jobs:
 
           echo 'CLASSIFICATION=M29_DORMANT_ADD_ONLY_BINARY_FOUNDATION_PASS' | tee -a "$OUT"
 
+      - name: Verify dormant wsdd2 overlay foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          W="$ASUS_ROOT/usr/sbin/wsdd2"
+          OUT=reports/wsdd2-overlay-validation.txt
+
+          if ! python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ports/active.json").read_text(encoding="utf-8"))
+          raise SystemExit(0 if any(e.get("target")=="/usr/sbin/wsdd2" for e in d.get("entries",[])) else 1)
+          PY
+          then
+            echo 'SKIP /usr/sbin/wsdd2 is not active in overlay manifest'
+            exit 0
+          fi
+
+          : > "$OUT"
+          test -f "$W"
+          test "$(sha256sum "$W" | awk '{print $1}')" = '89a4309ccbe6a33c74ac2ea971c91af1e753ca930c26767259594172189b94e0'
+          test "$(stat -c '%a' "$W")" = '755'
+          file "$W" | tee -a "$OUT"
+          file "$W" | grep -Eq 'ELF 32-bit.*ARM'
+
+          readelf -l "$W" | grep -Fq '/lib/ld-linux.so.3'
+          echo 'PASS interpreter=/lib/ld-linux.so.3' | tee -a "$OUT"
+
+          mapfile -t needed < <(readelf -d "$W" | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p' | sort)
+          printf 'NEEDED %s\n' "${needed[@]}" | tee -a "$OUT"
+          [ "${#needed[@]}" -eq 2 ]
+          [ "${needed[0]}" = 'ld-linux.so.3' ]
+          [ "${needed[1]}" = 'libc.so.6' ]
+          test -e "$ASUS_ROOT/lib/ld-linux.so.3"
+          test -e "$ASUS_ROOT/lib/libc.so.6"
+          echo 'PASS exact stock loader/libc dependency set' | tee -a "$OUT"
+
+          set +e
+          qemu-arm-static -L "$ASUS_ROOT" "$W" --help > reports/wsdd2-overlay-help.txt 2>&1
+          help_rc=$?
+          set -e
+          echo "help_rc=$help_rc" | tee -a "$OUT"
+          [ "$help_rc" -ne 126 ]
+          [ "$help_rc" -ne 127 ]
+          echo 'PASS QEMU loader smoke' | tee -a "$OUT"
+
+          python3 - <<'PY' | tee -a "$OUT"
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ports/active.json").read_text(encoding="utf-8"))
+          target="/usr/sbin/wsdd2"
+          owners=[e for e in d["entries"] if e.get("target")==target]
+          if len(owners)!=1 or owners[0].get("type")!="copy" or owners[0].get("policy")!="add_only":
+              raise SystemExit("wsdd2 manifest owner is not exactly one add-only copy")
+          refs=[]
+          for e in d["entries"]:
+              if e.get("target")==target:
+                  continue
+              if "wsdd2" in json.dumps(e,sort_keys=True).lower():
+                  refs.append(e.get("target"))
+          if refs:
+              raise SystemExit(f"wsdd2 is not dormant; other overlay entries reference it: {refs}")
+          print("PASS dormant: no overlay lifecycle/config entry references wsdd2")
+          PY
+
+          echo 'CLASSIFICATION=M21_DORMANT_ADD_ONLY_BINARY_FOUNDATION_PASS' | tee -a "$OUT"
+
       - name: Publish text reports only
         uses: actions/upload-artifact@v4
         with:
@@ -693,5 +760,7 @@ jobs:
             reports/scp-overlay-usage.txt
             reports/ntpd-overlay-validation.txt
             reports/ntpd-overlay-help.txt
+            reports/wsdd2-overlay-validation.txt
+            reports/wsdd2-overlay-help.txt
           if-no-files-found: error
           retention-days: 14
