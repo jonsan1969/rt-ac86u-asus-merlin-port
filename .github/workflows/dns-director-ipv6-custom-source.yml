@@ -1,0 +1,74 @@
+name: Verify M36 IPv6 custom DNS Director donor delta
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/dns-director-ipv6-custom-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/rc release/src/router/shared release/src/router/www
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify exact custom IPv6 mapping
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/dns-director-ipv6-custom-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          D="$M/release/src/router/shared/defaults.c"
+          R="$M/release/src/router/rc/dnsfilter.c"
+          W="$M/release/src/router/www/DNSDirector.asp"
+
+          for n in 1 2 3; do
+            have "$D" ""dnsfilter_custom6$n", """ "Default exists for dnsfilter_custom6$n"
+            have "$R" "nvram_safe_get("dnsfilter_custom6$n")" "IPv6 resolver consumes dnsfilter_custom6$n"
+            have "$W" "name="dnsfilter_custom6$n"" "UI exposes dnsfilter_custom6$n"
+          done
+
+          have "$R" 'if (proto == AF_INET6)' "Resolver has AF_INET6 branch"
+          have "$R" '#ifdef HND_ROUTER' "IPv6 custom mapping is HND-specific in donor"
+          have "$R" 'case DNSF_SRV_CUSTOM1:' "Custom1 mode handled"
+          have "$R" 'case DNSF_SRV_CUSTOM2:' "Custom2 mode handled"
+          have "$R" 'case DNSF_SRV_CUSTOM3:' "Custom3 mode handled"
+          have "$R" 'dnsfsrv->server2[0] = '\''\0'\''' "Custom IPv6 modes use one server"
+
+          have "$W" 'validator.isLegal_ipv6(document.form.dnsfilter_custom61)' "UI validates custom61"
+          have "$W" 'validator.isLegal_ipv6(document.form.dnsfilter_custom62)' "UI validates custom62"
+          have "$W" 'validator.isLegal_ipv6(document.form.dnsfilter_custom63)' "UI validates custom63"
+          have "$W" 'action_script" value="restart_dnsfilter"' "UI uses existing DNSFilter restart flow"
+
+          echo 'CLASSIFICATION M36_NARROW_CUSTOM_IPV6_SOURCE_ADAPTATION' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-director-ipv6-custom-source
+          path: reports/dns-director-ipv6-custom-source.txt
+          if-no-files-found: warn
+          retention-days: 30
