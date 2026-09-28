@@ -1,0 +1,98 @@
+name: Probe ASUS 52334 Wireless ACL client-name behavior
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/wireless-acl-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified ASUS 52334 and Merlin 386.14_2
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Probe ACL client-name delta
+        run: |
+          set -euo pipefail
+          OUT=reports/wireless-acl-52334-compatibility.txt
+          : > "$OUT"
+          for side in ASUS MERLIN; do
+            if [ "$side" = ASUS ]; then R="$ASUS_ROOT"; else R="$MERLIN_ROOT"; fi
+            P="$R/www/Advanced_ACL_Content.asp"
+            echo "===== $side Advanced_ACL_Content.asp =====" >> "$OUT"
+            if [ ! -f "$P" ]; then
+              echo MISSING >> "$OUT"
+              continue
+            fi
+            sha256sum "$P" >> "$OUT"
+            for sig in               'clientName = "New device"'               'clientList['               'wl_maclist_x_array'               'showDropdownClientList'               'manually_maclist_list_array'; do
+              n=$(grep -Foc "$sig" "$P" || true)
+              printf '%s count=%s\n' "$sig" "$n" >> "$OUT"
+            done
+            grep -n -A35 -B15 'clientName = "New device"' "$P" >> "$OUT" || true
+            grep -n -A35 -B15 'function show_wl_maclist_x' "$P" >> "$OUT" || true
+            echo >> "$OUT"
+          done
+
+          echo '===== SUPPORT ASSETS =====' >> "$OUT"
+          for rel in client_function.js state.js; do
+            echo "--- $rel ---" >> "$OUT"
+            sha256sum "$ASUS_ROOT/www/$rel" >> "$OUT"
+            grep -nEi -A6 -B4 'clientList|showDropdownClientList|manually_maclist' "$ASUS_ROOT/www/$rel" | head -n 200 >> "$OUT" || true
+          done
+
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          A="$ASUS_ROOT/www/Advanced_ACL_Content.asp"
+          if grep -Fq 'clientName = "New device"' "$A" && grep -Fq 'manually_maclist_list_array' "$A"; then
+            echo 'CLASSIFICATION=NO_PORT_STOCK_EQUIVALENT' >> "$OUT"
+          elif grep -Fq 'clientList[' "$ASUS_ROOT/www/client_function.js"; then
+            echo 'CLASSIFICATION=IMAGE_SAFE_PAGE_PATCH_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=SOURCE_OR_SHARED_UI_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-acl-52334-compatibility
+          path: reports/wireless-acl-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
