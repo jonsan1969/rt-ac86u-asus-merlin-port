@@ -77,57 +77,80 @@ jobs:
             echo "flock_path=$FP target=$(readlink "$FP" || true)" >> "$OUT"
             ls -l "$FP" >> "$OUT"
             file -L "$FP" >> "$OUT" || true
-            # Direct qemu-user invocation is not trustworthy for this ASUS
-            # BusyBox (even known applets return rc=1), so execute the exact
-            # firmware process model under binfmt/chroot instead: ASUS /bin/sh
-            # opens fd 278, ASUS /usr/bin/flock locks that inherited fd, a
-            # second open must contend, then the lock must release on close.
+            # Test the two assumptions Merlin's exact delta needs, without
+            # relying on runner binfmt/chroot:
+            #   1) ASUS BusyBox flock implements fd locking + contention.
+            #      Use fd 0 because qemu-user necessarily preserves it.
+            #   2) ASUS BusyBox ash accepts the high fd 278 redirection used
+            #      verbatim by Merlin cru.
+            BB="$ASUS_ROOT/bin/busybox"
+            LOCK="$PWD/reports/flock-qemu.lock"
+            FD278="$PWD/reports/fd278-qemu.test"
+            : > "$LOCK"
+            rm -f "$FD278" reports/flock-holder.status
+
             echo '-- static flock evidence --' >> "$OUT"
-            strings -a "$ASUS_ROOT/bin/busybox" | grep -Ei '^flock$|flock' | head -n 20 >> "$OUT" || true
+            strings -a "$BB" | grep -Ei '^flock$|flock' | head -n 20 >> "$OUT" || true
 
             set +e
-            sudo chroot "$ASUS_ROOT" /bin/busybox true > reports/chroot-sanity.txt 2>&1
-            sanity_rc=$?
+            qemu-arm-static -L "$ASUS_ROOT" -0 true "$BB" > reports/argv0-true.txt 2>&1
+            true_rc=$?
+            qemu-arm-static -L "$ASUS_ROOT" -0 sh "$BB" -c 'echo ASH_OK' > reports/argv0-sh.txt 2>&1
+            sh_rc=$?
+            qemu-arm-static -L "$ASUS_ROOT" -0 sh "$BB" -c "exec 278>\\"$FD278\\"; printf FD278_OK >&278" > reports/fd278-shell.txt 2>&1
+            fd278_rc=$?
             set -e
-            echo "chroot_busybox_true_rc=$sanity_rc" >> "$OUT"
-            cat reports/chroot-sanity.txt >> "$OUT" || true
+            echo "argv0_true_rc=$true_rc argv0_sh_rc=$sh_rc fd278_shell_rc=$fd278_rc" >> "$OUT"
+            cat reports/argv0-true.txt reports/argv0-sh.txt reports/fd278-shell.txt >> "$OUT" || true
+            [ -f "$FD278" ] && cat "$FD278" >> "$OUT" || true
 
-            if [ "$sanity_rc" -eq 0 ]; then
+            # Holder: its shell keeps the same open-file description on stdin
+            # after the flock applet exits, so the lock remains held during sleep.
+            (
+              exec 0<>"$LOCK"
               set +e
-              sudo chroot "$ASUS_ROOT" /bin/sh -c '
-                L=/var/lock/cron.lock.cru-probe
-                rm -f "$L"
-                exec 278>"$L"
-                /usr/bin/flock -x 278
-                acquire_rc=$?
-                (
-                  exec 279>"$L"
-                  /usr/bin/flock -n -x 279
-                )
-                contend_rc=$?
-                exec 278>&-
-                (
-                  exec 279>"$L"
-                  /usr/bin/flock -n -x 279
-                )
-                release_rc=$?
-                rm -f "$L"
-                echo "acquire_rc=$acquire_rc contend_rc=$contend_rc release_rc=$release_rc"
-                [ "$acquire_rc" -eq 0 ] && [ "$contend_rc" -ne 0 ] && [ "$release_rc" -eq 0 ]
-              ' > reports/flock-chroot.txt 2>&1
-              flock_rc=$?
+              qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -x 0 > reports/flock-holder.txt 2>&1
+              hrc=$?
               set -e
-              echo "flock_chroot_test_rc=$flock_rc" >> "$OUT"
-              cat reports/flock-chroot.txt >> "$OUT" || true
-              if [ "$flock_rc" -eq 0 ]; then
-                echo 'flock_fd_semantics=PASS' >> "$OUT"
-                echo 'CLASSIFICATION=EXACT_CRU_FLOCK_PATCH_JUSTIFIED' >> "$OUT"
-              else
-                echo 'flock_fd_semantics=FAIL' >> "$OUT"
-                echo 'CLASSIFICATION=KEEP_ASUS_CRU_NO_FLOCK_ADAPT' >> "$OUT"
-              fi
+              echo "$hrc" > reports/flock-holder.status
+              [ "$hrc" -eq 0 ] || exit "$hrc"
+              sleep 3
+            ) &
+            holder_pid=$!
+
+            for _ in 1 2 3 4 5 6 7 8 9 10; do
+              [ -s reports/flock-holder.status ] && break
+              sleep 0.2
+            done
+            holder_acquire_rc="$(cat reports/flock-holder.status 2>/dev/null || echo 99)"
+
+            set +e
+            (
+              exec 0<>"$LOCK"
+              qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -n -x 0
+            ) > reports/flock-contend.txt 2>&1
+            contend_rc=$?
+            wait "$holder_pid"
+            holder_wait_rc=$?
+            (
+              exec 0<>"$LOCK"
+              qemu-arm-static -L "$ASUS_ROOT" -0 flock "$BB" -n -x 0
+            ) > reports/flock-release.txt 2>&1
+            release_rc=$?
+            set -e
+
+            echo "flock_fd0_acquire_rc=$holder_acquire_rc" >> "$OUT"
+            echo "flock_fd0_contend_rc=$contend_rc" >> "$OUT"
+            echo "flock_fd0_release_rc=$release_rc" >> "$OUT"
+            cat reports/flock-holder.txt reports/flock-contend.txt reports/flock-release.txt >> "$OUT" || true
+
+            if [ "$true_rc" -eq 0 ] && [ "$sh_rc" -eq 0 ] && [ "$fd278_rc" -eq 0 ] && \
+               [ "$holder_acquire_rc" -eq 0 ] && [ "$contend_rc" -ne 0 ] && [ "$release_rc" -eq 0 ]; then
+              echo 'flock_fd_semantics=PASS' >> "$OUT"
+              echo 'fd278_redirection=PASS' >> "$OUT"
+              echo 'CLASSIFICATION=EXACT_CRU_FLOCK_PATCH_JUSTIFIED' >> "$OUT"
             else
-              echo 'flock_fd_semantics=UNTESTABLE_WITH_BINFMT' >> "$OUT"
+              echo 'flock_fd_semantics=NOT_PROVEN' >> "$OUT"
               echo 'CLASSIFICATION=KEEP_ASUS_CRU_NO_UNPROVEN_ADAPT' >> "$OUT"
             fi
           else
