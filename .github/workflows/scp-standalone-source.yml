@@ -65,11 +65,125 @@ jobs:
           echo 'CLASSIFICATION M16_ADD_ONLY_STANDALONE_SCP_BUILD' | tee -a "$OUT"
           echo 'DO_NOT_REPLACE_ASUS_DROPBEAR' | tee -a "$OUT"
 
+      - name: Build static AArch64 standalone SCP
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross \
+            qemu-user-static file make
+
+          M=work/merlin/release/src/router/dropbear
+          OUT=reports/scp-standalone-source.txt
+          mkdir -p artifacts work/scp-smoke
+
+          cd "$M"
+          make distclean >/dev/null 2>&1 || true
+          CC=aarch64-linux-gnu-gcc \
+          AR=aarch64-linux-gnu-ar \
+          RANLIB=aarch64-linux-gnu-ranlib \
+          STRIP=aarch64-linux-gnu-strip \
+          CFLAGS='-Os' \
+          LDFLAGS='-Wl,--build-id=none' \
+            ./configure \
+              --host=aarch64-linux-gnu \
+              --enable-static \
+              --disable-zlib \
+              --enable-bundled-libtom \
+              > "$GITHUB_WORKSPACE/reports/scp-configure.log" 2>&1
+
+          make -j2 PROGRAMS=scp MULTI=0 SCPPROGRESS=1 scp \
+            > "$GITHUB_WORKSPACE/reports/scp-build.log" 2>&1
+          aarch64-linux-gnu-strip scp
+          cp scp "$GITHUB_WORKSPACE/artifacts/rtac86u-scp"
+          chmod 0755 "$GITHUB_WORKSPACE/artifacts/rtac86u-scp"
+          cd "$GITHUB_WORKSPACE"
+
+          echo '===== BUILT SCP =====' | tee -a "$OUT"
+          file artifacts/rtac86u-scp | tee -a "$OUT"
+          sha256sum artifacts/rtac86u-scp | tee -a "$OUT"
+          stat -c 'size=%s mode=%a' artifacts/rtac86u-scp | tee -a "$OUT"
+          aarch64-linux-gnu-readelf -l artifacts/rtac86u-scp | tee reports/scp-readelf.txt >> "$OUT"
+
+          file artifacts/rtac86u-scp | grep -Eq 'ELF 64-bit.*ARM aarch64|ELF 64-bit.*AArch64'
+          if aarch64-linux-gnu-readelf -l artifacts/rtac86u-scp | grep -q 'INTERP'; then
+            echo 'FAIL standalone SCP has PT_INTERP' | tee -a "$OUT"
+            exit 1
+          fi
+          echo 'PASS standalone SCP is static AArch64/no PT_INTERP' | tee -a "$OUT"
+
+          strings artifacts/rtac86u-scp | grep -Fxq '/usr/bin/dbclient'
+          echo 'PASS compiled SCP embeds ASUS dbclient transport path' | tee -a "$OUT"
+
+      - name: QEMU SCP smoke tests
+        run: |
+          set -euo pipefail
+          BIN="$GITHUB_WORKSPACE/artifacts/rtac86u-scp"
+          OUT="$GITHUB_WORKSPACE/reports/scp-standalone-source.txt"
+          S="$GITHUB_WORKSPACE/work/scp-smoke"
+          rm -rf "$S"
+          mkdir -p "$S/src dir" "$S/dst dir"
+
+          set +e
+          qemu-aarch64-static "$BIN" > reports/scp-usage.txt 2>&1
+          usage_rc=$?
+          set -e
+          cat reports/scp-usage.txt | tee -a "$OUT"
+          [ "$usage_rc" -ne 0 ]
+          grep -Fq 'usage: scp' reports/scp-usage.txt
+          echo 'PASS standalone usage path executes under qemu-aarch64' | tee -a "$OUT"
+
+          printf 'scp-local-copy-test\n' > "$S/src dir/file one.txt"
+          qemu-aarch64-static "$BIN" "$S/src dir/file one.txt" "$S/dst dir/copied file.txt"
+          cmp "$S/src dir/file one.txt" "$S/dst dir/copied file.txt"
+          echo 'PASS local-to-local copy path works under qemu-aarch64' | tee -a "$OUT"
+
+          set +e
+          qemu-aarch64-static "$BIN" -S /bin/false "$S/src dir/file one.txt" example.invalid:/tmp/x \
+            > reports/scp-remote.out 2> reports/scp-remote.err
+          remote_rc=$?
+          set -e
+          echo "remote_false_rc=$remote_rc" | tee -a "$OUT"
+          [ "$remote_rc" -ne 0 ]
+          echo 'PASS remote path honors -S transport override and fails closed' | tee -a "$OUT"
+
+      - name: Verify clean rebuild reproducibility
+        run: |
+          set -euo pipefail
+          M=work/merlin/release/src/router/dropbear
+          OUT=reports/scp-standalone-source.txt
+          first="$(sha256sum artifacts/rtac86u-scp | awk '{print $1}')"
+
+          cd "$M"
+          make clean >/dev/null 2>&1 || true
+          make -j2 PROGRAMS=scp MULTI=0 SCPPROGRESS=1 scp \
+            > "$GITHUB_WORKSPACE/reports/scp-rebuild.log" 2>&1
+          aarch64-linux-gnu-strip scp
+          cp scp "$GITHUB_WORKSPACE/artifacts/rtac86u-scp-rebuild"
+          cd "$GITHUB_WORKSPACE"
+
+          second="$(sha256sum artifacts/rtac86u-scp-rebuild | awk '{print $1}')"
+          echo "first_hash=$first" | tee -a "$OUT"
+          echo "second_hash=$second" | tee -a "$OUT"
+          cmp artifacts/rtac86u-scp artifacts/rtac86u-scp-rebuild
+          echo 'PASS standalone SCP clean rebuild is byte-identical' | tee -a "$OUT"
+          echo 'CLASSIFICATION M16_STATIC_AARCH64_ADD_ONLY_CANDIDATE' | tee -a "$OUT"
+
       - name: Publish report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: scp-standalone-source
-          path: reports/scp-standalone-source.txt
+          path: |
+            reports/scp-standalone-source.txt
+            reports/scp-configure.log
+            reports/scp-build.log
+            reports/scp-rebuild.log
+            reports/scp-readelf.txt
+            reports/scp-usage.txt
+            reports/scp-remote.out
+            reports/scp-remote.err
+            artifacts/rtac86u-scp
+            artifacts/rtac86u-scp-rebuild
           if-no-files-found: warn
           retention-days: 30
