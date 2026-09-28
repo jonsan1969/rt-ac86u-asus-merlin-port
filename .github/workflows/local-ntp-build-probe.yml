@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -263,6 +263,59 @@ jobs:
             fi
             exit 1
           fi
+
+      - name: Stage dormant verified NTPD in guarded overlay
+        run: |
+          set -euo pipefail
+          BIN=artifacts/rtac86u-ntpd-static
+          EXPECTED=6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb
+
+          test -f "$BIN"
+          test "$(sha256sum "$BIN" | awk '{print $1}')" = "$EXPECTED"
+          test "$(stat -c '%a' "$BIN")" = "755"
+
+          mkdir -p ports/files/usr/libexec
+          cp "$BIN" ports/files/usr/libexec/rtac86u-ntpd
+          chmod 0755 ports/files/usr/libexec/rtac86u-ntpd
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p=Path("ports/active.json")
+          d=json.loads(p.read_text(encoding="utf-8"))
+          expected={
+              "type":"copy",
+              "source_kind":"repo",
+              "source":"ports/files/usr/libexec/rtac86u-ntpd",
+              "target":"/usr/libexec/rtac86u-ntpd",
+              "sha256":"6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb",
+              "mode":"0755",
+              "policy":"add_only",
+          }
+          matches=[e for e in d["entries"] if e.get("target")=="/usr/libexec/rtac86u-ntpd"]
+          if not matches:
+              d["entries"].append(expected)
+          elif len(matches)!=1 or matches[0]!=expected:
+              raise SystemExit(f"existing NTPD manifest entry differs: {matches!r}")
+          p.write_text(json.dumps(d,indent=2)+"\n",encoding="utf-8")
+          PY
+
+          python3 tools/check_port_overlay.py ports/active.json
+          test "$(sha256sum ports/files/usr/libexec/rtac86u-ntpd | awk '{print $1}')" = "$EXPECTED"
+
+          if git diff --quiet -- ports/files/usr/libexec/rtac86u-ntpd ports/active.json &&
+             git ls-files --error-unmatch ports/files/usr/libexec/rtac86u-ntpd >/dev/null 2>&1; then
+            echo 'Verified dormant NTPD already staged'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ports/files/usr/libexec/rtac86u-ntpd ports/active.json
+          git commit -m 'port: stage reproducible dormant ntpd'
+          git pull --rebase origin asus-52334-merlin-port
+          git push origin HEAD:asus-52334-merlin-port
 
       - name: Publish build evidence
         if: always()
