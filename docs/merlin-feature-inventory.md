@@ -140,7 +140,7 @@ These are feature-bearing behavior changes rather than standalone pages.
 | M64 | Traditional QoS overhead accuracy/download statistics improvements | **REVIEW** | do not replace later ASUS QoS code wholesale |
 | M65 | IPv6 DDNS support | **REVIEW** | compare current ASUS DDNS behavior first |
 | M66 | Prevent Auto DoH also handles DDR / Private Relay interactions | **REVIEW** | security-sensitive behavior; ASUS 52334 wins unless missing and safely portable |
-| M67 | OpenVPN client selection for Ookla Speedtest | **REVIEW** | minor integration; verify AC86U page/backend in final donor |
+| M67 | OpenVPN client selection for Ookla Speedtest | not present in pinned 386.14_2 donor; appears in later 3006 changelog | **N/A** | — | outside this project's pinned Merlin donor baseline |
 | M68 | Outbound LAN connection logging when allowed-connection logging is enabled | **REVIEW** | firewall/logging behavior |
 | M69 | Local QR/OUI and WebUI diagnostics additions | **PORT/REVIEW** | grouped supporting WebUI assets |
 
