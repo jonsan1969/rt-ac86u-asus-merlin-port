@@ -78,3 +78,5 @@ Only these project states are used:
 | Late 386.51997 source triangulation | **SUCCESS** | Merlin `386.12_x` is pinned as a modified source/build tree merged with GPL 386_51997; SWRT independently documents Brcm AC merged with 386_51997. Both are structural references only; clean late ASUS source remains missing. See `docs/source-anchor-51997-triangulation.md` |
 
 | M04 custom config/postconf framework | **IN PROGRESS** | helper implementation is inherited from ASUS lineage; exact append → full replace → 120s postconf sequencing and staged generator targets are specified in `docs/custom-config-postconf-source-contract.md` |
+
+| M01-M03 JFFS core lifecycle patch series | **IN PROGRESS** | helper exposure, JFFS directory bootstrap, service/network/DHCP/USB/QoS/update hook signatures and blocking/argument semantics are frozen in `docs/jffs-core-source-patch-series.md`; signatures are stable across 386.12/51997 and 386.14_2 |
