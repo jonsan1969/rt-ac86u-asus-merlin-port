@@ -1,0 +1,144 @@
+name: Probe Merlin OpenVPN storage and routing delta on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/openvpn-delta-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Compare M24 M39 M40 contracts
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/openvpn-delta-52334.txt
+          : > "$OUT"
+
+          echo '===== OPENVPN RUNTIME BINARIES/LIBRARIES =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side ---" >> "$OUT"
+            for p in "$R"/usr/sbin/openvpn "$R"/usr/lib/libvpn.so* "$R"/usr/lib/libovpn.so*; do
+              [ -e "$p" ] || continue
+              printf '%s\t' "${p#"$R/"}" >> "$OUT"
+              file -b "$p" >> "$OUT" || true
+              sha256sum -L "$p" >> "$OUT" || true
+            done
+          done
+
+          echo '===== M39 CUSTOM STORAGE EXACT SURFACE =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side binaries ---" >> "$OUT"
+            for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+              [ -f "$R/$rel" ] || continue
+              echo "[$rel]" >> "$OUT"
+              strings -a "$R/$rel" | grep -E '/jffs/openvpn|vpn_(client|server)[%0-9a-zA-Z_]*custom3|vpn_(client|server)[%0-9a-zA-Z_]*cust2|custom3|OVPN_FS_PATH' | sort -u | head -n 200 >> "$OUT" || true
+            done
+
+            echo "--- $side libraries ---" >> "$OUT"
+            for p in "$R"/usr/lib/libvpn.so* "$R"/usr/lib/libovpn.so* "$R"/usr/lib/libwebapi.so*; do
+              [ -f "$p" ] || continue
+              echo "[${p#"$R/"}]" >> "$OUT"
+              strings -a "$p" | grep -E '/jffs/openvpn|vpn_(client|server)[%0-9a-zA-Z_]*custom3|vpn_(client|server)[%0-9a-zA-Z_]*cust2|custom3' | sort -u | head -n 200 >> "$OUT" || true
+            done
+
+            echo "--- $side pages ---" >> "$OUT"
+            for p in "$R"/www/*OpenVPN* "$R"/www/*VPNClient* "$R"/www/*vpn*; do
+              [ -f "$p" ] || continue
+              hits="$(grep -Ein 'vpn_(client|server).*custom|maxlength="?(350|4095)|custom settings|Custom Configuration' "$p" | head -n 120 || true)"
+              [ -n "$hits" ] && { echo "[${p#"$R/"}]" >> "$OUT"; printf '%s\n' "$hits" >> "$OUT"; }
+            done
+          done
+
+          echo '===== M40 ROUTING SEMANTICS =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            echo "--- $side rc/libvpn ---" >> "$OUT"
+            for p in "$R/sbin/rc" "$R"/usr/lib/libvpn.so* "$R"/usr/lib/libovpn.so*; do
+              [ -f "$p" ] || continue
+              echo "[${p#"$R/"}]" >> "$OUT"
+              strings -a "$p" | grep -E 'ovpnc%d|vpnroute%d|route_(network|netmask|gateway|metric)_%d|route-nopull|redirect-gateway|VPN Director|vpndirector_rulelist|VPNDIR|vpn_client%d_rgw|vpn_client.*enforce|table ovpnc|ip rule|vpnc.*policy' | sort -u | head -n 300 >> "$OUT" || true
+            done
+
+            echo "--- $side route/UI controls ---" >> "$OUT"
+            for p in "$R"/www/*OpenVPN* "$R"/www/*VPNClient* "$R"/www/*VPNDirector* "$R"/www/*vpnc*; do
+              [ -f "$p" ] || continue
+              hits="$(grep -Ein 'vpn_client.*rgw|VPN Director|Redirect Internet|Force Internet|route-nopull|policy|kill.?switch|enforce' "$p" | head -n 140 || true)"
+              [ -n "$hits" ] && { echo "[${p#"$R/"}]" >> "$OUT"; printf '%s\n' "$hits" >> "$OUT"; }
+            done
+          done
+
+          echo '===== ASUS MODERN VPN FUSION SURFACE =====' >> "$OUT"
+          for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+            echo "[$rel]" >> "$OUT"
+            strings -a "$A/$rel" | grep -Ei 'vpnc_fusion|VPN Fusion|vpnc_clientlist|vpnc_dev_policy|vpnc.*policy|vpnc.*rulelist|vpn_fusion' | sort -u | head -n 240 >> "$OUT" || true
+          done
+          find "$A/www" -maxdepth 5 -type f \( -iname '*vpnc*' -o -iname '*fusion*' \) -printf '%P\n' 2>/dev/null | sort | head -n 160 >> "$OUT" || true
+
+          echo '===== EXACT CLASSIFICATION TOKENS =====' >> "$OUT"
+          for side in ASUS MERLIN; do
+            [ "$side" = ASUS ] && R="$A" || R="$M"
+            custom3=no; jffsovpn=no; ovpntable=no; vpndir=no; fusion=no
+            grep -Raq 'vpn_client_custom3' "$R/www" 2>/dev/null && custom3=yes || true
+            for p in "$R/sbin/rc" "$R"/usr/lib/libvpn.so* "$R"/usr/lib/libovpn.so* "$R"/usr/sbin/httpd; do
+              [ -f "$p" ] || continue
+              strings -a "$p" | grep -Fq '/jffs/openvpn' && jffsovpn=yes || true
+              strings -a "$p" | grep -Fq 'table ovpnc%d' && ovpntable=yes || true
+              strings -a "$p" | grep -Fq 'vpndirector_rulelist' && vpndir=yes || true
+              strings -a "$p" | grep -Eiq 'vpnc_fusion|vpnc_dev_policy|VPN Fusion' && fusion=yes || true
+            done
+            echo "$side custom3_page=$custom3 jffs_openvpn=$jffsovpn merlin_ovpnc_table=$ovpntable vpndirector=$vpndir asus_fusion_surface=$fusion" >> "$OUT"
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvpn-delta-52334
+          path: reports/openvpn-delta-52334.txt
+          if-no-files-found: error
+          retention-days: 14
