@@ -19,15 +19,21 @@
 | JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series + pinned source contract documented in `docs/jffs-custom-script-port-plan.md` and `docs/jffs-custom-script-source-contract.md` |
 | ASUS 52334 DNSFilter runtime map | **SUCCESS** | Action 35993309478 verified retained stock backend/UI-support pieces |
 | DNS Director phase-1 overlay implementation | **SUCCESS** | guarded overlay changes only `DNSFilter.asp` + exact-patched `state.js`; validation run 36121711046 passed |
-| Guarded Merlin overlay validation | **SUCCESS** | latest exact-change validation run 36373879103 passed; ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear hashes unchanged |
+| Guarded Merlin overlay validation | **SUCCESS** | latest active-overlay validation run 36373879103 passed; ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear hashes unchanged |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; no core binary replacement |
+| M12 Scheduled jobs / `cru` | **IN PROGRESS** | ASUS 52334 has its own `cru` shell implementation and stock `flock`; Merlin's main delta is flock-based locking. Preserve ASUS scheduler and evaluate a tiny exact script adaptation rather than transplanting BusyBox/crond |
 | M13 Nano editor | **SUCCESS** | verified Merlin nano 5.7 + isolated add-only `libncurses.so.6.0` runtime executes against ASUS 52334 under qemu; four add-only overlay targets validated in run 36373879103 |
+| M14 Enhanced CLI utility set | **IN PROGRESS** | many Merlin names are BusyBox symlinks; do not transplant Merlin BusyBox. Stock Dropbear has no SCP applet; further utilities require per-applet proof against ASUS binaries |
 | M11 Custom DDNS callback | **IN PROGRESS** | ASUS 52334 has normal DDNS but lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated`; restore only with source-side DDNS/JFFS hook integration |
 | M10 JFFS backup/restore | **IN PROGRESS** | ASUS 52334 stock settings backup page exists, but the build lacks JFFS backup/upload routes/tokens in `httpd/uploader`; source backend required before exposing Merlin UI |
 | JFFS core hook/config engine | **IN PROGRESS** | pinned source delta contract complete; requires later ASUS-compatible source build path for `rc`/shared/httpd integration |
 | AMTM integration | **IN PROGRESS** | stock has required curl/core shell tools but lacks `dos2unix`/`unix2dos`; defer until utility + core-hook prerequisites are satisfied |
 | M36 IPv6 DNS Director parity | **IN PROGRESS** | ASUS 52334 already has IPv6 DNSFilter rule machinery (`DNSFILTERI/F`, DHCPv6 option 23) for supported modes, but lacks Merlin `dnsfilter_custom61/62/63` across rc/httpd/defaults; full custom-IPv6 parity requires source integration |
+| M18/M19 Samba naming/Master Browser | **IN PROGRESS** | ASUS Samba runtime exists, but `smbd_simpler_naming` and `smbd_master` are absent across rc/httpd/libshared; source-side config-generation/default/UI integration required |
+| M20 WINS server | **IN PROGRESS** | `smbd_wins` exists in ASUS rc + libshared but no matching WebUI/httpd token was found; isolate a possible ASUS-backed UI-only adaptation before any source change |
+| M21 Windows discovery (`wsdd2`) | **IN PROGRESS** | ASUS 52334 has smbd/nmbd but no `wsdd2`; standalone binary/dependency compatibility not yet proven |
+| M29/M30 Local NTP server + client-NTP redirect | **IN PROGRESS** | run 36374675271: no ntpd/chronyd and no `ntpd_enable`, `ntpd_server_redir`, or `ntpd_server_trust`; source/runtime integration required |
 | M31 Conntrack timeout tuning | **SUCCESS** | ASUS-backed UI adapter uses stock NVRAM keys and stock reboot apply path; no `rc` replacement |
 | M34 Wireless Site Survey | **SUCCESS** | adapted page reuses stock `/apscan.asp` + `restart_wlcscan`; guarded validation run 36338372948 |
 | M35 WiFi Insight / legacy WiFi Radar | **CANCELLED** | pinned Merlin 386.14_2 image contains only the launcher; visualization pages/assets and both Broadcom runtime daemons are absent, so there is no complete donor runtime to restore |

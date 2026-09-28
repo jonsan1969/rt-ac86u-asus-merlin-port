@@ -58,14 +58,14 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M09 | Entware/addon friendliness | no integrated Merlin setup path | **PORT** | A/C | `/opt` exists but Merlin integration/setup behavior must be restored |
 | M10 | JFFS backup/restore/upload WebUI | stock settings-backup page exists, but JFFS-specific upload/backup handlers are absent from ASUS 52334 | **PORT** | C | source-side HTTPD/uploader integration required; do not expose dead UI |
 | M11 | Custom DDNS user-script callback | ASUS 52334 lacks `WWW.CUSTOM`, `ddns-start` and `ddns_custom_updated` | **PORT** | C | source-side DDNS + JFFS hook integration required; stock DDNS path remains authoritative |
-| M12 | Scheduled jobs / `cru` | ASUS already has `/usr/sbin/cru`; implementation differs | **REVIEW** | B/C | preserve stock primitive; evaluate Merlin collision/race fixes; `crontab` utility is Merlin-only |
+| M12 | Scheduled jobs / `cru` | ASUS has its own shell `cru`; Merlin mainly replaces the hand-rolled lock with `flock`, and ASUS already ships `/usr/bin/flock` | **ADAPT** | B | preserve ASUS crond/BusyBox; consider only an exact script-level locking adaptation after a clean runtime lock test |
 
 ## 2. Shell, SSH and administration
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
 | M13 | Nano editor | absent | **PORT** | A/B | Merlin image includes `nano` and `rnano` |
-| M14 | Enhanced CLI utility set | many tools absent | **PORT** | A/B | includes `scp`, `crontab`, `diff`, `dos2unix`, `unix2dos`, `hexdump`, `xargs`, `getopt`, `hostname`, `tee`, `uniq` and others |
+| M14 | Enhanced CLI utility set | many command names absent; most Merlin entries are symlinks to Merlin BusyBox and stock Dropbear has no SCP applet | **ADAPT** | A/B | never transplant Merlin BusyBox; prove each ASUS stock applet/multicall capability or add an isolated compatible binary bundle |
 | M15 | SSH public-key authentication | already present | **NO PORT** | C | ASUS `rc` already contains `authorized_keys` support |
 | M16 | Merlin SSH behavior/key persistence | partially overlaps | **ADAPT** | B/C | compare `rc/ssh.c`, JFFS host-key persistence/fallback, Dropbear options and SCP |
 | M17 | SNMP | not present in verified AC86U Merlin image | **N/A** | — | Merlin README says only some models; do not invent support |
@@ -74,10 +74,10 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
-| M18 | Simpler SMB share naming | UI and backend signatures absent | **PORT** | C | `smbd_simpler_naming` in Samba UI + config generator |
-| M19 | Force SMB Master Browser | UI and backend signatures absent | **PORT** | C | `smbd_master` |
-| M20 | WINS server | UI and backend signatures absent | **PORT** | C | `smbd_wins` |
-| M21 | Windows discovery via `wsdd2` | runtime binary absent | **PORT** | A/B | integrate only if compatible with ASUS Samba stack |
+| M18 | Simpler SMB share naming | `smbd_simpler_naming` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
+| M19 | Force SMB Master Browser | `smbd_master` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
+| M20 | WINS server | ASUS rc + libshared retain `smbd_wins`, but no matching WebUI/httpd token was found | **ADAPT** | A/C | probe whether generic ASUS apply handling can expose the retained backend without httpd/core replacement |
+| M21 | Windows discovery via `wsdd2` | ASUS smbd/nmbd present, `wsdd2` absent | **PORT** | A/B | integrate only after standalone binary/dependency compatibility is proven against ASUS Samba stack |
 | M22 | NFS exports for USB storage | NFS page/daemon/modules absent | **PORT** | A/B/C | `nfsd`, `mountd`, `exportfs`, sunrpc/NFS modules + WebUI/config |
 | M23 | CIFS client support | mount points exist but CIFS kernel module absent | **PORT** | B/C | add source-compatible CIFS client support; no blind module transplant |
 
@@ -90,8 +90,8 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M26 | DNS Director | ASUS has DNSFilter backend; Merlin page absent | **ADAPT** | A/C | retain ASUS backend, adapt Merlin UI/schema; verify IPv4/IPv6/custom providers |
 | M27 | ipset kernel/userspace support | absent | **PORT** | A/B | modules + `libipset` + userspace `ipset` |
 | M28 | TOR with per-client access control | daemon/page absent | **PORT** | A/B/C | restore only current safe integration |
-| M29 | Local NTP daemon | `ntpd_enable` and Merlin daemon absent | **PORT** | A/B/C | local LAN NTP server |
-| M30 | Redirect client NTP queries to router | `ntpd_server_redir` absent | **PORT** | C | firewall UDP/123 redirect tied to NTP daemon |
+| M29 | Local NTP daemon | ASUS 52334 has no ntpd/chronyd and no `ntpd_enable` backend/default/UI contract | **PORT** | A/B/C | source/runtime integration required; not an image-only UI port |
+| M30 | Redirect client NTP queries to router | `ntpd_server_redir`/`ntpd_server_trust` and firewall redirect contract absent | **PORT** | C | source-side rc/firewall/default/UI integration tied to M29 |
 | M31 | TCP/UDP conntrack timeout tuning | backend keys already present; Merlin UI absent | **ADAPT** | A/C | reuse ASUS backend and add compatible controls |
 | M32 | Cake SQM QoS | cake module absent | **PORT** | B/C | requires kernel/source compatibility; hardware acceleration implications |
 | M33 | WireGuard kernel module/userspace tool | Merlin has `wireguard.ko` + `wg`; ASUS image lacks same runtime components but contains generic WG pages/libvpn | **REVIEW** | B/C/D | determine ASUS 52334 WireGuard capability path before any kernel/tool port |

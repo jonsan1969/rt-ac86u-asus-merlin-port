@@ -1,6 +1,6 @@
 # New-thread handoff
 
-Updated: 2026-09-25
+Updated: 2026-09-28
 
 ## Project sentence
 
@@ -8,275 +8,251 @@ Updated: 2026-09-25
 
 The final architecture is ASUS-first, not Merlin-first.
 
-## Non-negotiable rules
+## Working rule from the user
+
+**Do not stop unless input from the user is genuinely required.**
+
+When an Action finishes:
+- green: inspect the result/artifact and immediately continue to the next concrete step;
+- red: inspect logs, fix the real issue or classify the feature correctly, push the minimal change and continue;
+- do not end a turn merely by saying what will be done next.
+
+Ask the user only for information/decisions/access that cannot be resolved from the repo, firmware images, Actions, or established project rules.
+
+## Non-negotiable technical rules
 
 - Final runtime/hardware/security baseline: ASUS RT-AC86U `3.0.0.4.386_52334`.
 - Merlin donor/reference: Asuswrt-Merlin `386.14_2`.
 - Pinned Merlin source commit: `6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b`.
 - Preserve later ASUS code, hardware support, proprietary/model-specific components and security changes.
-- Never replace newer ASUS `rc`, `httpd`, `dnsmasq`, OpenVPN, Dropbear, BusyBox, OpenSSL or kernel/HND components with older Merlin binaries just to regain a feature.
-- For shared core components, identify and port the Merlin source/behavior delta onto the latest ASUS-side implementation that can be established.
-- Do not claim a build is “built from 52334 source” unless corresponding 52334 source is actually obtained and verified.
+- Never replace newer ASUS `rc`, `httpd`, `dnsmasq`, OpenVPN, Dropbear, BusyBox, OpenSSL, kernel/HND or proprietary components with older Merlin binaries just to regain a feature.
+- For shared core components, identify the Merlin behavior/source delta and port it onto an ASUS-compatible source base later.
+- Do not claim a build is “built from 52334 source” unless matching 52334 source is actually obtained and verified.
+- Image-first work must be additive or exact/preimage-guarded. Fail closed on unexpected stock content.
+- Do not write overlays through rootfs symlinks; target persistent canonical paths.
+- Do not describe the project as flashable until repack + hardware/runtime gates pass.
 
 ## Repository
 
 Repository: `jonsan1969/rt-ac86u-asus-merlin-port`
 
-Branches:
+Implementation branch: `asus-52334-merlin-port`
 
-- `main` — documented stable baseline
-- `asus-52334-analysis` — firmware/source comparison and feature classification
-- `asus-52334-merlin-port` — implementation/overlay work
+Snapshot base HEAD before this handoff commit:
 
-At handoff:
+`154c77f00b6ff51db20baa107edaffc8b1806aed`
 
-- analysis branch before this handoff commit: `8fc456fd153706b894d95fcde4f850b53fbd5d8b`
-- port branch before this handoff commit: `d3bba607d0aca6150c1dad2b14e805c8764fd6e8`
+The branch contains all current implementation/probe work. Read these first in a new thread:
+
+1. `docs/thread-handoff.md`
+2. `STATUS.md`
+3. `docs/merlin-feature-inventory.md`
+4. `docs/source-base-strategy.md`
+5. `docs/jffs-custom-script-port-plan.md`
+6. `ports/active.json`
 
 ## Verified firmware artifacts
 
 ### ASUS 52334 — final baseline
 
 - version: `3.0.0.4.386_52334`
-- release date: 2026-05-07
-- ZIP SHA-256:
-  `e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61`
-- image:
-  `RT-AC86U_3.0.0.4_386_52334-gd500e53_ubi.w`
-- image SHA-256:
-  `1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f`
+- ZIP SHA-256: `e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61`
+- image: `RT-AC86U_3.0.0.4_386_52334-gd500e53_ubi.w`
+- image SHA-256: `1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f`
 
 ### ASUS 51955 — temporal comparison reference
 
 - version: `3.0.0.4.386_51955`
-- release date: 2024-11-08
-- ASUS-published SHA-256 applies to the **unzipped .w image**:
-  `af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0`
-- role: isolate Merlin delta from later ASUS changes; it is not the final firmware baseline.
+- image SHA-256: `af63aeb4ef335e2ebac521358103de451333b021ec82e59736854ae95a3424e0`
+- role: isolate candidate Merlin changes from later ASUS changes; never use as final baseline.
 
 ### Merlin 386.14_2 — donor
 
-- release date: 2024-11-17
-- ZIP SHA-256:
-  `1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a`
-- image:
-  `RT-AC86U_386.14_2_ubi.w`
-- image SHA-256:
-  `ebe1491f8edb3f81ca4077d482ffca33d34ae7dfe245bbff7843684dbe9b7728`
+- ZIP SHA-256: `1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a`
+- image: `RT-AC86U_386.14_2_ubi.w`
+- image SHA-256: `ebe1491f8edb3f81ca4077d482ffca33d34ae7dfe245bbff7843684dbe9b7728`
+- source pin: `6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b`
 
 ## Three-way analysis
 
-The useful model is:
+Verified classification:
 
-```text
-ASUS 386_51955 ──────┬──────> Merlin 386.14_2
-                     │          isolate candidate Merlin delta
-                     │
-                     └──────> ASUS 386_52334
-                                identify later ASUS changes
-```
+- 1,992 all-identical paths
+- 266 pure Merlin additions
+- 1,513 strong Merlin-delta / ASUS-unchanged candidates
+- 460 divergent shared changes
+- 25 ASUS-later-change-only paths
+- 1 ASUS-52334-only addition
+- 1 both-added-differently path
 
-Then implementation remains:
+Feature inventory is maintained in `docs/merlin-feature-inventory.md`.
 
-```text
-ASUS 386_52334
-+ selected source-reviewed Merlin functionality
-= project firmware
-```
+## Source-base situation
 
-Verified three-way results:
+Exact public ASUS `386_52334` source has still not been obtained.
 
-- `ALL_IDENTICAL`: 1,992
-- `MERLIN_ONLY_PURE_ADDITION`: 266
-- `MERLIN_DELTA_ASUS_UNCHANGED`: 1,513
-- `BOTH_CHANGED_DIVERGENT`: 460
-- `ASUS_LATER_CHANGE_ONLY`: 25
-- `ASUS_52334_ONLY_ADDITION`: 1
-- `BOTH_ADDED_DIFFERENTLY`: 1
+Legacy `gpl@asus.com` bounced with SMTP 550. Late Merlin GPL merge commits are provenance references only, not clean ASUS source snapshots.
 
-The original direct 52334-vs-Merlin comparison had 1,939 same-path/different-content entries. The three-way model reduces the genuinely ambiguous shared-change set to 460 paths.
+Therefore:
+- image-safe/additive features can proceed now;
+- features that require `rc/httpd/shared/defaults` changes are documented as source-required and must not be faked by transplanting old Merlin core binaries.
 
-See `docs/three-way-firmware-analysis.md`.
-
-## Merlin feature inventory
-
-Feature-level inventory is **SUCCESS**.
-
-The master inventory is:
-
-`docs/merlin-feature-inventory.md`
-
-Major identified Merlin functionality includes:
-
-- JFFS custom scripts under `/jffs/scripts/`
-- `init-start`, `services-start/stop`, `service-event`, `service-event-end`, `wan-start`, `wan-event`, `nat-start`, `firewall-start`, USB/QoS/update hooks
-- postconf/custom-config framework
-- VPN Director
-- DNS Director/DNSFilter UI and enhanced behavior
-- advanced OpenVPN integration
-- custom WebUI pages/user slots
-- AMTM/addon integration
-- Entware/`/opt` friendliness
-- SSH/Dropbear enhancements
-- SMB simpler naming, Master Browser and WINS options
-- NTP daemon/redirection
-- conntrack tuning
-- traffic-history/storage options
-- NFS/CIFS additions
-- ipset/Cake/WireGuard and other rebuildable open-source additions
-- various Merlin tools/pages such as System Info, Other Settings, Site Survey and QoS-related UI
-
-The compatibility probe also showed that several backends already exist in ASUS 52334. Do not port duplicate backends blindly.
-
-See `docs/merlin-feature-compatibility-probe.md`.
-
-## ASUS GPL/source situation
-
-Exact public ASUS `386_52334` corresponding source has not been located.
-
-A direct request to legacy `gpl@asus.com` bounced with SMTP:
-
-`550 #5.1.0 Address rejected`
-
-Current ASUS support-account route was deferred.
-
-Important late-Merlin provenance:
-
-- `e9e6035c85c673701646f2cf15de09b01a997ab9` — “Merge with GPL 386_52796”
-- `75c9d789179e169de5b2da2c02031358d5d03566` — “Merge with GPL 386_52805”
-- `47bbd79560ec3f03f12537cce8fea81766e9f47d` — AC86U SDK/binary refresh from 386_52796
-
-These are **not clean ASUS source snapshots**. Merlin code already exists across those merge points, so they are provenance references only.
-
-See `docs/asus-gpl-provenance.md` and `docs/source-base-strategy.md`.
-
-## JFFS/custom-script work
-
-The JFFS source-delta map Action `35990042520` completed **SUCCESS**.
-
-The port specification is in:
-
-`docs/jffs-custom-script-port-plan.md`
-
-Key implementation areas:
-
-- `shared/scripts.c`
-- declarations/defaults
-- `rc/services.c`
-- `rc/init.c`
-- `rc/firewall.c`
-- `rc/wan.c`
-- `rc/usb.c`
-- JFFS/UBIFS setup
-- other individual hook call sites
-
-No old Merlin `rc` binary is to be transplanted.
-
-## Current implementation: DNS Director phase 1
-
-A guarded image-first overlay framework exists on `asus-52334-merlin-port`.
+## Guarded overlay framework
 
 Key files:
 
 - `ports/active.json`
-- `ports/files/DNSFilter.asp`
+- `ports/files/`
 - `tools/apply_port_overlay.py`
 - `tools/check_port_overlay.py`
 - `.github/workflows/validate-dns-director-overlay.yml`
-- `docs/dns-director-phase1-port.md`
 
-ASUS 52334 runtime mapping established:
+Important safety behavior:
+- exact stock preimage hashes where needed;
+- exact replacement counts;
+- add-only policy for new files;
+- rootfs symlink traversal rejected;
+- protected core hashes checked unchanged.
 
-- stock backend has `dnsfilter_enable_x`
-- stock backend has `dnsfilter_mode`
-- stock backend has `dnsfilter_custom1..3`
-- stock backend has `dnsfilter_rulelist`
-- stock `rc` contains DNSFilter firewall/dnsmasq integration
-- stock `httpd` contains `dnsfilter_modes_list`
-- stock menu has a `DNSFilter.asp` reference
-- stock firmware does **not** ship `/www/DNSFilter.asp`
-- stock `state.js` computes `isSupport("dnsfilter")` and then explicitly forces `dnsfilter_support = false`
+Latest active-overlay validation:
 
-Phase 1 intentionally does not add Merlin-only:
+- run `36373879103` — **SUCCESS**
+- ASUS `rc`, `httpd`, `dnsmasq`, BusyBox, OpenVPN and Dropbear remained unchanged.
 
-- `dnsfilter_rulelist1..5`
-- `dnsfilter_custom61..63`
-- `restart_dnsfilter`
-- expanded HND rule storage/full IPv6 behavior
+## Implemented and green
 
-Instead it aims to:
+The following are already implemented/validated. Do not redo them.
 
-- add an adapted `DNSFilter.asp`
-- keep ASUS 52334 `rc`, `httpd`, `dnsmasq`
-- use stock `restart_dnsmasq;restart_firewall`
-- retain stock one-field rule storage
-- patch only the forced-false UI line using an exact, preimage-hash-guarded text patch
+### DNS/JFFS/addon foundation
+- DNS Director phase 1: adapted `DNSFilter.asp` + exact state.js enablement; ASUS backend retained.
+- JFFS image-safe shell profile: exact `/rom/etc/profile` patch, including guarded `/jffs/configs/profile.add`.
+- Merlin addon helper API: `/usr/sbin/helper.sh` add-only.
+- 20 custom WebUI aliases add-only.
+- overlay engine hardened against writes through rootfs symlinks.
 
-## Exact current failure to fix next
+### WebUI / diagnostics / traffic
+- M31 Conntrack timeout tuning — ASUS-backed.
+- M34 Wireless Site Survey — stock `/apscan.asp` + `restart_wlcscan`.
+- M45 Temperature/performance page — stock `/ajax_coretmp.asp`.
+- M47 Traffic history persistence controls.
+- M49 Global monthly traffic history — ASUS rstats history spool + adapted page/Chart.js.
+- M51 Wireless ACL client-name display — **NO PORT needed**; ASUS 52334 already has a newer equivalent.
+- M53 System/Wireless Log no-auto-logout.
+- M54 safe System Log enhancements — local filtering/auto-refresh only; unsupported Merlin log-level backend controls deliberately omitted.
+- M55 dual-radio WiFi icon state — ASUS hardware-switch logic preserved; Merlin-style no-switch on/partial/off fallback added.
+- M58 WiFi/Guest QR codes — add-only QR library + exact page patches.
+- M59 local OUI database — local database + exactly three stock URL redirects.
 
-Latest port branch:
+### CLI
+- M13 Nano — **SUCCESS**.
+  - Merlin nano 5.7 staged as an isolated add-only bundle.
+  - required `libncurses.so.6.0` included without replacing ASUS libraries.
+  - qemu execution against ASUS rootfs passed.
+  - active overlay validation run `36373879103` passed.
 
-`d3bba607d0aca6150c1dad2b14e805c8764fd6e8`
+## Explicit NO PORT / CANCELLED decisions
 
-Validation Action:
+- M35 WiFi Insight / legacy WiFi Radar — **CANCELLED**. Pinned Merlin 386.14_2 firmware contains only a stale launcher; visualization pages/assets and `vis-datacollector`/`vis-dcon` are absent even from the donor image.
+- M51 Wireless ACL client-name enhancement — **NO PORT**. ASUS 52334 already has equivalent/newer behavior.
+- M67 Speedtest VPN interface selector — **CANCELLED / outside donor baseline**. It appears in later 3006 Merlin, not pinned 386.14_2.
 
-- run: `36000073528`
-- workflow: `Validate DNS Director overlay`
-- result: **FAILURE**
+## Source-required / gated features already proven
 
-All prior steps succeeded:
+Do not keep reproving these unless implementing their source contract.
 
-- manifest validation
-- extraction-tool install
-- verified ASUS 52334 download
-- pinned Merlin-source fetch
-- ASUS rootfs extraction
-- pre-overlay inventory
+- JFFS core custom-script/postconf engine — source-required in shared/rc/httpd.
+- M10 JFFS backup/restore — stock settings-backup page exists, but ASUS 52334 has no JFFS backup/upload routes in httpd/uploader.
+- M11 custom DDNS callback — normal DDNS exists, but `WWW.CUSTOM`, `ddns-start`, `ddns-started`, `ddns_custom_updated` are absent; run `36374538623`.
+- M18 simpler SMB naming — `smbd_simpler_naming` absent in rc/httpd/libshared.
+- M19 force SMB Master Browser — `smbd_master` absent in rc/httpd/libshared.
+- M29/M30 local NTP server + NTP redirect — no ntpd/chronyd and no `ntpd_enable` / redirect/trust keys; run `36374675271`.
+- M36 full IPv6 DNS Director custom resolver parity — ASUS has IPv6 DNSFilter machinery (`DNSFILTERI/F`, DHCPv6 option 23) but lacks Merlin `dnsfilter_custom61/62/63`; run `36374478421`.
+- M43 full System Info — stock generic sysinfo exists but Merlin-specific cpu/conntrack/nvram fields require HTTPD work.
+- M46 QoS Stats — missing Merlin AJAX/EJ tc/IPv6/conntrack data handlers.
+- M48 per-IP traffic — missing `cstats`, `ipt_bandwidth`, cstats keys and device traffic pages.
+- M52 wireless-client auto-refresh — stock log page exists but `get_wl_status`/Merlin AJAX endpoint is absent.
+- M57 Advanced VPN Status — stock `ajax_ipsec.asp` exists, but `ajax_vpn_status.asp`, Merlin OpenVPN status globals and expected client status contract are absent.
+- VPN Director remains deferred until the source-side routing/OpenVPN/JFFS integration path is defined.
 
-Failure occurred only at **Apply guarded overlay**:
+## Partially reusable / next-image-safe candidates
 
-```text
-entry 2: expected 1 exact match(es), found 0
-```
+These are better places to continue than repeatedly probing already-gated core features.
 
-The manifest entry for the `state.js` text replacement currently encodes the search separator as a literal escaped `\\n` sequence rather than matching the actual newline in the stock file.
+### M12 scheduled jobs / cru
+- ASUS and Merlin both have `/usr/sbin/cru` shell scripts.
+- ASUS uses a hand-rolled lock-file loop.
+- Merlin's main delta uses fd-based `flock`.
+- ASUS already ships `/usr/bin/flock -> ../../bin/busybox`.
+- Do **not** transplant Merlin BusyBox/crond.
+- Candidate: exact script-level adaptation of ASUS `cru`, but first make the flock runtime test unambiguous.
 
-The next change should be **only** to correct that exact preimage match representation, then rerun the same validation workflow once.
+### M20 WINS
+- ASUS `rc` and `libshared.so` contain `smbd_wins`.
+- `httpd`/WebUI token was not found.
+- This is worth a focused probe to determine whether generic ASUS form/NVRAM apply can expose the retained backend as an image-safe UI adaptation.
+- Do not group it with M18/M19, which definitely need source backend work.
 
-Do not weaken the preimage SHA-256 guard or replacement-count guard just to make the run pass.
+### M21 wsdd2
+- ASUS Samba `smbd` and `nmbd` exist.
+- `wsdd2` is absent.
+- Only proceed if an isolated donor binary and all dependencies can be shown compatible with ASUS 52334.
 
-Current stock `state.js` preimage SHA-256 pinned in the manifest:
+### M14 enhanced CLI set
+- Many Merlin command names are symlinks to Merlin BusyBox.
+- Never add those symlinks unless the same applet is proven present in ASUS BusyBox.
+- Stock Dropbear multicall does **not** expose SCP; run `36373784882`.
+- Nano is already handled separately and is green.
 
-`bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61`
+## Samba probe details
 
-Current adapted `DNSFilter.asp` manifest SHA-256:
+Run `36374607127` — **SUCCESS classification probe**:
 
-`bb032b3cbe8a7e197a710213e8bf440564b03b82c79358a7fd253b79bb05b545`
+- `smbd_simpler_naming`: absent in rc/httpd/libshared.
+- `smbd_master`: absent in rc/httpd/libshared.
+- `smbd_wins`: present in rc + libshared, absent as explicit httpd token.
+- ASUS has `/usr/sbin/smbd -> samba_multicall`.
+- ASUS has `/usr/sbin/nmbd -> samba_multicall`.
+- ASUS lacks `wsdd2`.
 
-## Immediate next steps
+Overall probe classification was source-backend-required because only 1/3 Merlin control keys is retained, but M20 should be considered separately.
 
-1. On `asus-52334-merlin-port`, fix only the exact `state.js` search string/newline representation in `ports/active.json`.
-2. Trigger/observe a single `Validate DNS Director overlay` run.
-3. If it reaches the exact-change verification step, inspect that report before any further change.
-4. Require unchanged hashes for protected core binaries and unchanged `menuTree.js`.
-5. If automated overlay/integrity validation becomes **SUCCESS**, keep DNS Director phase 1 marked implementation-success but hardware-validation-pending.
-6. Then return to the JFFS/custom-script source-level port. JFFS is foundational for AMTM, addons, postconf and service hooks.
-7. Do not start VPN Director until the `libovpn/httpd/rc` source reconciliation is sufficiently defined.
+## NTP probe details
 
-## Important Actions
+Run `36374675271` — **SUCCESS classification probe**:
 
-- `35982703376` — firmware artifact verification — **SUCCESS**
-- `35982848587` — ASUS 52334 vs Merlin extraction/diff — **SUCCESS**
-- `35987265109` — three-way firmware analysis — **SUCCESS**
-- `35989225935` — Merlin feature compatibility probe — **SUCCESS**
-- `35990042520` — JFFS custom-script source delta map — **SUCCESS**
-- `35993309478` — ASUS 52334 DNSFilter runtime map — **SUCCESS**
-- `36000073528` — DNS Director overlay validation — **FAILURE** at exact text patch match
+- no `ntpd`;
+- no `chronyd`;
+- no `ntpd_enable`;
+- no `ntpd_server_redir`;
+- no `ntpd_server_trust`;
+- no identified UDP/123 redirect contract.
 
-## Flashability status
+Classification: `SOURCE_BACKEND_REQUIRED`.
 
-**IN PROGRESS.**
+## Recent important Actions
 
-No firmware should be described as flashable yet.
+- `36373879103` — guarded active overlay incl. Nano — **SUCCESS**
+- `36374021624` — QoS Stats backend probe — **SUCCESS classification**
+- `36374147948` — per-IP traffic backend probe — **SUCCESS classification**
+- `36374208783` — cru scheduler + stock flock comparison — **SUCCESS**
+- `36374478421` — IPv6 DNS Director probe — **SUCCESS classification**
+- `36374538623` — custom DDNS callback probe — **SUCCESS classification**
+- `36374607127` — Samba controls probe — **SUCCESS classification**
+- `36374675271` — local NTP server probe — **SUCCESS classification**
 
-Successful compile/repack alone is not enough. Final validation must cover model/header, size/layout, retained ASUS 52334 hardware components, WebUI, SSH, JFFS/custom scripts, DNS/DHCP, NAT/firewall, OpenVPN/VPN Director, addons and regression checks.
+At this snapshot there are no known Actions that require user intervention.
+
+## Immediate continuation in the next thread
+
+1. Read this file + `STATUS.md` + `docs/merlin-feature-inventory.md`.
+2. Check current branch HEAD and any Actions newer than this snapshot.
+3. Continue automatically; do not ask permission.
+4. Prefer unresolved image-safe/adapt candidates before source-required features.
+5. Best immediate candidates:
+   - make M12 `cru` flock semantics test definitive, then exact-patch only if justified;
+   - isolate M20 WINS as a possible ASUS-backed UI adaptation;
+   - probe M21 `wsdd2` as a standalone dependency-safe binary only if M20 does not produce a safe port;
+   - continue remaining inventory rows for more A/B image-safe candidates.
+6. For every implementation, rerun guarded overlay validation and require protected ASUS core hashes unchanged.
+7. Source-required features should accumulate precise source contracts, not binary transplants.
+8. Flashable firmware remains **IN PROGRESS**; repack/hardware validation is a later gate.
