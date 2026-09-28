@@ -139,22 +139,15 @@ jobs:
           cat reports/local-ntp-help.txt | tee -a "$OUT"
           echo "help_rc=$help_rc" | tee -a "$OUT"
 
-          grep -Eiq 'ntpd|NTP' reports/local-ntp-help.txt
-          for opt in '-w' '-l' '-I' '-p'; do
-            if grep -Fq -- "$opt" reports/local-ntp-help.txt; then
-              echo "PASS help contains $opt" | tee -a "$OUT"
-            else
-              echo "FAIL help missing $opt" | tee -a "$OUT"
-              exit 1
-            fi
-          done
+          grep -Eiq 'Usage: ntpd|NTP client/server' reports/local-ntp-help.txt
+          grep -Fq -- '[-dnqNwtl -I IFACE]' reports/local-ntp-help.txt
+          grep -Fq -- '[-p PEER]' reports/local-ntp-help.txt
+          echo 'PASS runtime usage exposes w/t/l/I and peer option surface' | tee -a "$OUT"
 
-          if grep -Fq -- '-t' reports/local-ntp-help.txt || strings "$BIN" | grep -Fqi 'trust'; then
-            echo 'PASS trust-mode surface present' | tee -a "$OUT"
-          else
-            echo 'FAIL trust-mode surface missing' | tee -a "$OUT"
-            exit 1
-          fi
+          grep -Fq '"wp:S:t"' "$B/networking/ntpd.c"
+          grep -Fq 'IF_FEATURE_NTPD_SERVER("I:")' "$B/networking/ntpd.c"
+          grep -Fq 'OPT_t' "$B/networking/ntpd.c"
+          echo 'PASS source getopt contract includes -w/-p/-S/-t/-l/-I' | tee -a "$OUT"
 
       - name: Root launch smoke on UDP 123
         run: |
