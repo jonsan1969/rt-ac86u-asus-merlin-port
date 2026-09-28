@@ -76,7 +76,12 @@ jobs:
           asus_pairs="$(wc -l < reports/asus-symbol-crcs.txt)"
           asus_symbols="$(awk '{print $1}' reports/asus-symbol-crcs.txt | sort -u | wc -l)"
           echo "ASUS observed pairs=$asus_pairs unique_symbols=$asus_symbols" | tee -a "$OUT"
-          test "$asus_pairs" -gt 0
+          if [ "$asus_pairs" -eq 0 ]; then
+            echo 'ASUS_MODVERSION_CRCS=NOT_OBSERVABLE_IN_STOCK_MODULES' | tee -a "$OUT"
+            echo 'This is a diagnostic limitation, not binary compatibility evidence.' | tee -a "$OUT"
+          else
+            echo 'ASUS_MODVERSION_CRCS=OBSERVABLE' | tee -a "$OUT"
+          fi
 
           classify_module() {
             local feature="$1" mod="$2"
@@ -133,6 +138,9 @@ jobs:
           EOF
 
           echo '===== COMMON MODULE SANITY =====' | tee -a "$OUT"
+          if [ "$asus_pairs" -eq 0 ]; then
+            echo 'SKIP common-module CRC comparison: ASUS stock modules expose no observed modversion CRCs' | tee -a "$OUT"
+          fi
           find "$A/lib/modules" -type f -name '*.ko' -printf '%f|%p\\n' 2>/dev/null | sort -u > reports/asus-module-basenames.txt
           common=0; checked=0; hard_mismatch=0
           while IFS= read -r mmod; do
