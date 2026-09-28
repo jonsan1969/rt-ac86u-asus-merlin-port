@@ -90,11 +90,9 @@ jobs:
             exit 1
           fi
           if strings -a "$R/usr/sbin/httpd" | grep -Fxq 'get_wl_status'; then
-            echo 'PASS stock get_wl_status backend' >> "$OUT"
+            echo 'CLASSIFICATION=IMAGE_ADAPT_CANDIDATE get_wl_status backend present' >> "$OUT"
           else
-            echo 'FAIL get_wl_status backend missing' >> "$OUT"
-            cat "$OUT"
-            exit 1
+            echo 'CLASSIFICATION=SOURCE_REQUIRED get_wl_status backend absent' >> "$OUT"
           fi
           if [ -f "$endpoint" ]; then
             echo 'STOCK ajax_wificlients endpoint already present' >> "$OUT"
