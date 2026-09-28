@@ -68,3 +68,5 @@ Only these project states are used:
 - **CANCELLED**
 
 | M67 Speedtest VPN interface selector | **CANCELLED** | feature appears in later 3006 Merlin changelog; pinned 386.14_2 `internet_speed.html` has no VPN/interface selector, so it is outside this donor baseline |
+
+| M68 Outbound LAN allowed logging | **IN PROGRESS** | clean ASUS 45956 source vs pinned Merlin proves a one-line `ACCEPT` → `logaccept` target delta in the default LAN→WAN FORWARD rule; contract: `docs/outbound-lan-logging-source-contract.md`; later ASUS `rc` source still required |
