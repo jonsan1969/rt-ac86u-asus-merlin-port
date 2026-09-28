@@ -98,3 +98,5 @@ Only these project states are used:
 
 | M29 isolated local NTP daemon foundation | **SUCCESS / DORMANT FOUNDATION** | reproducible build run `36466577777`; guarded overlay run `36468186414`: add-only `/usr/libexec/rtac86u-ntpd`, static AArch64/no PT_INTERP, SHA-256 `6885069bb5ee26512b7f6903c08b3f28304f0b29e45bc7e810eeefe67276c6fb`, QEMU option-surface PASS, and no overlay startup/config reference. M29 feature remains IN PROGRESS until M01-M04 lifecycle/dnsmasq integration |
 
+
+| ASUS 52334 stock event surfaces | **VERIFIED / LIMITED** | run `36415137373`: stock PPP scripts execute `/etc/ppp/ip-up.local` and `ip-down.local`, but no generic user lifecycle equivalent to M03 is proven; these are PPP-only supplemental callbacks. See `docs/asus-stock-event-surfaces-52334.md` |
