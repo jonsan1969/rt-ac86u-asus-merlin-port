@@ -1,0 +1,94 @@
+name: Probe ASUS 52334 per-IP traffic compatibility
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/cstats-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Fetch and extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/fw.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/fw.zip' | sha256sum -c -
+          unzip -q work/artifacts/fw.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+      - name: Probe cstats/IP traffic surface
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"; OUT=reports/cstats-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'CSTATS RUNTIME'
+          for rel in bin/cstats usr/bin/cstats usr/sbin/cstats; do
+            if [ -f "$R/$rel" ]; then
+              echo "PRESENT /$rel" >> "$OUT"
+              sha256sum "$R/$rel" >> "$OUT"
+              strings -a "$R/$rel" | grep -Ei 'cstats_|monthly|daily|ipt|bandwidth|history' | sort -u >> "$OUT" || true
+            fi
+          done
+
+          section 'PER-IP WEB PAGES'
+          for rel in Main_TrafficMonitor_devrealtime.asp Main_TrafficMonitor_devdaily.asp Main_TrafficMonitor_devmonthly.asp; do
+            [ -f "$R/www/$rel" ] && echo "PRESENT $rel" >> "$OUT" || echo "MISSING $rel" >> "$OUT"
+          done
+
+          section 'HTTPD HANDLERS'
+          for sig in ipt_bandwidth cstats_enable cstats_path cstats_stime cstats_offset; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fq "$sig"; then echo "PASS httpd::$sig" >> "$OUT"; else echo "MISSING httpd::$sig" >> "$OUT"; fi
+          done
+
+          section 'SHARED/RC CSTATS KEYS'
+          for sig in cstats_enable cstats_path cstats_stime cstats_offset; do
+            n=0
+            for rel in sbin/rc usr/lib/libshared.so; do
+              [ -f "$R/$rel" ] || continue
+              strings -a "$R/$rel" | grep -Fq "$sig" && n=$((n+1)) || true
+            done
+            echo "$sig components=$n" >> "$OUT"
+          done
+
+          section 'RELATED WEB REFERENCES'
+          grep -RInaE --binary-files=without-match 'ipt_bandwidth|cstats_enable|devmonthly|devdaily|devrealtime' "$R/www" 2>/dev/null | head -n 500 >> "$OUT" || true
+
+          section 'CLASSIFICATION'
+          daemon="$(find "$R/bin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 -type f -name cstats -print -quit 2>/dev/null || true)"
+          if [ -n "$daemon" ] && strings -a "$R/usr/sbin/httpd" | grep -Fq 'ipt_bandwidth'; then
+            echo 'CLASSIFICATION=IMAGE_UI_ADAPT_CANDIDATE' >> "$OUT"
+          else
+            echo 'CLASSIFICATION=SOURCE_BACKEND_REQUIRED' >> "$OUT"
+          fi
+          cat "$OUT"
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cstats-52334-compatibility
+          path: reports/cstats-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
