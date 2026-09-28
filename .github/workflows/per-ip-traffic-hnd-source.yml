@@ -1,0 +1,93 @@
+name: Verify M48 HND cstats boundary
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/per-ip-traffic-hnd-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned donor and clean ASUS anchor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set release/src/router/cstats release/src/router/httpd release/src/router/rc release/src/router/shared release/src/router/Makefile
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router release/src-rt-5.02axhnd
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+      - name: Verify HND exclusions and legacy accounting dependency
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          A=work/asus
+          OUT=reports/per-ip-traffic-hnd-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          TOP="$M/release/src/router/Makefile"
+          RC="$M/release/src/router/rc/services.c"
+          HTTP="$M/release/src/router/httpd/data_arrays.c"
+          CST="$M/release/src/router/cstats/cstats.c"
+          DEF="$M/release/src/router/shared/defaults.c"
+
+          echo '===== DONOR BUILD/LIFECYCLE BOUNDARY =====' | tee -a "$OUT"
+          have "$TOP" 'ifneq ($(HND_ROUTER),y)' "Top-level build has non-HND guard"
+          have "$TOP" 'obj-y += cstats' "cstats is donor add-on"
+          have "$RC" '#if !defined(HND_ROUTER)' "rc lifecycle contains HND exclusions"
+          have "$RC" 'restart_cstats();' "donor has cstats restart path"
+          have "$RC" 'stop_cstats();' "donor has cstats stop path"
+          have "$HTTP" '#if !defined(HND_ROUTER)' "HTTPD cstats handlers are non-HND"
+          have "$HTTP" 'int ej_iptmon' "legacy live accounting handler exists"
+          have "$HTTP" 'int ej_ipt_bandwidth' "legacy history handler exists"
+          have "$HTTP" 'int ej_iptraffic' "legacy per-IP detail handler exists"
+
+          echo '===== LEGACY KERNEL ACCOUNTING SOURCE =====' | tee -a "$OUT"
+          have "$CST" '/proc/net/ipt_account/lan' "cstats reads legacy ipt_account procfs"
+          have "$HTTP" '/proc/net/ipt_account/lan' "HTTPD reads legacy ipt_account procfs"
+          have "$DEF" '{ "cstats_enable", "0"' "donor defines cstats enable key"
+          have "$DEF" '{ "cstats_exclude"' "donor defines exclude list"
+          have "$DEF" '{ "cstats_include"' "donor defines include list"
+          have "$DEF" '{ "cstats_all", "1"' "donor defines all-clients mode"
+
+          echo '===== CLEAN ASUS HND SEARCH =====' | tee -a "$OUT"
+          if grep -RqsE 'ipt_ACCOUNT|xt_ACCOUNT|/proc/net/ipt_account/lan' "$A/release/src/router" "$A/release/src-rt-5.02axhnd" 2>/dev/null; then
+            fail "Clean ASUS anchor unexpectedly exposes legacy ipt_ACCOUNT support; re-review M48 design"
+          else
+            pass "Clean ASUS anchor lacks legacy ipt_ACCOUNT accounting backend"
+          fi
+
+          echo 'CLASSIFICATION M48_HND_NATIVE_ACCOUNTING_REIMPLEMENTATION_REQUIRED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: per-ip-traffic-hnd-source
+          path: reports/per-ip-traffic-hnd-source.txt
+          if-no-files-found: warn
+          retention-days: 30
