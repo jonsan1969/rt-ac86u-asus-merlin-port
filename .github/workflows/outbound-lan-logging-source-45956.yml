@@ -37,7 +37,7 @@ jobs:
           git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
           git -C work/merlin-src checkout --detach FETCH_HEAD
 
-      - name: Verify one-line behavior delta
+      - name: Verify duplicated LAN allow target delta
         run: |
           set -euo pipefail
           A=work/asus-src/release/src/router/rc/firewall.c
@@ -61,9 +61,9 @@ jobs:
           asus='fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, "ACCEPT");'
           merlin='fprintf(fp, "-A FORWARD -i %s -j %s\n", lan_if, logaccept);'
 
-          [ "$(grep -Fc "$asus" "$A")" -eq 1 ]             && pass "Clean ASUS has exactly one literal-ACCEPT LAN default rule"             || fail "Clean ASUS literal-ACCEPT rule count changed"
+          [ "$(grep -Fc "$asus" "$A")" -eq 2 ]             && pass "Clean ASUS has two literal-ACCEPT LAN default call sites"             || fail "Clean ASUS literal-ACCEPT call-site count changed"
 
-          [ "$(grep -Fc "$merlin" "$M")" -eq 1 ]             && pass "Pinned Merlin has exactly one logaccept LAN default rule"             || fail "Pinned Merlin logaccept rule count changed"
+          [ "$(grep -Fc "$merlin" "$M")" -eq 2 ]             && pass "Pinned Merlin has two logaccept LAN default call sites"             || fail "Pinned Merlin logaccept call-site count changed"
 
           if grep -Fq "$merlin" "$A"; then
             fail "Clean ASUS unexpectedly already contains Merlin M68 rule"
@@ -77,7 +77,7 @@ jobs:
             pass "Pinned Merlin replaces ASUS target rather than duplicating rule"
           fi
 
-          echo 'CLASSIFICATION M68_ONE_LINE_SOURCE_DELTA_VERIFIED' | tee -a "$OUT"
+          echo 'CLASSIFICATION M68_TWO_CALL_SITE_ONE_TOKEN_SOURCE_DELTA_VERIFIED' | tee -a "$OUT"
 
       - name: Publish report
         if: always()
