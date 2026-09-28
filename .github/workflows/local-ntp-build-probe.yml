@@ -67,7 +67,14 @@ jobs:
           set_cfg CONFIG_SHOW_USAGE y
           set_cfg CONFIG_FEATURE_PIDFILE y
 
+          set +e
           yes "" | make oldconfig CROSS_COMPILE=arm-linux-gnueabi- >/dev/null
+          oldconfig_rc=${PIPESTATUS[1]}
+          set -e
+          [ "$oldconfig_rc" -eq 0 ] || {
+            echo "FAIL oldconfig rc=$oldconfig_rc" | tee -a "$GITHUB_WORKSPACE/$OUT"
+            exit "$oldconfig_rc"
+          }
 
           echo '===== FINAL CONFIG =====' | tee -a "$GITHUB_WORKSPACE/$OUT"
           grep -E '^(CONFIG_STATIC|CONFIG_NTPD|CONFIG_FEATURE_NTPD_SERVER|CONFIG_FEATURE_NTPD_CONF|CONFIG_FEATURE_IPV6|CONFIG_LONG_OPTS|CONFIG_CROSS_COMPILER_PREFIX)=' .config             | tee -a "$GITHUB_WORKSPACE/$OUT"
