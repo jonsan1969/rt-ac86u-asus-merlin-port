@@ -130,11 +130,11 @@ jobs:
               classify_module "$feature" "$mod"
             done
           done <<'EOF'
-          M22_NFS|/(nfs|nfsd|sunrpc|lockd|grace)\\.ko$
-          M23_CIFS|/cifs\\.ko$
-          M27_IPSET|/(ip_set|xt_set|ip_set_[^/]+)\\.ko$
-          M32_CAKE|/(sch_cake|act_ctinfo)\\.ko$
-          M33_WIREGUARD|/wireguard\\.ko$
+          M22_NFS|/(nfs|nfsd|sunrpc|lockd|grace)\.ko$
+          M23_CIFS|/cifs\.ko$
+          M27_IPSET|/(ip_set|xt_set|ip_set_[^/]+)\.ko$
+          M32_CAKE|/(sch_cake|act_ctinfo)\.ko$
+          M33_WIREGUARD|/wireguard\.ko$
           EOF
 
           echo '===== COMMON MODULE SANITY =====' | tee -a "$OUT"
