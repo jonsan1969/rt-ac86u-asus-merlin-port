@@ -123,7 +123,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M54 | System Log layout/filter/log-level enhancements | shared pages differ | **REVIEW** | C | port only demonstrably missing useful UI behavior |
 | M55 | WiFi icon reports both radios | shared UI; exact stock behavior unverified | **REVIEW** | C | small visual/behavioral delta |
 | M56 | Editable-entry WebUI enhancements | cross-cutting page differences | **REVIEW** | C | not a single transplantable file |
-| M57 | Advanced VPN status page | absent | **PORT** | A/C | `Advanced_VPNStatus.asp` + backend status handlers |
+| M57 | Advanced VPN status page | page absent; stock IPsec AJAX exists but Merlin OpenVPN status endpoint/globals are absent | **PORT** | C | do not add page alone; source-side HTTPD/OpenVPN status endpoint integration required before UI port |
 | M58 | QR codes for network/Guest Network | Merlin `qrcode.min.js` present; no same runtime asset in ASUS | **PORT/REVIEW** | A/C | verify ASUS has no alternative implementation before adding |
 | M59 | Local OUI database for WebUI/networkmap | Merlin `ajax/ouiDB.json` is runtime-only | **PORT/REVIEW** | A/C | enables local vendor lookup without remote query |
 | M60 | JFFS upload/restore page | absent | **PORT** | A/C | also listed under addon/JFFS block for dependency ordering |
