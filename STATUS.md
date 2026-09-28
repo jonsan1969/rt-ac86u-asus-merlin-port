@@ -92,3 +92,4 @@ Only these project states are used:
 | M46 QoS Stats | **IN PROGRESS** | narrowed to read-only tc-class + BWDPI HTTPD handlers, then add-only page/AJAX/menu integration; M64 download counters share this backend. See `docs/qos-stats-source-contract.md` |
 
 | M52 Wireless client auto-refresh | **IN PROGRESS** | narrowed to read-only `get_wl_status` Broadcom/HND HTTPD handler + AJAX/exact Wireless Log page adaptation; no wireless daemon/driver replacement. Must compose with M53 no-auto-logout. See `docs/wireless-client-refresh-source-contract.md` |
+| M36 IPv6 DNS Director Custom 1–3 | **IN PROGRESS** | existing ASUS IPv6 DNSFilter rule engine is retained; only `dnsfilter_custom61/62/63` defaults + HND AF_INET6 custom resolver mapping + follow-up UI fields remain. Contract: `docs/dns-director-ipv6-custom-source-contract.md` |
