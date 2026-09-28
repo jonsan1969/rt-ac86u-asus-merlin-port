@@ -22,14 +22,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work reports
-          git clone --filter=blob:none --no-checkout https://github.com/blackfuel/asuswrt-rt-ac86u.git work/asus-src
+          git init work/asus-src
+          git -C work/asus-src remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
           git -C work/asus-src sparse-checkout init --cone
           git -C work/asus-src sparse-checkout set release/src/router release/src-rt
-          git -C work/asus-src checkout a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
-          git clone --filter=blob:none --no-checkout https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          git -C work/asus-src fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus-src checkout --detach FETCH_HEAD
+          git init work/merlin-src
+          git -C work/merlin-src remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
           git -C work/merlin-src sparse-checkout init --cone
           git -C work/merlin-src sparse-checkout set release/src/router
-          git -C work/merlin-src checkout 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin-src checkout --detach FETCH_HEAD
 
       - name: Measure source anchor
         run: |
