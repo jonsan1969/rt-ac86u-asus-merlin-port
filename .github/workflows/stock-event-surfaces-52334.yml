@@ -1,0 +1,145 @@
+name: Probe ASUS 52334 stock event surfaces
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/stock-event-surfaces-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Extract ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus-fw work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus-fw
+          (
+            cd work/asus-fw
+            FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+            test -n "$FW"
+            binwalk -Me "$FW" >/dev/null
+          )
+          ASUS_ROOT="$(find work/asus-fw -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ASUS_ROOT"
+          echo "ASUS_ROOT=$ASUS_ROOT" >> "$GITHUB_ENV"
+
+      - name: Inventory stock event and script surfaces
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"
+          OUT=reports/stock-event-surfaces-52334.txt
+          : > "$OUT"
+
+          section() { printf '\n===== %s =====\n' "$1" | tee -a "$OUT"; }
+
+          section "ROOT"
+          echo "root=$A" | tee -a "$OUT"
+
+          section "SHELL AND TEXT SCRIPTS"
+          find "$A" -xdev -type f \( -perm /111 -o -name '*.sh' -o -name '*.script' \) -print0 2>/dev/null |
+            while IFS= read -r -d '' f; do
+              t="$(file -b "$f" 2>/dev/null || true)"
+              case "$t" in
+                *script*|*text*)
+                  rel="${f#"$A"/}"
+                  printf '%s | %s\n' "$rel" "$t"
+                  ;;
+              esac
+            done | sort | tee -a "$OUT"
+
+          section "SYMLINKS TO RC OR EVENT-LIKE TARGETS"
+          find "$A" -xdev -type l -printf '%p -> %l\n' 2>/dev/null |
+            sed "s#^$A/##" |
+            grep -Ei '(^|/)(rc|hotplug|udhc|dhcp|ppp|wan|usb|mount|firewall|service|network|notify|event|ip-up|ip-down)' |
+            sort | tee -a "$OUT" || true
+
+          section "EVENT-LIKE PATHS"
+          find "$A" -xdev \( -type f -o -type l -o -type d \) -print 2>/dev/null |
+            sed "s#^$A##" |
+            grep -Ei '(^|/)(hotplug|hotplug\.d|udhc|dhcp6|dhcp|ppp|ip-up|ip-down|usb|mount|firewall|wan|service|event|notify|scripts?)($|[./_-])' |
+            sort -u | tee -a "$OUT" || true
+
+          section "KNOWN CONFIG DIRECTORIES"
+          for d in             /etc/hotplug.d /etc/hotplug2.rules /etc/udhcpc /etc/dhcp /etc/dhcp6c             /etc/ppp /etc/ppp/ip-up /etc/ppp/ip-down /rom/etc /usr/libexec /usr/sbin /sbin; do
+            if [ -e "$A$d" ]; then
+              echo "--- $d" | tee -a "$OUT"
+              if [ -d "$A$d" ]; then
+                find "$A$d" -maxdepth 2 -printf '%y %p -> %l\n' 2>/dev/null | sed "s# $A# #g" | sort | tee -a "$OUT"
+              else
+                file "$A$d" | sed "s#$A##" | tee -a "$OUT"
+                head -n 120 "$A$d" 2>/dev/null | tee -a "$OUT" || true
+              fi
+            fi
+          done
+
+          section "CORE BINARY EVENT STRINGS"
+          for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so usr/lib/libnvram.so; do
+            [ -f "$A/$rel" ] || continue
+            echo "--- $rel" | tee -a "$OUT"
+            strings -a "$A/$rel" |
+              grep -Ei                 '(/jffs/|/rom/|/etc/|/tmp/).*(script|event|hook|hotplug|udhc|dhcp|ppp|mount|usb|wan|firewall|service)|hotplug|notify_rc|udhcpc|dhcp6c|ip-up|ip-down|pre-mount|post-mount|unmount|firewall-start|wan-start|wan-event|nat-start|services-start|services-stop|service-event|qos-start|ddns-start' |
+              sort -u | tee -a "$OUT" || true
+          done
+
+          section "RC MULTICALL APPLETS"
+          if [ -f "$A/sbin/rc" ]; then
+            strings -a "$A/sbin/rc" |
+              grep -E '^[A-Za-z0-9_.+-]{2,48}$' |
+              grep -Ei 'hotplug|udhc|dhcp|ppp|wan|usb|mount|firewall|service|notify|event|network|ddns|qos|jffs' |
+              sort -u | tee -a "$OUT" || true
+          fi
+
+          section "JFFS REFERENCES"
+          for rel in sbin/rc usr/sbin/httpd usr/lib/libshared.so; do
+            [ -f "$A/$rel" ] || continue
+            echo "--- $rel" | tee -a "$OUT"
+            strings -a "$A/$rel" | grep -F '/jffs/' | sort -u | tee -a "$OUT" || true
+          done
+
+          section "SCRIPT CONTENT REFERENCES"
+          while IFS= read -r f; do
+            rel="${f#"$A"/}"
+            hits="$(grep -Ein 'hotplug|udhc|dhcp6|ip-up|ip-down|notify_rc|firewall|wan|usb|mount|service|event|jffs' "$f" 2>/dev/null | head -n 60 || true)"
+            if [ -n "$hits" ]; then
+              echo "--- $rel" | tee -a "$OUT"
+              printf '%s\n' "$hits" | tee -a "$OUT"
+            fi
+          done < <(
+            find "$A" -xdev -type f -size -512k -print 2>/dev/null |
+              while read -r f; do
+                file -b "$f" 2>/dev/null | grep -Eq 'script|text' && echo "$f" || true
+              done
+          )
+
+          section "CLASSIFICATION"
+          echo "REPORT_ONLY: use concrete stock callbacks only if ordering/arguments can be proven equivalent to the desired Merlin hook." | tee -a "$OUT"
+          echo "NO_CORE_BINARY_PATCH_AUTHORIZED_BY_THIS_PROBE" | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-event-surfaces-52334
+          path: reports/stock-event-surfaces-52334.txt
+          if-no-files-found: warn
+          retention-days: 30
