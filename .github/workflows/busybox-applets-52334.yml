@@ -48,21 +48,35 @@ jobs:
           sha256sum "$R/bin/busybox" >> "$OUT"
 
           BB_LIST=reports/busybox-list.txt
-          if qemu-arm-static -L "$R" "$R/bin/busybox" --list > "$BB_LIST" 2>reports/qemu-busybox.err; then
-            echo 'QEMU_BUSYBOX_EXEC=PASS' >> "$OUT"
-          else
-            echo 'QEMU_BUSYBOX_EXEC=FAIL' >> "$OUT"
-            cat reports/qemu-busybox.err >> "$OUT"
-          fi
+          : > "$BB_LIST"
+          set +e
+          qemu-arm-static -L "$R" "$R/bin/busybox" --help > reports/busybox-help.txt 2>reports/qemu-busybox.err
+          bb_rc=$?
+          set -e
+          echo "QEMU_BUSYBOX_HELP_RC=$bb_rc" >> "$OUT"
+          cat reports/busybox-help.txt >> "$OUT" || true
+          cat reports/qemu-busybox.err >> "$OUT" || true
 
           echo >> "$OUT"
           echo '===== TARGET APPLETS =====' >> "$OUT"
-          targets='crontab diff dos2unix unix2dos hexdump xargs getopt hostname tee uniq'
+          targets='crontab diff dos2unix unix2dos hexdump xargs getopt hostname tee uniq flock'
           for x in $targets; do
-            compiled=no
-            grep -Fxq "$x" "$BB_LIST" 2>/dev/null && compiled=yes || true
+            tmp="reports/applet-$x.txt"
+            set +e
+            qemu-arm-static -L "$R" "$R/bin/busybox" "$x" --help > "$tmp" 2>&1
+            rc=$?
+            set -e
+            if grep -Eiq 'applet not found|unknown applet|not found' "$tmp"; then
+              compiled=no
+            elif [ -s "$tmp" ]; then
+              compiled=yes
+              echo "$x" >> "$BB_LIST"
+            else
+              compiled=unknown
+            fi
             links=$(find "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$x" -print 2>/dev/null | wc -l)
-            printf '%-12s compiled=%s existing_paths=%s\n' "$x" "$compiled" "$links" >> "$OUT"
+            printf '%-12s compiled=%s rc=%s existing_paths=%s\n' "$x" "$compiled" "$rc" "$links" >> "$OUT"
+            sed -n '1,8p' "$tmp" | sed 's/^/  /' >> "$OUT"
           done
 
           echo >> "$OUT"
@@ -83,5 +97,7 @@ jobs:
             reports/busybox-applets-52334.txt
             reports/busybox-list.txt
             reports/qemu-busybox.err
+            reports/busybox-help.txt
+            reports/applet-*.txt
           if-no-files-found: error
           retention-days: 14
