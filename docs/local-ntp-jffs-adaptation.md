@@ -107,11 +107,13 @@ It must not replace or symlink over `/bin/busybox`.
 
 The build should use the latest compatible ASUS-lineage source/toolchain available for the final source build. The clean 45956 source proves behavior availability but is not automatically the final binary build base.
 
-Invocation should use BusyBox multicall syntax so process naming cannot collide with ASUS `pids("ntp")`, for example conceptually:
+The isolated build is a BusyBox **single-applet** executable, so invoke it directly rather than passing an extra `ntpd` applet name:
 
 ```sh
-/usr/libexec/rtac86u-ntpd ntpd -w -t -l -I "$lan_if" -p "$server0" ...
+/usr/libexec/rtac86u-ntpd -w -t -l -I "$lan_if" -p "$server0" ...
 ```
+
+This also avoids creating a multicall surface or symlink that could collide with ASUS `/sbin/ntp -> rc`.
 
 The wrapper owns a distinct pidfile such as:
 
@@ -320,7 +322,28 @@ Do not activate transparent Tor until M29 has passed its server validation gate.
 
 ## Classification
 
-**M29: B/C AFTER M01-M04 — SOURCE-BUILT ISOLATED DAEMON, NO BUSYBOX REPLACEMENT**  
+**M29: B AFTER M01-M04 — ISOLATED AARCH64 DAEMON BUILD PROVEN, NO BUSYBOX REPLACEMENT**  
 **M30: B AFTER M03 + M29 — GENERIC FIREWALL-HOOK ADAPTATION**
 
 The remaining build requirement is producing the isolated NTPD executable from the latest compatible ASUS-lineage source/toolchain. Neither feature requires transplanting Merlin BusyBox or modifying ASUS 52334 core binaries.
+
+
+## Isolated daemon build result
+
+GitHub Actions run `36447439013` successfully built and smoke-tested the isolated candidate from the pinned clean ASUS BusyBox lineage.
+
+Evidence:
+
+- source anchor: ASUS 386.45956 BusyBox/ntpd;
+- target: ELF64 AArch64;
+- linking: static, no `PT_INTERP`;
+- size: 925720 bytes;
+- SHA-256 for that run: `d6ba15cf241e09cda773d511af7e7c6e6aeae0464f78cb041af4fa5de57b0e47`;
+- runtime usage: `Usage: ntpd [-dnqNwtl -I IFACE] [-S PROG] [-p PEER]...`;
+- source getopt surface verifies `-w/-p/-S/-t/-l/-I`;
+- qemu-aarch64 root launch with `-w -l -I lo -p 192.0.2.1` remained alive until the three-second timeout;
+- stock ASUS BusyBox is not involved or replaced.
+
+The build is therefore no longer the M29 blocker. Remaining work is image integration, lifecycle gating after ASUS `ntp_ready`, dnsmasq postconf, and real-router NTP reply validation.
+
+The artifact hash is evidence for this CI build, not yet a permanent release pin. Before shipping, make the build reproducible/pinned and rerun guarded image-size/runtime validation.
