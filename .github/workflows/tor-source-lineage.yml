@@ -1,0 +1,110 @@
+name: Verify M28 Tor source-lineage contract
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/tor-source-lineage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned source trees
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+
+          git init work/asus
+          git -C work/asus remote add origin https://github.com/blackfuel/asuswrt-rt-ac86u.git
+          git -C work/asus sparse-checkout init --cone
+          git -C work/asus sparse-checkout set release/src/router release/src-rt
+          git -C work/asus fetch --depth=1 --filter=blob:none origin a9179fc9329565dea0f7c5c7648fe8ad49ceaaf6
+          git -C work/asus checkout --detach FETCH_HEAD
+
+          git init work/m12
+          git -C work/m12 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/m12 sparse-checkout init --cone
+          git -C work/m12 sparse-checkout set release/src/router
+          git -C work/m12 fetch --depth=1 --filter=blob:none origin 5b47ec64ce58d23c591e809d4cbad09d1121c4ea
+          git -C work/m12 checkout --detach FETCH_HEAD
+
+          git init work/m14
+          git -C work/m14 remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/m14 sparse-checkout init --cone
+          git -C work/m14 sparse-checkout set release/src/router release/src-rt
+          git -C work/m14 fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/m14 checkout --detach FETCH_HEAD
+
+      - name: Verify Tor lineage, version and firewall scope
+        run: |
+          set -euo pipefail
+          A=work/asus
+          X=work/m12
+          M=work/m14
+          OUT=reports/tor-source-lineage.txt
+          : > "$OUT"
+
+          pass(){ echo "PASS $*" | tee -a "$OUT"; }
+          fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have(){ grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          echo '===== CLEAN ASUS FEATURE LINEAGE =====' | tee -a "$OUT"
+          have "$A/release/src/router/config_base" '# RTCONFIG_TOR is not set' "ASUS clean base disables RTCONFIG_TOR"
+          have "$A/release/src/router/Makefile" 'obj-y += tor' "ASUS router build contains Tor target"
+          have "$A/release/src/router/Makefile" 'install -D tor/src/app/tor $(INSTALLDIR)/tor/usr/sbin/Tor' "ASUS build installs /usr/sbin/Tor"
+          have "$A/release/src/router/rc/services.c" 'void start_Tor_proxy(void)' "ASUS source contains Tor start backend"
+          have "$A/release/src/router/rc/services.c" 'void stop_Tor_proxy(void)' "ASUS source contains Tor stop backend"
+          have "$A/release/src/router/rc/firewall.c" 'nvram_match("Tor_enable", "1")' "ASUS source contains Tor firewall path"
+          have "$A/release/src/router/shared/defaults.c" '{ "Tor_enable", "0"' "ASUS source contains Tor defaults"
+          test -f "$A/release/src/router/www/Advanced_TOR_Content.asp"             && pass "ASUS source contains Tor WebUI page" || fail "ASUS Tor WebUI page missing"
+          have "$A/release/src/router/rc/services.c" 'tor:x:65533:65533:tor:/dev/null:/dev/null' "ASUS source creates locked-service passwd entry"
+          have "$A/release/src/router/rc/services.c" 'tor:*:65533:' "ASUS source creates Tor group"
+
+          echo '===== VERSION LINEAGE =====' | tee -a "$OUT"
+          have "$A/release/src/router/tor/configure.ac" 'AC_INIT([tor],[0.4.5.8])' "Clean ASUS Tor is 0.4.5.8"
+          have "$X/release/src/router/tor/configure.ac" 'AC_INIT([tor],[0.4.7.13])' "Merlin 386.12 Tor is 0.4.7.13"
+          have "$M/release/src/router/tor/configure.ac" 'AC_INIT([tor],[0.4.7.16])' "Pinned donor Tor is 0.4.7.16"
+
+          echo '===== PINNED DONOR RUNTIME CONTRACT =====' | tee -a "$OUT"
+          S="$M/release/src/router/rc/services.c"
+          F="$M/release/src/router/rc/firewall.c"
+          W="$M/release/src/router/www/Advanced_TOR_Content.asp"
+          for token in             'SocksPort %s'             'VirtualAddrNetwork 10.192.0.0/10'             'AutomapHostsOnResolve 1'             'TransPort %s:%s'             'DNSPort %s:%s'             'DataDirectory /tmp/.tordb'             'AvoidDiskWrites 1'             'User tor'             'append_custom_config("torrc", fp)'             'use_custom_config("torrc", "/tmp/torrc")'             'run_postconf("torrc", "/tmp/torrc")'; do
+            have "$S" "$token" "Donor Tor config contains $token"
+          done
+
+          have "$F" '-p udp --dport 53 -j REDIRECT --to-ports %s' "Donor redirects Tor DNS"
+          have "$F" '-p udp --dport 123 -j REDIRECT --to-ports 123' "Donor redirects Tor client NTP to local server"
+          have "$F" '-p tcp --syn ! -d %s -j REDIRECT --to-ports %s' "Donor redirects external TCP to TransPort"
+          have "$F" '-I FORWARD -i %s -j DROP' "Donor blocks non-proxied IPv4 forwarding"
+
+          echo '===== IPV6 SCOPE =====' | tee -a "$OUT"
+          if grep -F 'Tor_enable' "$F" | grep -Fq 'fp_ipv6'; then
+            fail "Pinned donor unexpectedly has Tor-specific IPv6 firewall generation; re-review contract"
+          else
+            pass "Pinned donor Tor rules are not emitted to fp_ipv6"
+          fi
+          if grep -Eiq 'ipv6|IPv6' "$W"; then
+            fail "Pinned Tor UI unexpectedly gained IPv6 gating/warning; re-review contract"
+          else
+            pass "Pinned Tor UI has no IPv6 warning/gating"
+          fi
+
+          echo 'CLASSIFICATION M28_ASUS_LINEAGE_SOURCE_REENABLE_WITH_IPV6_HARDENING' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tor-source-lineage
+          path: reports/tor-source-lineage.txt
+          if-no-files-found: warn
+          retention-days: 30
