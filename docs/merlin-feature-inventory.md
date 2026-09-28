@@ -74,8 +74,8 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 
 | ID | Function | ASUS 52334 state | Decision | Class | Port notes |
 |---|---|---|---|---|---|
-| M18 | Simpler SMB share naming | `smbd_simpler_naming` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
-| M19 | Force SMB Master Browser | `smbd_master` absent from ASUS rc/httpd/libshared | **PORT** | C | source-side Samba config/default/UI integration required |
+| M18 | Simpler SMB share naming | `smbd_simpler_naming` absent from ASUS rc/httpd/libshared | **PORT** | C | exact donor uniqueness/section-name semantics documented in `docs/samba-merlin-controls-source-contract.md`; graft into later ASUS generator only |
+| M19 | Force SMB Master Browser | `smbd_master` absent from ASUS rc/httpd/libshared | **PORT** | C | exact global-config + no-disk lifecycle semantics documented in `docs/samba-merlin-controls-source-contract.md`; preserve current ASUS/M20 WINS path |
 | M20 | WINS server | ASUS rc + libshared retain `smbd_wins`; generic Samba form/NVRAM apply handling was proven | **ADAPT** | A/C | implemented as one exact UI row in stock Samba page; guarded run 36382734032 validates WINS on/off controls, stock `restart_ftpsamba`, and absence of M18/M19 leakage |
 | M21 | Windows discovery via `wsdd2` | ASUS smbd/nmbd present; donor `wsdd2` ELF has all NEEDED libs in ASUS, but ASUS `rc` has no wsdd2 lifecycle | **PORT** | A/B/C | binary compatibility proven in 36382208517; source-side start/stop integration is still required, so no binary-only overlay |
 | M22 | NFS exports for USB storage | ASUS image has no NFS userland or NFS/sunrpc kernel modules; Merlin has both | **PORT** | B/C | run 36383330681: donor modules report `4.1.27 SMP preempt mod_unload aarch64`, but matching vermagic is not kernel symbol/config ABI proof; rebuild/integrate against ASUS kernel source, then add userland/WebUI |
