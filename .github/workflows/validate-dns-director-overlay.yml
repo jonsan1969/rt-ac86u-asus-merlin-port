@@ -272,6 +272,26 @@ jobs:
           if 'dnsfilter_support = false;' in state:
               raise SystemExit("state.js still forcibly disables DNSFilter support")
 
+          # Merlin dual-radio WiFi icon fallback, preserving ASUS hardware-switch logic.
+          if state.count('id="wifi_hw_sw_status" class="wifihwswstatusoff"') != 1:
+              raise SystemExit("dual-radio WiFi icon is not rendered exactly once")
+          if state.count('if(wifi_hw_sw_support && !downsize_8m_support && !downsize_4m_support){') != 1:
+              raise SystemExit("ASUS hardware-switch WiFi status branch was unexpectedly altered")
+          if 'if(!downsize_8m_support && !downsize_4m_support){' not in state:
+              raise SystemExit("WiFi icon banner is still limited to hardware-switch models")
+          if state.count('else if (radio_2 || radio_5 || parseInt(radio_5b)){') != 1:
+              raise SystemExit("dual-radio partial-state fallback missing")
+          if state.count('wifihwswstatuspartial') != 1:
+              raise SystemExit("dual-radio partial-state class reference missing or duplicated")
+
+          wifi_css=(root/"www/form_style.css").read_text(encoding="utf-8")
+          if wifi_css.count('.wifihwswstatuspartial{') != 1:
+              raise SystemExit("WiFi partial-state CSS missing or duplicated")
+          if 'background-position:2px -73px;' not in wifi_css:
+              raise SystemExit("WiFi partial-state sprite offset missing")
+          if not (root/"www/images/wifi_hw_sw.png").is_file():
+              raise SystemExit("stock ASUS WiFi status sprite missing")
+
           profile=(root/"rom/etc/profile").read_text(encoding="utf-8")
           profile_required=[
               '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin',

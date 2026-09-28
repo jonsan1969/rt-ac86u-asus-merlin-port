@@ -15,14 +15,29 @@
       "policy": "add_only"
     },
     {
-      "type": "text_replace",
+      "type": "text_replace_multi",
       "target": "/www/state.js",
       "target_sha256": "bce58d27bcfdaeff9fdb216a5eb0f8fd944b5618058c1d38ef7b3cb8452e5d61",
-      "find": "var dnsfilter_support = isSupport(\"dnsfilter\");\ndnsfilter_support = false;",
-      "replace": "var dnsfilter_support = isSupport(\"dnsfilter\");",
-      "count": 1,
       "encoding": "utf-8",
-      "policy": "patch_exact"
+      "policy": "patch_exact",
+      "replacements": [
+        {
+          "find": "var dnsfilter_support = isSupport(\"dnsfilter\");\ndnsfilter_support = false;",
+          "replace": "var dnsfilter_support = isSupport(\"dnsfilter\");",
+          "count": 1
+        },
+        {
+          "find": "if(wifi_hw_sw_support && !downsize_8m_support && !downsize_4m_support){\nbanner_code +='<td width=\"30\"><div id=\"wifi_hw_sw_status\" class=\"wifihwswstatusoff\"></div></td>\\n';\n}\n",
+          "replace": "if(!downsize_8m_support && !downsize_4m_support){\nbanner_code +='<td width=\"30\"><div id=\"wifi_hw_sw_status\" class=\"wifihwswstatusoff\"></div></td>\\n';\n}\n",
+          "count": 1
+        },
+        {
+          "find": "document.getElementById(\"wifi_hw_sw_status\").onmouseover = function(){overHint(8);}\ndocument.getElementById(\"wifi_hw_sw_status\").onmouseout = function(){nd();}\n}\nif(usb_support){",
+          "replace": "document.getElementById(\"wifi_hw_sw_status\").onmouseover = function(){overHint(8);}\ndocument.getElementById(\"wifi_hw_sw_status\").onmouseout = function(){nd();}\n}\nelse{\n<%radio_status();%>\nif (!band5g_support)\nradio_5 = radio_2;\nif (wl_info.band5g_2_support)\nradio_5b = '<% nvram_get(\"wl2_radio\"); %>';\nelse\nradio_5b = radio_5;\nif (radio_2 && radio_5 && parseInt(radio_5b)){\ndocument.getElementById(\"wifi_hw_sw_status\").className = \"wifihwswstatuson\";\ndocument.getElementById(\"wifi_hw_sw_status\").onclick = function(){}\n}\nelse if (radio_2 || radio_5 || parseInt(radio_5b)){\ndocument.getElementById(\"wifi_hw_sw_status\").className = \"wifihwswstatuspartial\";\ndocument.getElementById(\"wifi_hw_sw_status\").onclick = function(){}\n}\nelse{\ndocument.getElementById(\"wifi_hw_sw_status\").className = \"wifihwswstatusoff\";\ndocument.getElementById(\"wifi_hw_sw_status\").onclick = function(){}\n}\ndocument.getElementById(\"wifi_hw_sw_status\").onmouseover = function(){overHint(8);}\ndocument.getElementById(\"wifi_hw_sw_status\").onmouseout = function(){nd();}\n}\nif(usb_support){",
+          "count": 1
+        }
+      ],
+      "result_sha256": "649aa3e70d0d205b6de64a17ce250fb6dbd42cddf950deb6a91cce2569a817bc"
     },
     {
       "type": "text_replace",
@@ -375,6 +390,17 @@
       "replace": "<script>\n// disable auto log out\nAUTOLOGOUT_MAX_MINUTE = 0;\nvar classObj= {",
       "count": 1,
       "encoding": "utf-8",
+      "policy": "patch_exact"
+    },
+    {
+      "type": "text_replace",
+      "target": "/www/form_style.css",
+      "target_sha256": "403763fb38402d55a366f640388082fa134b0bb8add37f8ec2422a879b485b3e",
+      "find": ".wifihwswstatuson{\n\tbackground-image:url(images/wifi_hw_sw.png);\n\tbackground-repeat:no-repeat;\n\tbackground-position:2px 2px;\n\theight:29px;\n\twidth:30px;\n\tcursor: pointer;\n}\n.wifihwswstatusoff{",
+      "replace": ".wifihwswstatuson{\n\tbackground-image:url(images/wifi_hw_sw.png);\n\tbackground-repeat:no-repeat;\n\tbackground-position:2px 2px;\n\theight:29px;\n\twidth:30px;\n\tcursor: pointer;\n}\n.wifihwswstatuspartial{\n\tbackground-image:url(images/wifi_hw_sw.png);\n\tbackground-repeat:no-repeat;\n\tbackground-position:2px -73px;\n\theight:29px;\n\twidth:30px;\n\tcursor: pointer;\n}\n.wifihwswstatusoff{",
+      "count": 1,
+      "encoding": "utf-8",
+      "result_sha256": "ee285ad2592424074985ba6ed1d53e4ce1f1d75a8c27d2de9ab1922e1c0eb5d8",
       "policy": "patch_exact"
     }
   ]
