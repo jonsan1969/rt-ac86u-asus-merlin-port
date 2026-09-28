@@ -44,8 +44,8 @@ jobs:
           : > "$OUT"
           pass(){ echo "PASS $*" | tee -a "$OUT"; }
           fail(){ echo "FAIL $*" | tee -a "$OUT"; return 1; }
-          have(){ grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
-          lack(){ if grep -Fq "$2" "$1"; then fail "$3"; else pass "$3"; fi; }
+          have(){ grep -Fq -- "$2" "$1" && pass "$3" || fail "$3"; }
+          lack(){ if grep -Fq -- "$2" "$1"; then fail "$3"; else pass "$3"; fi; }
 
           AN="$A/release/src/router/busybox/networking/ntpd.c"
           MN="$M/release/src/router/busybox/networking/ntpd.c"
