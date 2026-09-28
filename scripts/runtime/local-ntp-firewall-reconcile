@@ -1,0 +1,99 @@
+#!/bin/sh
+# RT-AC86U client-NTP redirect reconcile helper.
+# Dormant until invoked by the JFFS firewall-start lifecycle hook.
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+
+CHAIN=RTAC86U_NTP
+LOCKDIR=/tmp/rtac86u-ntp-fw.lock
+STATEFILE=/var/run/rtac86u-ntp-fw.iface
+
+log() {
+    if command -v logger >/dev/null 2>&1; then
+        logger -t local-ntp-firewall -- "$*"
+    fi
+}
+
+nvget() {
+    nvram get "$1" 2>/dev/null || true
+}
+
+find_iptables() {
+    for p in /usr/sbin/iptables /sbin/iptables; do
+        [ -x "$p" ] && { printf '%s\n' "$p"; return 0; }
+    done
+    command -v iptables 2>/dev/null || return 1
+}
+
+valid_iface_name() {
+    case "$1" in
+        ''|*[!A-Za-z0-9_.:-]*) return 1 ;;
+    esac
+    return 0
+}
+
+valid_iface() {
+    valid_iface_name "$1" && [ -d "/sys/class/net/$1" ]
+}
+
+unlock() {
+    rmdir "$LOCKDIR" 2>/dev/null || true
+}
+
+lock() {
+    n=0
+    while ! mkdir "$LOCKDIR" 2>/dev/null; do
+        n=$((n + 1))
+        [ "$n" -lt 10 ] || return 1
+        sleep 1
+    done
+    trap 'unlock' EXIT HUP INT TERM
+}
+
+remove_jump_for() {
+    iface="$1"
+    valid_iface_name "$iface" || return 0
+    while "$IPT" -t nat -D PREROUTING -i "$iface" -p udp -m udp --dport 123 -j "$CHAIN" 2>/dev/null; do :; done
+}
+
+cleanup() {
+    old_if=""
+    [ -r "$STATEFILE" ] && old_if="$(cat "$STATEFILE" 2>/dev/null || true)"
+    remove_jump_for "$old_if"
+    [ "$lan_if" = "$old_if" ] || remove_jump_for "$lan_if"
+    "$IPT" -t nat -F "$CHAIN" 2>/dev/null || true
+    "$IPT" -t nat -X "$CHAIN" 2>/dev/null || true
+    rm -f "$STATEFILE"
+}
+
+IPT="$(find_iptables)" || {
+    log 'iptables not found; cannot reconcile NTP interception'
+    exit 1
+}
+
+lan_if="$(nvget lan_ifname)"
+
+lock || {
+    log 'another firewall reconcile instance holds the lock'
+    exit 0
+}
+
+# Always remove our exact previous ownership first. This makes disable and
+# repeated firewall-start invocations idempotent.
+cleanup
+
+if [ "$(nvget ntpd_enable)" != "1" ] || [ "$(nvget ntpd_server_redir)" != "1" ]; then
+    exit 0
+fi
+
+if ! valid_iface "$lan_if"; then
+    log "invalid LAN interface '$lan_if'; NTP interception left disabled"
+    exit 1
+fi
+
+"$IPT" -t nat -N "$CHAIN"
+"$IPT" -t nat -A "$CHAIN" -p udp -m udp --dport 123 -j REDIRECT --to-ports 123
+"$IPT" -t nat -A PREROUTING -i "$lan_if" -p udp -m udp --dport 123 -j "$CHAIN"
+printf '%s\n' "$lan_if" > "$STATEFILE"
+log "enabled LAN UDP/123 redirect on $lan_if"
