@@ -1,0 +1,118 @@
+name: Verify VPN Director routing donor contract
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/vpn-director-routing-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set             release/src/router/libovpn             release/src/router/shared             release/src/router/www             release/src/router/rom/rom/etc/iproute2
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify routing and policy invariants
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/vpn-director-routing-source.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          C="$M/release/src/router/libovpn/openvpn_config.c"
+          O="$M/release/src/router/libovpn/openvpn_control.c"
+          H="$M/release/src/router/libovpn/openvpn_config.h"
+          D="$M/release/src/router/shared/defaults.c"
+          W="$M/release/src/router/www/Advanced_OpenVPNClient_Content.asp"
+          V="$M/release/src/router/www/Advanced_VPNDirector.asp"
+          T="$M/release/src/router/rom/rom/etc/iproute2/rt_tables"
+
+          echo '===== PIN =====' | tee -a "$OUT"
+          git -C "$M" show -s --format='%H %s' HEAD | tee -a "$OUT"
+
+          echo '===== RULE STORE / SCHEMA =====' | tee -a "$OUT"
+          have "$D" '{ "vpndirector_rulelist"' "Donor defines vpndirector_rulelist default"
+          have "$C" 'vpndirector_rulelist' "OpenVPN backend persists VPN Director rule list"
+          have "$C" 'vstrsep(rule, ">", &enable, &desc, &src, &dst, &target)' "Rule parser uses enabled/desc/src/dst/target schema"
+          have "$V" 'var ruleMaxNum = 199' "Pinned UI caps rule list at 199"
+          have "$V" 'parseNvramToArray' "Pinned UI parses rule list"
+
+          echo '===== ROUTING MODES =====' | tee -a "$OUT"
+          have "$H" 'OVPN_RGW_NONE = 0' "Routing mode 0 is none"
+          have "$H" 'OVPN_RGW_ALL' "Routing mode 1 is redirect-all"
+          have "$H" 'OVPN_RGW_POLICY' "Routing mode 2 is policy"
+          have "$W" 'add_option(document.form.vpn_client_rgw, "No","0"' "UI exposes no-redirection"
+          have "$W" 'add_option(document.form.vpn_client_rgw, "Yes (all)","1"' "UI exposes redirect-all"
+          have "$W" 'add_option(document.form.vpn_client_rgw, "VPN Director (policy rules)","2"' "UI exposes VPN Director as mode 2"
+
+          echo '===== TABLES / PRIORITIES =====' | tee -a "$OUT"
+          for n in 1 2 3 4 5; do
+            have "$T" "ovpnc$n" "rt_tables contains ovpnc$n"
+          done
+          have "$O" '10010-10209: WAN rules' "WAN priority band pinned"
+          have "$O" '10210-10409: OVPN 1' "OVPN1 priority band pinned"
+          have "$O" '10510-10609: OVPN 2' "OVPN2 priority band pinned"
+          have "$O" '10710-10809: OVPN 3' "OVPN3 priority band pinned"
+          have "$O" '10910-11009: OVPN 4' "OVPN4 priority band pinned"
+          have "$O" '11100-11209: OVPN 5' "OVPN5 priority band pinned"
+          have "$O" 'wanprio = 10010' "WAN rule writer starts at 10010"
+          have "$O" 'vpnprio = 10010 + (200 * unit)' "VPN rule writer uses 200-rule bands"
+          have "$O" 'priority %d' "RPDB rules carry explicit priority"
+
+          echo '===== CLIENT TABLE BUILD =====' | tee -a "$OUT"
+          have "$O" 'ip route flush table ovpnc%d' "Client-up flushes per-client table"
+          have "$O" 'ip route show table main > /tmp/vpnroute%d_tmp' "Client-up snapshots main table"
+          have "$O" 'ip route add %s table ovpnc%d' "Main/pushed routes are copied into client table"
+          have "$O" 'ip route replace default via %s dev %s table ovpnc%d' "Client table gets VPN default route"
+          have "$O" 'ip rule add table ovpnc%d priority %d' "Redirect-all installs table rule"
+
+          echo '===== POLICY RULE WRITER =====' | tee -a "$OUT"
+          have "$O" 'if (!strcmp(target,"WAN"))' "WAN target maps to main table"
+          have "$O" 'else if (!strncmp(target, "OVPN", 4))' "OVPN target maps to client table"
+          have "$O" 'snprintf(srcstr, sizeof (srcstr), "from %s", src)' "Source selector supported"
+          have "$O" 'snprintf(dststr, sizeof (dststr), "to %s", dst)' "Destination selector supported"
+
+          echo '===== KILLSWITCH / CLEANUP =====' | tee -a "$OUT"
+          have "$D" '{ "vpn_client1_enforce","0"' "Per-client killswitch default exists"
+          have "$O" 'ip route add prohibit default table ovpnc%d' "Killswitch uses prohibit default"
+          have "$O" 'ovpn_set_killswitch(unit);' "Client-down/autostart path applies killswitch"
+          have "$O" '_clear_routing_rules(unit);' "Client stop clears owned RPDB rules"
+          have "$O" 'ip route flush table ovpnc%d' "Client stop clears client routing table"
+
+          echo '===== M38 SHARED POLICY OWNER =====' | tee -a "$OUT"
+          have "$O" 'ovpn_get_policy_rules(unit, rules' "Exclusive DNS reads VPN client policy rules"
+          have "$O" 'ovpn_get_policy_rules(0, wanrules' "Exclusive DNS also reads WAN policy rules"
+          have "$O" 'OVPN_DNSMODE_EXCLUSIVE' "Exclusive DNS mode is integrated with OpenVPN routing"
+          have "$O" 'VPNROUTING_LOCK' "DNS routing updates use dedicated routing lock"
+
+          echo 'CLASSIFICATION M25_M40_DONOR_ROUTING_CONTRACT_VERIFIED' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-director-routing-source
+          path: reports/vpn-director-routing-source.txt
+          if-no-files-found: warn
+          retention-days: 30
