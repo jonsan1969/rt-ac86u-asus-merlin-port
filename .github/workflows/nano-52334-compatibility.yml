@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
@@ -115,6 +115,33 @@ jobs:
             echo 'CLASSIFICATION=DEPENDENCY_GAP' >> "$OUT"
           fi
           cat "$OUT"
+      - name: Stage verified nano bundle in port tree
+        run: |
+          set -euo pipefail
+          N="$MERLIN_ROOT/usr/bin/nano"
+          L="$MERLIN_ROOT/usr/lib/libncurses.so.6.0"
+          test -f "$N"
+          test -f "$L"
+          test "$(sha256sum "$N" | awk '{print $1}')" = '82e9e6d755fb779315d8a7b9f3530182456b9544f0e14216ac3ca3dd481db5e8'
+          test "$(sha256sum "$L" | awk '{print $1}')" = 'd7b57d0d6b327c11230793f58cc64327f6be7ce64ea9c1d2dbe4a39ac7387a0b'
+          mkdir -p ports/files/usr/bin ports/files/usr/lib
+          cp "$N" ports/files/usr/bin/nano
+          cp "$L" ports/files/usr/lib/libncurses.so.6.0
+          chmod 755 ports/files/usr/bin/nano
+          chmod 644 ports/files/usr/lib/libncurses.so.6.0
+          if git diff --quiet -- ports/files/usr/bin/nano ports/files/usr/lib/libncurses.so.6.0 &&
+             git ls-files --error-unmatch ports/files/usr/bin/nano >/dev/null 2>&1 &&
+             git ls-files --error-unmatch ports/files/usr/lib/libncurses.so.6.0 >/dev/null 2>&1; then
+            echo 'Verified nano bundle already staged'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ports/files/usr/bin/nano ports/files/usr/lib/libncurses.so.6.0
+          git commit -m 'port: stage verified nano runtime bundle'
+          git pull --rebase origin asus-52334-merlin-port
+          git push origin HEAD:asus-52334-merlin-port
+
       - name: Publish report
         if: always()
         uses: actions/upload-artifact@v4
