@@ -118,7 +118,7 @@ Broad bugfixes, component version bumps and security backports are tracked separ
 | M49 | Monthly traffic history page | absent | **PORT** | A/C | `Main_TrafficMonitor_monthly.asp` |
 | M50 | DHCP reservation hostname field | already present in ASUS page | **NO PORT** | — | stock page contains `dhcp_hostname_x_0`; compare only semantics |
 | M51 | Wireless ACL/client-name display enhancement | ASUS 52334 already has client-name resolution and a newer shared `clientList` model | **NO PORT** | — | verified runtime page equivalence; preserve later ASUS implementation |
-| M52 | Auto-refreshing advanced wireless client list | stock wireless log page exists, but Merlin AJAX endpoint and `get_wl_status` HTTPD handler are absent | **PORT** | C | page refresh UI is simple, but full Merlin client-list data path requires source-side HTTPD handler before adding `ajax_wificlients.asp` |
+| M52 | Wireless client auto-refresh | stock Wireless Log exists but ASUS 52334 lacks Merlin structured `get_wl_status` AJAX contract | **PORT** | C backend + A UI | small read-only Broadcom/HND HTTPD handler + add-only AJAX/exact page adaptation; contract in `docs/wireless-client-refresh-source-contract.md`; preserve M53 patch |
 | M53 | System Log / Wireless Log no-auto-logout behavior | shared pages differ | **PORT/REVIEW** | C | Merlin explicitly disables auto logout on these log pages |
 | M54 | System Log layout/filter/log-level enhancements | shared pages differ | **REVIEW** | C | port only demonstrably missing useful UI behavior |
 | M55 | WiFi icon reports both radios | shared UI; exact stock behavior unverified | **REVIEW** | C | small visual/behavioral delta |
