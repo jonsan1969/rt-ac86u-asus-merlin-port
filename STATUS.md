@@ -97,3 +97,5 @@ Only these project states are used:
 | Optional kernel module ABI CRC probe | **SUCCESS / DIAGNOSTIC LIMIT** | run `36447256650`: Merlin image contains NFS stack, CIFS, full ipset family, `sch_cake` and WireGuard modules, but stock ASUS and donor modules expose no readable MODVERSIONS CRC table (`required=0`, ASUS observed pairs=0); binary ABI cannot be proven from images, so M22/M23/M27/M32/M33 remain source-build-only and donor `.ko` transplant stays forbidden |
 
 | M29 isolated local NTP daemon build | **SUCCESS / CANDIDATE** | run `36447439013`: clean ASUS-lineage BusyBox NTPD built as static ELF64 AArch64 single-applet (925720 bytes), no PT_INTERP, correct `-w/-t/-l/-I/-p` surface, qemu root launch stayed alive to timeout; SHA-256 `d6ba15cf...`. Remaining M29 work is add-only lifecycle/dnsmasq integration after M01-M04, not daemon source availability |
+
+| M48 Per-IP traffic/cstats | **IN PROGRESS** | direct donor path is invalid on HND: 386.14_2 excludes cstats build/lifecycle/HTTPD handlers under `HND_ROUTER`; HND-native accounting + collector/API design is in `docs/per-ip-traffic-hnd-design.md` |
