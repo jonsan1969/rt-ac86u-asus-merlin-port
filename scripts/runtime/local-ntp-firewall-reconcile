@@ -92,8 +92,28 @@ if ! valid_iface "$lan_if"; then
     exit 1
 fi
 
-"$IPT" -t nat -N "$CHAIN"
-"$IPT" -t nat -A "$CHAIN" -p udp -m udp --dport 123 -j REDIRECT --to-ports 123
-"$IPT" -t nat -A PREROUTING -i "$lan_if" -p udp -m udp --dport 123 -j "$CHAIN"
-printf '%s\n' "$lan_if" > "$STATEFILE"
+if ! "$IPT" -t nat -N "$CHAIN"; then
+    log "failed to create NAT chain $CHAIN"
+    cleanup
+    exit 1
+fi
+
+if ! "$IPT" -t nat -A "$CHAIN" -p udp -m udp --dport 123 -j REDIRECT --to-ports 123; then
+    log "failed to install UDP/123 redirect rule"
+    cleanup
+    exit 1
+fi
+
+if ! "$IPT" -t nat -A PREROUTING -i "$lan_if" -p udp -m udp --dport 123 -j "$CHAIN"; then
+    log "failed to install PREROUTING jump for $lan_if"
+    cleanup
+    exit 1
+fi
+
+if ! printf '%s\n' "$lan_if" > "$STATEFILE"; then
+    log "failed to persist NTP redirect ownership state"
+    cleanup
+    exit 1
+fi
+
 log "enabled LAN UDP/123 redirect on $lan_if"
