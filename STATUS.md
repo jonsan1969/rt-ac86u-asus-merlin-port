@@ -93,3 +93,5 @@ Only these project states are used:
 
 | M52 Wireless client auto-refresh | **IN PROGRESS** | narrowed to read-only `get_wl_status` Broadcom/HND HTTPD handler + AJAX/exact Wireless Log page adaptation; no wireless daemon/driver replacement. Must compose with M53 no-auto-logout. See `docs/wireless-client-refresh-source-contract.md` |
 | M36 IPv6 DNS Director Custom 1–3 | **IN PROGRESS** | existing ASUS IPv6 DNSFilter rule engine is retained; only `dnsfilter_custom61/62/63` defaults + HND AF_INET6 custom resolver mapping + follow-up UI fields remain. Contract: `docs/dns-director-ipv6-custom-source-contract.md` |
+
+| Optional kernel module ABI CRC probe | **SUCCESS / DIAGNOSTIC LIMIT** | run `36447256650`: Merlin image contains NFS stack, CIFS, full ipset family, `sch_cake` and WireGuard modules, but stock ASUS and donor modules expose no readable MODVERSIONS CRC table (`required=0`, ASUS observed pairs=0); binary ABI cannot be proven from images, so M22/M23/M27/M32/M33 remain source-build-only and donor `.ko` transplant stays forbidden |
