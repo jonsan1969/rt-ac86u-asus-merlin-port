@@ -1,0 +1,105 @@
+name: Probe ASUS 52334 Merlin CLI utilities
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/cli-utils-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip             'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Probe utility compatibility
+        run: |
+          set -euo pipefail
+          OUT=reports/cli-utils-52334-compatibility.txt
+          : > "$OUT"
+          tools='nano rnano scp crontab diff dos2unix unix2dos hexdump xargs getopt hostname tee uniq'
+          for tool in $tools; do
+            echo "===== $tool =====" >> "$OUT"
+            AP="$(find "$ASUS_ROOT/bin" "$ASUS_ROOT/sbin" "$ASUS_ROOT/usr/bin" "$ASUS_ROOT/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$tool" -print -quit 2>/dev/null || true)"
+            MP="$(find "$MERLIN_ROOT/bin" "$MERLIN_ROOT/sbin" "$MERLIN_ROOT/usr/bin" "$MERLIN_ROOT/usr/sbin" -maxdepth 1 \( -type f -o -type l \) -name "$tool" -print -quit 2>/dev/null || true)"
+            [ -n "$AP" ] && echo "ASUS PRESENT $AP -> $(readlink "$AP" || true)" >> "$OUT" || echo 'ASUS MISSING' >> "$OUT"
+            if [ -n "$MP" ]; then
+              echo "MERLIN PRESENT $MP -> $(readlink "$MP" || true)" >> "$OUT"
+              if [ -f "$MP" ] && [ ! -L "$MP" ]; then
+                file "$MP" >> "$OUT"
+                sha256sum "$MP" >> "$OUT"
+                readelf -d "$MP" 2>/dev/null | grep 'NEEDED' >> "$OUT" || true
+              fi
+            else
+              echo 'MERLIN MISSING' >> "$OUT"
+            fi
+            echo >> "$OUT"
+          done
+
+          echo '===== LIBRARY AVAILABILITY =====' >> "$OUT"
+          python3 - <<'PY' >> "$OUT"
+          import os,re,subprocess
+          from pathlib import Path
+          A=Path(os.environ["ASUS_ROOT"]); M=Path(os.environ["MERLIN_ROOT"])
+          names=['nano','scp','crontab','diff','dos2unix','unix2dos','hexdump','xargs','getopt','hostname','tee','uniq']
+          roots=[M/'bin',M/'sbin',M/'usr/bin',M/'usr/sbin']
+          alibs={p.name for base in [A/'lib',A/'usr/lib'] if base.exists() for p in base.iterdir()}
+          for name in names:
+              paths=[base/name for base in roots]
+              p=next((x for x in paths if x.exists() and x.is_file() and not x.is_symlink()),None)
+              if not p: continue
+              try: txt=subprocess.check_output(['readelf','-d',str(p)],text=True,stderr=subprocess.DEVNULL)
+              except: continue
+              needed=re.findall(r'\[([^\]]+)\]', '\n'.join(x for x in txt.splitlines() if 'NEEDED' in x))
+              missing=[x for x in needed if x not in alibs]
+              print(f'{name}: needed={needed} missing_in_ASUS={missing}')
+          PY
+
+          echo '===== CLASSIFICATION =====' >> "$OUT"
+          echo 'Only standalone Merlin files with all NEEDED libraries present in ASUS are add-only candidates.' >> "$OUT"
+          echo 'BusyBox applets/symlinks are never copied from Merlin.' >> "$OUT"
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-utils-52334-compatibility
+          path: reports/cli-utils-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
