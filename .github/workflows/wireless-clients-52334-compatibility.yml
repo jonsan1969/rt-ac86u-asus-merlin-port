@@ -1,0 +1,118 @@
+name: Probe ASUS 52334 wireless client refresh
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/wireless-clients-52334-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/artifacts/FW_RT-AC86U_300438652334.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/FW_RT-AC86U_300438652334.zip' | sha256sum -c -
+          unzip -q work/artifacts/FW_RT-AC86U_300438652334.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          binwalk -Me "$FW" >/dev/null
+          cd ../..
+          ROOT="$(find work/asus -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Probe wireless client refresh contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          R="$ASUS_ROOT"
+          OUT=reports/wireless-clients-52334-compatibility.txt
+          : > "$OUT"
+          section() { printf '\n===== %s =====\n' "$1" >> "$OUT"; }
+
+          section 'STOCK PAGE'
+          if [ -f "$R/www/Main_WStatus_Content.asp" ]; then
+            sha256sum "$R/www/Main_WStatus_Content.asp" >> "$OUT"
+            grep -nEi -A8 -B5 'ajax_wificlients|awrtm_wlrefresh|refreshrate|get_wlclient_list|get_wl_status|wl_log' "$R/www/Main_WStatus_Content.asp" >> "$OUT" || true
+          else
+            echo 'MISSING /www/Main_WStatus_Content.asp' >> "$OUT"
+          fi
+
+          section 'AJAX ENDPOINT'
+          if [ -f "$R/www/ajax_wificlients.asp" ]; then
+            echo 'PRESENT /www/ajax_wificlients.asp' >> "$OUT"
+            sha256sum "$R/www/ajax_wificlients.asp" >> "$OUT"
+            cat "$R/www/ajax_wificlients.asp" >> "$OUT"
+          else
+            echo 'MISSING /www/ajax_wificlients.asp' >> "$OUT"
+          fi
+
+          section 'BACKEND SIGNATURES'
+          for sig in get_wl_status wlan11b_2g.log; do
+            if strings -a "$R/usr/sbin/httpd" | grep -Fxq "$sig"; then
+              echo "PASS httpd::$sig" >> "$OUT"
+            else
+              echo "MISSING httpd::$sig" >> "$OUT"
+            fi
+          done
+
+          section 'SUMMARY'
+          page="$R/www/Main_WStatus_Content.asp"
+          endpoint="$R/www/ajax_wificlients.asp"
+          if [ ! -f "$page" ]; then
+            echo 'FAIL stock wireless status page missing' >> "$OUT"
+            cat "$OUT"
+            exit 1
+          fi
+          if strings -a "$R/usr/sbin/httpd" | grep -Fxq 'get_wl_status'; then
+            echo 'PASS stock get_wl_status backend' >> "$OUT"
+          else
+            echo 'FAIL get_wl_status backend missing' >> "$OUT"
+            cat "$OUT"
+            exit 1
+          fi
+          if [ -f "$endpoint" ]; then
+            echo 'STOCK ajax_wificlients endpoint already present' >> "$OUT"
+          else
+            echo 'ADD-ONLY ajax_wificlients endpoint candidate' >> "$OUT"
+          fi
+          if grep -q 'ajax_wificlients.asp' "$page"; then
+            echo 'STOCK auto-refresh UI already present' >> "$OUT"
+          else
+            echo 'PATCH candidate: stock page lacks Merlin auto-refresh UI' >> "$OUT"
+          fi
+          cat "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-clients-52334-compatibility
+          path: reports/wireless-clients-52334-compatibility.txt
+          if-no-files-found: error
+          retention-days: 14
