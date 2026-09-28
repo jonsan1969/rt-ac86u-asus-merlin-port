@@ -108,6 +108,10 @@ jobs:
             echo "flock_fd_contend_rc=$contend_rc" >> "$OUT"
             echo "flock_fd_release_rc=$release_rc" >> "$OUT"
             cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt >> "$OUT"
+            echo '--- flock fd diagnostic ---'
+            echo "acquire_rc=$acquire_rc contend_rc=$contend_rc release_rc=$release_rc"
+            cat reports/flock-acquire.txt reports/flock-contend.txt reports/flock-release.txt || true
+            qemu-arm-static -L "$ASUS_ROOT" "$BB" flock --help 2>&1 | head -n 40 || true
 
             test "$acquire_rc" -eq 0
             test "$contend_rc" -ne 0
@@ -129,6 +133,7 @@ jobs:
           done
           cat "$OUT"
       - name: Publish report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cru-52334-compatibility
