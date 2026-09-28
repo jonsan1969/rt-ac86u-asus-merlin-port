@@ -34,6 +34,7 @@
 | M59 Local OUI database | **SUCCESS** | verified Merlin OUI DB add-only; exactly three ASUS remote OUI lookups redirected locally; guarded validation run 36336834393 |
 | M58 QR codes for WiFi/Guest Network | **SUCCESS** | add-only pinned QR library + exact multi-patches of ASUS Guest Network/router pages; validation run 36337583899 |
 | M43 System Info page | **IN PROGRESS** | stock `httpd` has generic `sysinfo` dispatcher but lacks Merlin `cpu.model`, `cpu.freq`, `conn.max`, `nvram.total`; source-side HTTPD work required |
+| M46 QoS Stats / Classification page | **IN PROGRESS** | ASUS 52334 lacks `ajax_gettcdata.asp`, `get_ipv6clients_array`, `get_tcfilter_array`, `get_tcdata`/conntrack data handlers; source-side HTTPD/QoS integration required |
 | M45 Temperature/performance page | **SUCCESS** | ASUS-native `/ajax_coretmp.asp` backend reused; guarded validation run 36338181498 |
 | M51 Wireless ACL/client-name display | **SUCCESS** | NO PORT: ASUS 52334 already resolves/stores client names through its newer `clientList` model and ACL page logic; compatibility run 36373415595 |
 | M52 Auto-refreshing wireless client list | **IN PROGRESS** | stock page + `wl_log.asp` exist, but Merlin's `ajax_wificlients.asp` endpoint depends on `get_wl_status`, absent from ASUS 52334 `httpd`; source-side HTTPD work required for full feature |
