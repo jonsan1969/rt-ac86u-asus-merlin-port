@@ -74,3 +74,5 @@ Only these project states are used:
 | M66 Prevent Auto DoH / DDR / Private Relay | **IN PROGRESS** | donor Auto/Yes/No conditions and exact dnsmasq canaries are specified in `docs/prevent-auto-doh-source-contract.md`; source config-generation port only, with a targeted 52334 key/UI ownership check still required |
 
 | M64 Traditional QoS overhead/download stats | **IN PROGRESS** | donor overhead/framing behavior is source-bounded in `docs/qos-overhead-stats-source-contract.md`; download class counters are explicitly folded into future M46 QoS Stats HTTPD integration |
+
+| Late 386.51997 source triangulation | **SUCCESS** | Merlin `386.12_x` is pinned as a modified source/build tree merged with GPL 386_51997; SWRT independently documents Brcm AC merged with 386_51997. Both are structural references only; clean late ASUS source remains missing. See `docs/source-anchor-51997-triangulation.md` |
