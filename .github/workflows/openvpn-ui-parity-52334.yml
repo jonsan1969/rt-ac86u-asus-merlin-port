@@ -1,0 +1,110 @@
+name: Probe advanced OpenVPN UI parity on ASUS 52334
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/openvpn-ui-parity-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch and extract verified images
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus work/merlin work/artifacts reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/artifacts/merlin.zip \
+            'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/artifacts/asus.zip' | sha256sum -c -
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/artifacts/merlin.zip' | sha256sum -c -
+          unzip -q work/artifacts/asus.zip -d work/asus
+          unzip -q work/artifacts/merlin.zip -d work/merlin
+          for d in asus merlin; do
+            (
+              cd "work/$d"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/$d" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            if [ "$d" = asus ]; then echo "ASUS_ROOT=$ROOT" >> "$GITHUB_ENV"; else echo "MERLIN_ROOT=$ROOT" >> "$GITHUB_ENV"; fi
+          done
+
+      - name: Compare OpenVPN control surfaces
+        run: |
+          set -euo pipefail
+          A="$ASUS_ROOT"; M="$MERLIN_ROOT"; OUT=reports/openvpn-ui-parity-52334.txt
+          : > "$OUT"
+
+          extract_names() {
+            local root="$1"
+            find "$root/www" -maxdepth 1 -type f \( -name '*OpenVPN*' -o -name '*VPNClient*' \) -print0 2>/dev/null |
+              xargs -0 -r grep -hoE 'name="vpn_(client|server)_[A-Za-z0-9_]+"|nvram_(get|match|clean_get)\("vpn_(client|server)_[A-Za-z0-9_]+"' 2>/dev/null |
+              grep -oE 'vpn_(client|server)_[A-Za-z0-9_]+' | sort -u
+          }
+
+          extract_names "$A" > reports/asus-openvpn-keys.txt
+          extract_names "$M" > reports/merlin-openvpn-keys.txt
+
+          echo '===== COUNTS =====' >> "$OUT"
+          echo "ASUS keys $(wc -l < reports/asus-openvpn-keys.txt)" >> "$OUT"
+          echo "MERLIN keys $(wc -l < reports/merlin-openvpn-keys.txt)" >> "$OUT"
+
+          echo '===== MERLIN UI KEYS ABSENT FROM ASUS UI =====' >> "$OUT"
+          comm -13 reports/asus-openvpn-keys.txt reports/merlin-openvpn-keys.txt >> "$OUT" || true
+
+          echo '===== ASUS UI KEYS ABSENT FROM MERLIN UI =====' >> "$OUT"
+          comm -23 reports/asus-openvpn-keys.txt reports/merlin-openvpn-keys.txt >> "$OUT" || true
+
+          echo '===== ABSENT MERLIN KEYS WITH ASUS BACKEND STRING CHECK =====' >> "$OUT"
+          while read -r key; do
+            [ -n "$key" ] || continue
+            hit=no
+            for p in "$A/sbin/rc" "$A/usr/sbin/httpd" "$A/usr/lib/libshared.so" "$A/usr/lib/libvpn.so"; do
+              [ -f "$p" ] || continue
+              strings -a "$p" | grep -Fqx "$key" && hit=yes && break || true
+            done
+            printf '%s backend=%s\n' "$key" "$hit" >> "$OUT"
+          done < <(comm -13 reports/asus-openvpn-keys.txt reports/merlin-openvpn-keys.txt)
+
+          echo '===== HIGH-SIGNAL MERLIN CONTROLS =====' >> "$OUT"
+          for key in vpn_client_rgw vpn_client_enforce vpn_client_adns vpn_client_custom3 vpn_server_custom3 vpn_server_nat6 vpn_server_ip6; do
+            printf '%s ASUS_UI=' "$key" >> "$OUT"
+            grep -Fxq "$key" reports/asus-openvpn-keys.txt && printf yes >> "$OUT" || printf no >> "$OUT"
+            printf ' MERLIN_UI=' >> "$OUT"
+            grep -Fxq "$key" reports/merlin-openvpn-keys.txt && printf yes >> "$OUT" || printf no >> "$OUT"
+            printf '\n' >> "$OUT"
+          done
+
+          cat "$OUT"
+
+      - name: Publish report
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvpn-ui-parity-52334
+          path: |
+            reports/openvpn-ui-parity-52334.txt
+            reports/asus-openvpn-keys.txt
+            reports/merlin-openvpn-keys.txt
+          if-no-files-found: error
+          retention-days: 14
