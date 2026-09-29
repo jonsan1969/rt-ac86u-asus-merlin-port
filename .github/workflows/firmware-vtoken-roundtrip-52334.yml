@@ -1,0 +1,134 @@
+name: Prove RT-AC86U 52334 addvtoken round-trip
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/firmware-vtoken-roundtrip-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus reports
+          OUT=work/asus-52334.zip
+          SHA=e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61
+
+          urls=(
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U'
+          )
+          ok=0
+          for url in "${urls[@]}"; do
+            if curl -fL --retry 2 --connect-timeout 20 -o "$OUT" "$url"; then
+              ok=1
+              break
+            fi
+          done
+          if (( ! ok )); then
+            API=work/asus-api.json
+            curl -fsSL --retry 3 --connect-timeout 30 -o "$API"               'https://www.asus.com/support/api/product.asmx/GetPDBIOS?website=global&model=RT-AC86U&cpu='
+            url="$(python3 - "$API" <<'PY'
+          import json, sys
+          d=json.load(open(sys.argv[1], encoding='utf-8'))
+          def walk(x):
+              if isinstance(x,dict):
+                  if '52334' in str(x.get('Version','')):
+                      u=x.get('DownloadUrl')
+                      if isinstance(u,dict):
+                          for k in ('Global','global','Url','URL'):
+                              z=u.get(k)
+                              if isinstance(z,str) and z.startswith('http'):
+                                  print(z); raise SystemExit
+                      for k in ('DownloadUrl','DownloadURL','Url','URL'):
+                          z=x.get(k)
+                          if isinstance(z,str) and z.startswith('http'):
+                              print(z); raise SystemExit
+                  for z in x.values(): walk(z)
+              elif isinstance(x,list):
+                  for z in x: walk(z)
+          walk(d)
+          raise SystemExit('ASUS API did not expose 52334 download URL')
+          PY
+          )"
+            curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o "$OUT" "$url"
+          fi
+          printf '%s  %s\n' "$SHA" "$OUT" | sha256sum -c -
+          unzip -q "$OUT" -d work/asus
+          FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          test "$(stat -c '%s' "$FW")" = 78250004
+          test "$(sha256sum "$FW" | awk '{print $1}')" = 1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f
+          echo "FW=$FW" >> "$GITHUB_ENV"
+
+      - name: Fetch exact 51997 RT-AC86U addvtoken
+        run: |
+          set -euo pipefail
+          URL='https://raw.githubusercontent.com/RMerl/asuswrt-merlin.ng/c553d8e4b0bf3289683368b0d57172649b030039/release/src-rt-5.02hnd/hostTools/prebuilt/RT-AC86U/addvtoken'
+          curl -fsSL --retry 4 --connect-timeout 30 -o work/addvtoken "$URL"
+          test "$(git hash-object work/addvtoken)" = 124f5487730eb0b8de1a1b55b2ed0f6235b81edd
+          chmod +x work/addvtoken
+          file work/addvtoken | tee reports/addvtoken-file.txt
+          sha256sum work/addvtoken | tee reports/addvtoken-sha256.txt
+          work/addvtoken 2>&1 | head -n 30 > reports/addvtoken-usage.txt || true
+
+      - name: Isolate stock body and 20-byte token
+        run: |
+          set -euo pipefail
+          SIZE="$(stat -c '%s' "$FW")"
+          BODY_SIZE=$((SIZE - 20))
+          head -c "$BODY_SIZE" "$FW" > work/stock-body.bin
+          tail -c 20 "$FW" > work/stock-vtoken.bin
+          test "$(stat -c '%s' work/stock-body.bin)" = 78249984
+          test "$(stat -c '%s' work/stock-vtoken.bin)" = 20
+          sha256sum work/stock-body.bin work/stock-vtoken.bin | tee reports/stock-body-token-sha256.txt
+          xxd -g1 work/stock-vtoken.bin | tee reports/stock-vtoken.hex
+
+      - name: Reproduce stock token
+        run: |
+          set -euo pipefail
+          : > reports/vtoken-roundtrip.txt
+          matched=0
+
+          for btrm in 0 1; do
+            out="work/rebuilt-btrm${btrm}.w"
+            set +e
+            work/addvtoken --endian little --chip 4908 --flashtype NAND128 --btrm "$btrm"               work/stock-body.bin "$out"               >"reports/addvtoken-btrm${btrm}.stdout.txt"               2>"reports/addvtoken-btrm${btrm}.stderr.txt"
+            rc=$?
+            set -e
+            echo "btrm=$btrm rc=$rc" | tee -a reports/vtoken-roundtrip.txt
+            if [ "$rc" -eq 0 ] && [ -f "$out" ]; then
+              stat -c 'size=%s' "$out" | tee -a reports/vtoken-roundtrip.txt
+              sha256sum "$out" | tee -a reports/vtoken-roundtrip.txt
+              if cmp -s "$FW" "$out"; then
+                echo "MATCH btrm=$btrm" | tee -a reports/vtoken-roundtrip.txt
+                matched=$((matched + 1))
+              else
+                echo "NO_MATCH btrm=$btrm" | tee -a reports/vtoken-roundtrip.txt
+                cmp -l "$FW" "$out" | head -n 40 > "reports/vtoken-btrm${btrm}-first-diffs.txt" || true
+                tail -c 20 "$out" | xxd -g1 > "reports/vtoken-btrm${btrm}-tail.hex"
+              fi
+            fi
+          done
+
+          test "$matched" -eq 1
+          echo 'CLASSIFICATION=STOCK_52334_VTOKEN_EXACTLY_REPRODUCED' | tee -a reports/vtoken-roundtrip.txt
+
+      - name: Publish token reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-vtoken-roundtrip-52334
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30
