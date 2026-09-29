@@ -119,60 +119,10 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE="$TC/aarch64-buildroot-linux-gnu-"
           export LD_LIBRARY_PATH="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/lib:${LD_LIBRARY_PATH:-}"
-          # linux-4.1/.config is the generated kernel Kconfig.
-          # Broadcom's patched Makefile also includes ../../.config, which is
-          # router-build Make syntax. Reuse the exact K1 target-variable map
-          # rather than placing kernel Kconfig syntax at that path.
+          # Keep kernel Kconfig and Broadcom router-build Make config separate.
           cp reports/config_rt-ac86u.51997 "$K/.config"
           cp work/k2/generated-vars.mk "$K/../../.config"
-          grep -q '^BUILD_NAME[[:space:]]*:=[[:space:]]*RT-AC86U
-          make -C "$K" oldnoconfig
-          make -C "$K" prepare modules_prepare
-          test -f "$K/include/generated/autoconf.h"
-          "$CROSS_COMPILE"gcc --version | head -1 | tee reports/k2-compiler.txt
-
-      - name: Build coherent ipset module family
-        run: |
-          set -euo pipefail
-          K="$PWD/work/source/release/src-rt-5.02hnd/kernel/linux-4.1"
-          TC="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/bin"
-          export ARCH=arm64
-          export CROSS_COMPILE="$TC/aarch64-buildroot-linux-gnu-"
-          export LD_LIBRARY_PATH="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/lib:${LD_LIBRARY_PATH:-}"
-          make -C "$K" M=net/netfilter/ipset modules
-          make -C "$K" M=net/netfilter modules
-          mkdir -p reports/modules
-          find "$K/net/netfilter/ipset" "$K/net/netfilter" -maxdepth 1 -type f \( -name 'ip_set*.ko' -o -name 'xt_set.ko' \) -print -exec cp -v {} reports/modules/ \;
-          test -f reports/modules/ip_set.ko
-          test -f reports/modules/xt_set.ko
-
-      - name: Capture K2 module metadata
-        run: |
-          set -euo pipefail
-          TC="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/bin"
-          READELF="$TC/aarch64-buildroot-linux-gnu-readelf"
-          NM="$TC/aarch64-buildroot-linux-gnu-nm"
-          : > reports/k2-ipset-metadata.txt
-          for m in reports/modules/*.ko; do
-            echo "===== $(basename "$m") =====" | tee -a reports/k2-ipset-metadata.txt
-            sha256sum "$m" | tee -a reports/k2-ipset-metadata.txt
-            "$READELF" -h "$m" | grep -E 'Class:|Machine:|Type:' | tee -a reports/k2-ipset-metadata.txt
-            strings "$m" | grep -m1 '^vermagic=' | tee -a reports/k2-ipset-metadata.txt || true
-            "$NM" -u "$m" | sort | tee "reports/$(basename "$m").undefined.txt" >/dev/null
-          done
-          echo 'CLASSIFICATION K2_IPSET_BUILD_SMOKE_COMPLETE' | tee -a reports/k2-ipset-metadata.txt
-          echo 'NO_ACTIVATION modules are build artifacts only; K4 required for ASUS 52334' | tee -a reports/k2-ipset-metadata.txt
-
-      - name: Publish K2 artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-k2-ipset-51997
-          path: |
-            reports/
-          if-no-files-found: warn
-          retention-days: 30
- "$K/../../.config"
+          grep -q '^override BUILD_NAME := RT-AC86U$' "$K/../../.config"
           make -C "$K" oldnoconfig
           make -C "$K" prepare modules_prepare
           test -f "$K/include/generated/autoconf.h"
