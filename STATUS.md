@@ -109,3 +109,5 @@ Only these project states are used:
 | RT-AC86U 51997 ipset module build | **SUCCESS / K2** | run `36556899650`, commit `2f423c2d...`: coherent 18-module ipset/xt_set family rebuilt from exact K1 lineage; ELF64 AArch64, vermagic `4.1.27 SMP preempt mod_unload aarch64`; artifact digest `66b79e48...`; no activation/overlay; K4 still required for ASUS 52334 runtime compatibility |
 
 | RT-AC86U 51997 optional module family build | **SUCCESS / K3** | run `36561957525`, commit `fb0dc42e...`: NFS/SUNRPC/LOCKD, CIFS, Cake and WireGuard rebuilt from the exact K1 lineage; all ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`; artifact digest `231f1902...`; no activation/overlay. K4 real-router validation is now the active gate. |
+
+| RT-AC86U K4a read-only router preflight | **SUCCESS / READY FOR HARDWARE** | run `36562651589`: POSIX/safety/smoke CI passes for `scripts/k4-router-preflight.sh`; collector writes only to `/tmp` and contains no module load/unload, NVRAM/JFFS mutation, service restart, reboot or flash commands. Next evidence must come from the physical RT-AC86U on ASUS 386_52334 before K4b is designed. |
