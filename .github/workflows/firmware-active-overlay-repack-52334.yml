@@ -121,7 +121,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x zlib             -r "$ORIG_ROOT" -o work/overlay.ubifs > reports/mkfs-ubifs.txt 2>&1
+          if ! sudo mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x zlib             -r "$ORIG_ROOT" -o work/overlay.ubifs > reports/mkfs-ubifs.txt 2>&1; then
+            cat reports/mkfs-ubifs.txt
+            exit 1
+          fi
+          stat -c 'overlay_ubifs_bytes=%s' work/overlay.ubifs
           cat > work/ubi.ini <<EOF
           [rootfs]
           mode=ubi
@@ -131,9 +135,18 @@ jobs:
           vol_name=rootfs_ubifs
           vol_flags=autoresize
           EOF
-          ubinize -v -o work/overlay.ubi -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 work/ubi.ini             > reports/ubinize.txt 2>&1
-          test "$(stat -c '%s' work/overlay.ubi)" = 74711040
-          test $(( $(stat -c '%s' work/overlay.ubi) / 131072 )) -eq 570
+          if ! ubinize -v -o work/overlay.ubi -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 work/ubi.ini             > reports/ubinize.txt 2>&1; then
+            cat reports/ubinize.txt
+            exit 1
+          fi
+          UBI_BYTES="$(stat -c '%s' work/overlay.ubi)"
+          UBI_PEBS=$(( UBI_BYTES / 131072 ))
+          printf 'overlay_ubi_bytes=%s\noverlay_ubi_pebs=%s\n' "$UBI_BYTES" "$UBI_PEBS"
+          if [ "$UBI_BYTES" != 74711040 ] || [ "$UBI_PEBS" -ne 570 ]; then
+            echo "ERROR: active overlay UBI violates pinned 570-PEB geometry" >&2
+            cat reports/ubinize.txt
+            exit 1
+          fi
           printf 'ubi_bytes=%s\nubi_pebs=%s\n' "$(stat -c '%s' work/overlay.ubi)"             "$(( $(stat -c '%s' work/overlay.ubi) / 131072 ))" > reports/overlay-ubi-layout.txt
 
       - name: Build and validate final WFI
