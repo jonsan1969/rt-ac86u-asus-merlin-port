@@ -34,7 +34,52 @@ jobs:
           fetch_fw() {
             local ver="$1" code="$2" sha="$3"
             local out="work/downloads/${ver}.zip"
-            curl -fL --retry 5 --retry-all-errors --connect-timeout 30               -o "$out"               "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_${code}.zip?model=RT-AC86U"
+            local direct="https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_${code}.zip?model=RT-AC86U"
+            local url="$direct"
+
+            if ! curl -fsIL --connect-timeout 20 "$direct" >/dev/null 2>&1; then
+              local api_json
+              api_json="$(mktemp)"
+              curl -fsSL --retry 3 --connect-timeout 30 \
+                -o "$api_json" \
+                "https://www.asus.com/support/api/product.asmx/GetPDBIOS?website=global&model=RT-AC86U&cpu="
+              url="$(python3 - "$api_json" "$ver" <<'PY'
+          import json, sys
+          path, ver = sys.argv[1], sys.argv[2]
+          data = json.load(open(path, encoding="utf-8"))
+          want = f"3.0.0.4.386_{ver}"
+
+          def walk(x):
+              if isinstance(x, dict):
+                  version = str(x.get("Version", ""))
+                  if want in version or ver in version:
+                      d = x.get("DownloadUrl")
+                      if isinstance(d, dict):
+                          for k in ("Global", "global", "Url", "URL"):
+                              v = d.get(k)
+                              if isinstance(v, str) and v.startswith("http"):
+                                  print(v)
+                                  raise SystemExit
+                      for k in ("DownloadUrl", "DownloadURL", "Url", "URL"):
+                          v = x.get(k)
+                          if isinstance(v, str) and v.startswith("http"):
+                              print(v)
+                              raise SystemExit
+                  for v in x.values():
+                      walk(v)
+              elif isinstance(x, list):
+                  for v in x:
+                      walk(v)
+
+          walk(data)
+          raise SystemExit(f"ASUS support API did not return a download URL for {want}")
+          PY
+          )"
+              rm -f "$api_json"
+            fi
+
+            echo "Downloading ASUS ${ver} from: $url"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 30 -o "$out" "$url"
             printf '%s  %s\n' "$sha" "$out" | sha256sum -c -
           }
 
