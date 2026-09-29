@@ -1,0 +1,161 @@
+name: Probe ASUS 52334 firmware repack geometry
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/firmware-repack-geometry-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install firmware tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils unzip file xxd
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          OUT=work/asus-52334.zip
+          SHA=e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61
+
+          urls=(
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U'
+          )
+
+          ok=0
+          for url in "${urls[@]}"; do
+            if curl -fL --retry 2 --connect-timeout 20 -o "$OUT" "$url"; then
+              ok=1
+              echo "download_url=$url" > reports/download.txt
+              break
+            fi
+          done
+
+          if (( ! ok )); then
+            API=work/asus-api.json
+            curl -fsSL --retry 3 --connect-timeout 30               -o "$API"               'https://www.asus.com/support/api/product.asmx/GetPDBIOS?website=global&model=RT-AC86U&cpu='
+            url="$(python3 - "$API" <<'PY'
+          import json, sys
+          d=json.load(open(sys.argv[1], encoding='utf-8'))
+          want='3.0.0.4.386_52334'
+          def walk(x):
+              if isinstance(x,dict):
+                  v=str(x.get('Version',''))
+                  if want in v or '52334' in v:
+                      u=x.get('DownloadUrl')
+                      if isinstance(u,dict):
+                          for k in ('Global','global','Url','URL'):
+                              z=u.get(k)
+                              if isinstance(z,str) and z.startswith('http'):
+                                  print(z); raise SystemExit
+                      for k in ('DownloadUrl','DownloadURL','Url','URL'):
+                          z=x.get(k)
+                          if isinstance(z,str) and z.startswith('http'):
+                              print(z); raise SystemExit
+                  for z in x.values(): walk(z)
+              elif isinstance(x,list):
+                  for z in x: walk(z)
+          walk(d)
+          raise SystemExit('ASUS API did not expose 52334 download URL')
+          PY
+          )"
+            curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o "$OUT" "$url"
+            echo "download_url=$url" > reports/download.txt
+          fi
+
+          printf '%s  %s\n' "$SHA" "$OUT" | sha256sum -c -
+          unzip -q "$OUT" -d work/asus
+          FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          echo "FW=$FW" >> "$GITHUB_ENV"
+          file "$FW" | tee reports/firmware-file.txt
+          stat -c '%s' "$FW" | tee reports/firmware-size.txt
+          sha256sum "$FW" | tee reports/firmware-sha256.txt
+
+      - name: Map firmware container
+        run: |
+          set -euo pipefail
+          binwalk "$FW" | tee reports/binwalk.txt
+
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          text=Path('reports/binwalk.txt').read_text(encoding='utf-8',errors='replace')
+          hits=[]
+          for line in text.splitlines():
+              if 'UBI erase count header' in line:
+                  m=re.match(r'\s*(\d+)\s+0x([0-9A-Fa-f]+)',line)
+                  if m:
+                      hits.append((int(m.group(1)),int(m.group(2),16),line))
+          if not hits:
+              raise SystemExit('No UBI erase-count header found in binwalk output')
+          off=hits[0][0]
+          Path('reports/ubi-offset.txt').write_text(f'{off}\n0x{off:x}\n',encoding='utf-8')
+          Path('reports/ubi-hits.txt').write_text('\n'.join(x[2] for x in hits)+'\n',encoding='utf-8')
+          size=os.path.getsize(os.environ['FW'])
+          Path('reports/container-layout.txt').write_text(
+              f'firmware_size={size}\nubi_offset={off}\nubi_offset_hex=0x{off:x}\nbytes_after_ubi_offset={size-off}\n',
+              encoding='utf-8')
+          PY
+
+          OFF="$(head -n1 reports/ubi-offset.txt)"
+          dd if="$FW" of=work/firmware-prefix.bin bs=1 count="$OFF" status=none
+          dd if="$FW" of=work/rootfs.ubi bs=1 skip="$OFF" status=none
+          sha256sum work/firmware-prefix.bin work/rootfs.ubi | tee reports/container-parts-sha256.txt
+          stat -c '%n %s' work/firmware-prefix.bin work/rootfs.ubi | tee reports/container-parts-size.txt
+          xxd -g1 -l 256 "$FW" | tee reports/firmware-head.hex
+          xxd -g1 -l 256 work/rootfs.ubi | tee reports/ubi-head.hex
+
+      - name: Inspect UBI geometry and volumes
+        run: |
+          set -euo pipefail
+          command -v ubireader_display_info
+          command -v ubireader_utils_info
+          ubireader_display_info work/rootfs.ubi | tee reports/ubi-display-info.txt
+          mkdir -p work/ubi-utils
+          (
+            cd work/ubi-utils
+            ubireader_utils_info ../rootfs.ubi > ../../reports/ubi-utils-info.txt
+          )
+          find work/ubi-utils -maxdepth 3 -printf '%y %p -> %l\n' | sort | tee reports/ubi-utils-tree.txt
+
+          rm -rf work/extracted-images work/extracted-files
+          mkdir -p work/extracted-images work/extracted-files
+          ubireader_extract_images -o work/extracted-images work/rootfs.ubi | tee reports/ubi-extract-images.txt
+          ubireader_extract_files -o work/extracted-files work/rootfs.ubi | tee reports/ubi-extract-files.txt
+          find work/extracted-images -type f -printf '%p\t%s\n' | sort | tee reports/ubi-image-files.txt
+          find work/extracted-files -maxdepth 4 -printf '%y\t%p\t%l\n' | sort | head -n 500 > reports/ubi-file-tree-sample.txt
+
+      - name: Capture UBIFS source statistics
+        run: |
+          set -euo pipefail
+          ROOT="$(find work/extracted-files -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "$ROOT" | tee reports/rootfs-path.txt
+          du -sb "$ROOT" | tee reports/rootfs-bytes.txt
+          find "$ROOT" -type f | wc -l | tee reports/rootfs-regular-files.txt
+          find "$ROOT" -type l | wc -l | tee reports/rootfs-symlinks.txt
+
+      - name: Publish geometry reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-repack-geometry-52334
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30
