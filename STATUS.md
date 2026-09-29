@@ -100,3 +100,5 @@ Only these project states are used:
 
 
 | ASUS 52334 stock event surfaces | **VERIFIED / LIMITED** | run `36415137373`: stock PPP scripts execute `/etc/ppp/ip-up.local` and `ip-down.local`, but no generic user lifecycle equivalent to M03 is proven; these are PPP-only supplemental callbacks. See `docs/asus-stock-event-surfaces-52334.md` |
+
+| ASUS late-runtime lineage 51967→52294→52334 | **IN PROGRESS** | workflow `asus-runtime-lineage-51967-52294-52334.yml` pins all three official firmware SHA-256 values and compares whole-rootfs manifests plus protected `rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear/OpenSSL/libshared/libovpn/kernel-module` fingerprints; this is now the source-rebuild risk gate after final GPL 386_51997 |
