@@ -105,17 +105,22 @@ The repo now contains `scripts/k4-router-preflight.sh`, a read-only physical-rou
 
 K4a writes only below `/tmp` and collects firmware/kernel/module/symbol evidence before any candidate module is allowed to load.
 
-### Immediate continuation — physical RT-AC86U input required
-Run the K4a preflight on the actual RT-AC86U while it is running ASUS `386_52334`, then inspect the generated report before designing K4b.
+### K4 hardware gate — DEFERRED UNTIL 52334 RUNTIME IS AVAILABLE
+The user's physical RT-AC86U currently runs the final Asuswrt-Merlin 386.14_2, **not** ASUS 386_52334.
 
-Do **not** load K2/K3 modules yet.
+Therefore the current router cannot provide the required ASUS 52334 runtime evidence for K4. Do not ask the user to flash stock 52334 merely to advance development.
 
-After K4a evidence:
-- compare stock kernel release/vermagic/symbol surface to the K2/K3 builds;
-- only if acceptable, create family-by-family K4b load tests;
-- keep all features disabled on any K4 failure.
+The K4a read-only collector remains ready and CI-validated, but final K4a/K4b compatibility testing is deferred until ASUS 52334 is actually running on hardware (for example during a controlled candidate/validation phase).
 
-M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family. Runtime lineage `51967 -> 52294 -> 52334` remains a parallel risk gate.
+Do **not** load K2/K3 modules on the current Merlin runtime and do not treat a Merlin-side load test as proof of ASUS 52334 compatibility.
+
+### Immediate continuation — continue non-hardware work
+Proceed with work that does not require the physical router:
+- continue the official ASUS runtime-lineage risk gate `51967 -> 52294 -> 52334`;
+- advance source-side/core feature integration and repack/firmware-image work;
+- keep K2/K3 optional modules build-only and inactive until the deferred K4 gate.
+
+M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family.
 
 ## Read only as needed
 Primary current state:
