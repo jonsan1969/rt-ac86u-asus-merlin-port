@@ -202,3 +202,30 @@ Interpretation rule:
 - `httpd`, `rc`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, shared libraries, kernel modules and proprietary HND components remain protected until component-specific evidence proves otherwise.
 
 The runtime-lineage report is therefore a gating input to any future source-rebuilt core component.
+
+
+## Exact 386.51997 Git import boundary
+
+The late-source reference is now pinned more precisely than the `386.12_x` branch head.
+
+Merlin history contains two distinct single-parent import stages:
+
+- general GPL import: `28daa82377c5a9a68bf2c79aea429323a891ac08`
+  - parent: `bf59d7ec4339d3c1eb71fe03209243947084e754`
+  - message: `Merged with GPL 386_51997 + RT-AC88U SDK and binary blobs`;
+- RT-AC86U SDK/blob import: `c553d8e4b0bf3289683368b0d57172649b030039`
+  - parent: `2b13c8cc8cf821fa774371c18e3a68a8b6965ad8`
+  - message: `Merge RT-AC86U binary blobs + SDK from 386_51997`.
+
+There is no clean ASUS second parent recoverable from these commits.
+
+The exact provenance and critical source blob matrix are documented in `docs/source-anchor-51997-import-boundary.md` and CI-locked by `.github/workflows/source-anchor-51997-import-boundary.yml`.
+
+Practical rule:
+
+- use clean 45956 for ASUS-vs-Merlin ancestry;
+- use `28daa823...` for the post-51997 shared source shape;
+- use `c553d8e4...` for RT-AC86U HND SDK/model-specific build context;
+- use official 51967/52294/52334 images for post-GPL runtime/security drift.
+
+A file that is unchanged by the GPL import is not automatically ASUS-owned. For example, Merlin `libovpn/openvpn_control.c` is unchanged across the import and therefore remains donor-owned evidence, not clean ASUS source.
