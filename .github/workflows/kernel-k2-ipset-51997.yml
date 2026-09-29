@@ -119,7 +119,11 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE="$TC/aarch64-buildroot-linux-gnu-"
           export LD_LIBRARY_PATH="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/lib:${LD_LIBRARY_PATH:-}"
+          # Broadcom HND linux-4.1 Makefile includes ../../.config in
+          # addition to the normal kernel .config. Keep both identical.
           cp reports/config_rt-ac86u.51997 "$K/.config"
+          cp reports/config_rt-ac86u.51997 "$K/../../.config"
+          cmp "$K/.config" "$K/../../.config"
           make -C "$K" oldnoconfig
           make -C "$K" prepare modules_prepare
           test -f "$K/include/generated/autoconf.h"
