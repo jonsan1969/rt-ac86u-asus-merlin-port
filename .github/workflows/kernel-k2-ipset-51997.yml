@@ -73,14 +73,15 @@ jobs:
           text=extract(root/"Makefile","extraKernelConfig")+"\n"+extract(root/"platform.mak","platformKernelConfig")+"\n"+extract(root/"Makefile","KernelConfig")
           Path("work/k2/kernel-macros.mk").write_text(text)
           PY
-          cat > work/k2/print-target.mk <<EOF
-          SRC := $SRC
+          cat > work/k2/print-target.mk <<'EOF'
+          SRC := __SRC__
           include $(SRC)/target.mak
           .PHONY: print
           print:
           	@printf '%s\n' '$(GENERAL_BASE)' > work/k2/general-vars.txt
           	@printf '%s\n' '$(RT-AC86U)' > work/k2/rtac86u-vars.txt
           EOF
+          sed -i "s#__SRC__#$SRC#g" work/k2/print-target.mk
           make -f work/k2/print-target.mk print
           python3 - <<'PY'
           from pathlib import Path
