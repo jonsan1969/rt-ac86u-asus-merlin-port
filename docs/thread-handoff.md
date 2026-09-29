@@ -155,6 +155,8 @@ Do **not** revisit the solved stock repack work.
 
 Active-overlay authorization root cause is now fully resolved in workflow code. Run `36609601459` proved all 49 guarded overlay entries apply, then exposed the leading-slash path-domain mismatch. Run `36619600961` subsequently hung in step 7 because the corrected absolute parent walk reached `Path('/')`, whose parent is itself; the loop had no root termination. Commit `62dd48f45000ff8eb7b03ef360b3ffa8311cbeaf` terminates at filesystem root (`q == q.parent`). Neither case reached firmware repack semantics. Do not fetch logs for `36607825944` or `36609601459` again; `36619600961` required no log fetch for the hang diagnosis.
 
+Run `36630265853` advances the gate beyond overlay authorization: all 49 entries apply and the manifest-authorized semantic delta passes. The run then fails in `Rebuild UBIFS and exact-size UBI` before WFI construction. Its log has been fetched exactly once; do not fetch it again. Because mkfs/ubinize output was redirected, the next run must expose UBIFS/UBI sizes and tool output while retaining the exact 570-PEB contract.
+
 Next task is exactly:
 
 **Pass the current guarded active overlay through the proven 52334 extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.**
