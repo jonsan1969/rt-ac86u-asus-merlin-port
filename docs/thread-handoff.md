@@ -98,15 +98,22 @@ K3 rebuilt the remaining optional families from the exact K1 lineage:
 
 All are ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`. No activation or overlay change was made.
 
-### Immediate continuation — K4
-Prepare a **non-persistent real-router validation bundle** for ASUS 52334. It must:
-- stage modules under `/tmp` only;
-- collect stock kernel release/module evidence before loading anything;
-- load coherent dependency families in controlled order;
-- capture `dmesg` and return codes;
-- unload where safe/supported;
-- make no boot, JFFS startup, NVRAM or firmware-image changes;
-- keep every feature disabled unless its K4 load/function test passes.
+### K4a — READY / CI-VALIDATED
+Workflow run: `36562651589` — SUCCESS.
+
+The repo now contains `scripts/k4-router-preflight.sh`, a read-only physical-router collector. CI verifies POSIX syntax and rejects module loading, NVRAM mutation, JFFS writes, service mutation, reboot and flash/mtd operations.
+
+K4a writes only below `/tmp` and collects firmware/kernel/module/symbol evidence before any candidate module is allowed to load.
+
+### Immediate continuation — physical RT-AC86U input required
+Run the K4a preflight on the actual RT-AC86U while it is running ASUS `386_52334`, then inspect the generated report before designing K4b.
+
+Do **not** load K2/K3 modules yet.
+
+After K4a evidence:
+- compare stock kernel release/vermagic/symbol surface to the K2/K3 builds;
+- only if acceptable, create family-by-family K4b load tests;
+- keep all features disabled on any K4 failure.
 
 M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family. Runtime lineage `51967 -> 52294 -> 52334` remains a parallel risk gate.
 
