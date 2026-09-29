@@ -95,35 +95,73 @@ jobs:
           sha256sum work/stock-body.bin work/stock-vtoken.bin | tee reports/stock-body-token-sha256.txt
           xxd -g1 work/stock-vtoken.bin | tee reports/stock-vtoken.hex
 
-      - name: Reproduce stock token
+      - name: Validate and exactly rebuild final WFI token
         run: |
           set -euo pipefail
-          : > reports/vtoken-roundtrip.txt
-          matched=0
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct, hashlib
 
-          for btrm in 0 1; do
-            out="work/rebuilt-btrm${btrm}.w"
-            set +e
-            work/addvtoken --endian little --chip 4908 --flashtype NAND128 --btrm "$btrm"               work/stock-body.bin "$out"               >"reports/addvtoken-btrm${btrm}.stdout.txt"               2>"reports/addvtoken-btrm${btrm}.stderr.txt"
-            rc=$?
-            set -e
-            echo "btrm=$btrm rc=$rc" | tee -a reports/vtoken-roundtrip.txt
-            if [ "$rc" -eq 0 ] && [ -f "$out" ]; then
-              stat -c 'size=%s' "$out" | tee -a reports/vtoken-roundtrip.txt
-              sha256sum "$out" | tee -a reports/vtoken-roundtrip.txt
-              if cmp -s "$FW" "$out"; then
-                echo "MATCH btrm=$btrm" | tee -a reports/vtoken-roundtrip.txt
-                matched=$((matched + 1))
-              else
-                echo "NO_MATCH btrm=$btrm" | tee -a reports/vtoken-roundtrip.txt
-                cmp -l "$FW" "$out" | head -n 40 > "reports/vtoken-btrm${btrm}-first-diffs.txt" || true
-                tail -c 20 "$out" | xxd -g1 > "reports/vtoken-btrm${btrm}-tail.hex"
-              fi
-            fi
-          done
+          body = Path("work/stock-body.bin").read_bytes()
+          token = Path("work/stock-vtoken.bin").read_bytes()
+          if len(token) != 20:
+              raise SystemExit(f"unexpected WFI token size: {len(token)}")
 
-          test "$matched" -eq 1
-          echo 'CLASSIFICATION=STOCK_52334_VTOKEN_EXACTLY_REPRODUCED' | tee -a reports/vtoken-roundtrip.txt
+          crc, version, chip, flash_type, flags = struct.unpack("<IIIII", token)
+
+          # Broadcom createimg.pl / Digest::CRC parameters:
+          # width=32 poly=0x04c11db7 init=0xffffffff xorout=0
+          # refin=1 refout=1 -> reflected polynomial 0xEDB88320.
+          calc = 0xffffffff
+          for b in body:
+              calc ^= b
+              for _ in range(8):
+                  calc = (calc >> 1) ^ (0xEDB88320 if (calc & 1) else 0)
+          calc &= 0xffffffff
+
+          report = [
+              f"body_size={len(body)}",
+              f"body_sha256={hashlib.sha256(body).hexdigest()}",
+              f"stock_crc=0x{crc:08x}",
+              f"calculated_crc=0x{calc:08x}",
+              f"wfi_version=0x{version:08x}",
+              f"wfi_chip=0x{chip:08x}",
+              f"wfi_flash_type=0x{flash_type:08x}",
+              f"wfi_flags=0x{flags:08x}",
+          ]
+
+          if calc != crc:
+              raise SystemExit("\n".join(report + ["CRC_MISMATCH"]))
+          if version != 0x5732:
+              raise SystemExit(f"unexpected WFI version 0x{version:x}")
+          if chip != 0x4908:
+              raise SystemExit(f"unexpected WFI chip 0x{chip:x}")
+          if flash_type != 3:
+              raise SystemExit(f"unexpected WFI flash type {flash_type}")
+          if flags != 2:
+              raise SystemExit(f"unexpected WFI flags {flags}")
+
+          rebuilt_token = struct.pack("<IIIII", calc, version, chip, flash_type, flags)
+          Path("work/rebuilt-vtoken.bin").write_bytes(rebuilt_token)
+          rebuilt = body + rebuilt_token
+          Path("work/rebuilt-final.w").write_bytes(rebuilt)
+
+          stock = Path(__import__("os").environ["FW"]).read_bytes()
+          if rebuilt != stock:
+              raise SystemExit("final WFI reconstruction is not byte-identical to stock")
+
+          report += [
+              f"rebuilt_token_sha256={hashlib.sha256(rebuilt_token).hexdigest()}",
+              f"rebuilt_image_sha256={hashlib.sha256(rebuilt).hexdigest()}",
+              "CLASSIFICATION=STOCK_52334_FINAL_WFI_TOKEN_EXACTLY_REPRODUCED",
+          ]
+          Path("reports/vtoken-roundtrip.txt").write_text("\n".join(report) + "\n")
+          PY
+
+          cmp -s work/stock-vtoken.bin work/rebuilt-vtoken.bin
+          cmp -s "$FW" work/rebuilt-final.w
+          cat reports/vtoken-roundtrip.txt
+          xxd -g1 work/rebuilt-vtoken.bin > reports/rebuilt-vtoken.hex
 
       - name: Publish token reports
         if: always()
