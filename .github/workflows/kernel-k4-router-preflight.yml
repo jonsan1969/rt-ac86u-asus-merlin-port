@@ -1,0 +1,87 @@
+name: Validate K4a RT-AC86U read-only preflight
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - scripts/k4-router-preflight.sh
+      - .github/workflows/kernel-k4-router-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-k4a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse POSIX shell
+        run: |
+          set -euo pipefail
+          sh -n scripts/k4-router-preflight.sh
+
+      - name: Enforce read-only safety contract
+        run: |
+          set -euo pipefail
+          f=scripts/k4-router-preflight.sh
+
+          # K4a may inspect runtime state only. Any command that could alter
+          # kernel/runtime/flash/NVRAM/JFFS must make this gate fail.
+          forbidden=(
+            '(^|[[:space:]])insmod([[:space:]]|$)'
+            '(^|[[:space:]])modprobe([[:space:]]|$)'
+            '(^|[[:space:]])rmmod([[:space:]]|$)'
+            'nvram[[:space:]]+(set|unset|commit)'
+            '(^|[[:space:]])reboot([[:space:]]|$)'
+            '(^|[[:space:]])mtd(-write)?([[:space:]]|$)'
+            '(^|[[:space:]])service[[:space:]].*(restart|stop|start)'
+            '(^|[[:space:]])kill(all)?([[:space:]]|$)'
+            '>[[:space:]]*/jffs/'
+            'rm[[:space:]].*/jffs'
+          )
+
+          for p in "${forbidden[@]}"; do
+            if grep -En "$p" "$f"; then
+              echo "Forbidden K4a mutation pattern: $p" >&2
+              exit 1
+            fi
+          done
+
+          grep -Fq 'OUT="/tmp/rtac86u-k4-preflight"' "$f"
+          grep -Fq 'NO_MODULES_LOADED=1' "$f"
+          grep -Fq 'NO_NVRAM_WRITES=1' "$f"
+          grep -Fq 'NO_JFFS_WRITES=1' "$f"
+          grep -Fq 'NO_FLASH_WRITES=1' "$f"
+
+      - name: Smoke-run with mocked router commands
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/bin"
+          cat > "$tmp/bin/nvram" <<'EOF'
+          #!/bin/sh
+          [ "$1" = get ] || exit 2
+          case "$2" in
+            productid) echo RT-AC86U ;;
+            firmver) echo 3.0.0.4 ;;
+            buildno) echo 386 ;;
+            extendno) echo 52334 ;;
+          esac
+          EOF
+          chmod +x "$tmp/bin/nvram"
+          PATH="$tmp/bin:$PATH" sh scripts/k4-router-preflight.sh
+          test -f /tmp/rtac86u-k4-preflight/summary.txt
+          grep -Fxq 'productid=RT-AC86U' /tmp/rtac86u-k4-preflight/summary.txt
+          grep -Fxq 'buildno=386' /tmp/rtac86u-k4-preflight/summary.txt
+          grep -Fxq 'extendno=52334' /tmp/rtac86u-k4-preflight/summary.txt
+          grep -Fxq 'NO_MODULES_LOADED=1' /tmp/rtac86u-k4-preflight/safety.txt
+
+      - name: Publish script
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4a-router-preflight
+          path: scripts/k4-router-preflight.sh
+          retention-days: 30
