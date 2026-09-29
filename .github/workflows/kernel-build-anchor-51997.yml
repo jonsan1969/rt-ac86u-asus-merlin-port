@@ -35,7 +35,7 @@ jobs:
             mkdir -p "work/source/$(dirname "$path")"
             git -C work/source cat-file blob "$SRC_SHA:$path" > "work/source/$path"
             test -s "work/source/$path"
-            test "$(git -C work/source hash-object "work/source/$path")" = "$(git -C work/source rev-parse "$SRC_SHA:$path")"
+            test "$(git hash-object "work/source/$path")" = "$(git -C work/source rev-parse "$SRC_SHA:$path")"
           }
 
           materialize release/src-rt-5.02hnd/Makefile
