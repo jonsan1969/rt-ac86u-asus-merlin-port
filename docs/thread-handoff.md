@@ -153,7 +153,7 @@ This proves the **stock repack baseline only**, not flashability.
 ### Immediate continuation — ACTIVE OVERLAY REPACK GATE
 Do **not** revisit the solved stock repack work.
 
-Run `36609601459` supersedes the first workflow-scope failure: the `ORIG_ROOT` propagation fix worked and the guarded overlay applied all **49 entries** successfully. The next authorization step falsely rejected those legitimate deltas because manifest targets were stripped of their leading `/` while `fs_semantic_inventory.py` records absolute-style paths with `/`. Firmware repack was therefore not reached. Fix only that path-domain normalization and rerun the same gate. Logs for both `36607825944` and `36609601459` have already been fetched once; **never fetch either again**.
+Active-overlay authorization root cause is now fully resolved in workflow code. Run `36609601459` proved all 49 guarded overlay entries apply, then exposed the leading-slash path-domain mismatch. Run `36619600961` subsequently hung in step 7 because the corrected absolute parent walk reached `Path('/')`, whose parent is itself; the loop had no root termination. Commit `62dd48f45000ff8eb7b03ef360b3ffa8311cbeaf` terminates at filesystem root (`q == q.parent`). Neither case reached firmware repack semantics. Do not fetch logs for `36607825944` or `36609601459` again; `36619600961` required no log fetch for the hang diagnosis.
 
 Next task is exactly:
 
