@@ -161,7 +161,7 @@ jobs:
           make -C "$K" M=net/sched/sch_cake modules
           make -C "$K" M=net/wireguard modules
           mkdir -p reports/modules
-          find "$K/net/sunrpc" "$K/fs/lockd" "$K/fs/nfs" "$K/fs/nfsd" "$K/fs/cifs" "$K/net/sched/sch_cake" "$K/net/wireguard" -type f -name '*.ko' -print -exec cp -v {} reports/modules/ \;
+          find -L "$K/net/sunrpc" "$K/fs/lockd" "$K/fs/nfs" "$K/fs/nfsd" "$K/fs/cifs" "$K/net/sched/sch_cake" "$K/net/wireguard" -type f -name '*.ko' -print -exec cp -v {} reports/modules/ \;
           test -f reports/modules/sunrpc.ko
           test -f reports/modules/lockd.ko
           test -f reports/modules/nfs.ko
