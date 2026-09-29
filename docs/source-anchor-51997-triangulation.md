@@ -146,3 +146,13 @@ A future clean 51997/52334 ASUS source archive would immediately supersede the m
 **CLEAN LATE ASUS SOURCE: STILL MISSING**
 
 This does not unlock wholesale source replacement, but it materially improves placement/review of narrow source patches and prevents us from overfitting patches to the much older 45956 source layout.
+
+
+## Superseding precision note
+
+The modified-source triangulation remains useful, but the Git history has now been pinned to the exact import stages. Use `docs/source-anchor-51997-import-boundary.md` for commit-level provenance:
+
+- `28daa823...` = general GPL 386_51997 source-shape import;
+- `c553d8e4...` = RT-AC86U 386_51997 SDK/blob import.
+
+These exact anchors supersede the branch head when the question is source placement or RT-AC86U build provenance.
