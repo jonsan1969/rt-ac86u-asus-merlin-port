@@ -364,4 +364,24 @@ All expected NFS/CIFS/ipset/Cake/WireGuard config assertions passed. The final K
 
 **K2 SUCCESS.** Run `36556899650` on `2f423c2daa61924001675c04358bac156210c635` rebuilt the coherent ipset family: 17 `ip_set*.ko` modules plus `xt_set.ko`. All are ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`. Artifact archive digest: `66b79e481390880a8c1e9c3e57aeca1d498fca8940638be53e9ce1e714afb9f2`. Representative hashes: `ip_set.ko=19c47ab2...`, `ip_set_hash_ip.ko=e1179e36...`, `ip_set_list_set.ko=060bce18...`, `xt_set.ko=6ed89a95...`. No activation or overlay was performed.
 
-**K3 AUTHORIZED:** build the remaining NFS/CIFS/Cake/WireGuard families from the same prepared lineage. **K4 remains mandatory** before any kernel feature can become active on ASUS 52334.
+**K3 SUCCESS.** Run `36561957525` on `fb0dc42e34a17ddbe50c43672d0e8bf59cdafdb2` rebuilt the remaining optional families from the exact K1 lineage. Artifact `kernel-k3-optional-modules-51997` has archive digest `231f190223dc220008b6aab211cee9a017f9619e40327d3bd19d9ffa424021f3`.
+
+Built modules:
+- NFS family: `sunrpc.ko`, `lockd.ko`, `nfs.ko`, `nfsv2.ko`, `nfsv3.ko`, `nfsd.ko`;
+- CIFS: `cifs.ko`;
+- Cake: `sch_cake.ko`;
+- WireGuard: `wireguard.ko`.
+
+Every module is ELF64/AArch64 and reports vermagic `4.1.27 SMP preempt mod_unload aarch64`.
+
+Representative SHA-256:
+- `sunrpc.ko`: `b547166600f2e2c0b6ff7356010b7eeec509139b928cc01236e8cba2820b1241`;
+- `nfs.ko`: `82f8a84767334ab49a032f5b96f59960cd4e207336b9b8995c9442947631bf5d`;
+- `nfsd.ko`: `953d838733e9ab740980ecd5f0a5c76ddbcfafef8c0af1621171551406a8a293`;
+- `cifs.ko`: `eb545f7ce5429477f081ef0c4d1c5d1b8eca519d9025afdc2a225417417567b8`;
+- `sch_cake.ko`: `159256eb407a76d0ac38b53c3eea36ef74d054b1afe60329a61aad0e5024f24c`;
+- `wireguard.ko`: `418f6e212f4d8f3f83142352f462fd870b591602f45b8af0564ecd72c7e5161c`.
+
+The only K3 workflow fix was artifact collection through the Cake symlink (`find -L`); the module itself had already compiled successfully. No activation or overlay change was made.
+
+**K4 is now the active gate.** Controlled real-router validation against ASUS 52334 remains mandatory before any optional kernel feature can become active.
