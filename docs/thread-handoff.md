@@ -114,13 +114,60 @@ The K4a read-only collector remains ready and CI-validated, but final K4a/K4b co
 
 Do **not** load K2/K3 modules on the current Merlin runtime and do not treat a Merlin-side load test as proof of ASUS 52334 compatibility.
 
-### Immediate continuation — continue non-hardware work
-Proceed with work that does not require the physical router:
-- ASUS runtime-lineage risk gate `51967 -> 52294 -> 52334` is now **SUCCESS** (run `36570687943`); see `docs/asus-runtime-lineage-51967-52294-52334.md`;
-- advance source-side/core feature integration and repack/firmware-image work;
-- keep K2/K3 optional modules build-only and inactive until the deferred K4 gate.
+## Active firmware/repack track
 
-M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family. Runtime-lineage evidence materially raises the K4 bar because 137/142 protected paths changed from 51967 to 52294; do not infer 52334 module compatibility from build success alone.
+### ASUS late-runtime lineage — SUCCESS
+Run: `36570687943`.
+
+The official `51967 -> 52294 -> 52334` comparison is complete. ASUS 52334 remains authoritative for protected/core runtime. See `docs/asus-runtime-lineage-51967-52294-52334.md`.
+
+### 52334 repack geometry + final WFI contract — SUCCESS
+- Geometry probe run: `36571407058`.
+- Final WFI-token proof run: `36572950163`.
+- Contract: `docs/firmware-repack-52334.md`.
+
+Pinned stock geometry:
+- immutable prefix: `0x360000` / 3,538,944 bytes;
+- UBI: 570 PEBs × 131,072 bytes;
+- UBIFS LEB: 126,976 bytes;
+- volume: dynamic/autoresize `rootfs_ubifs`;
+- final Broadcom WFI token: 20 bytes, BCM4908/NAND128.
+
+### Stock ASUS 52334 semantic repack round-trip — SUCCESS
+Run: `36593572826`  
+Commit under test: `4b6ce8f675d7cdfa54b7ba71257bc645369a1a63`  
+Artifact: `firmware-stock-repack-roundtrip-52334`  
+Artifact digest: `sha256:8fddaed20326f10435d383a59006d33075c90ee3938939e642d1e5638b6107fe`.
+
+Result:
+- 3,992 original semantic rootfs entries;
+- 3,992 rebuilt entries;
+- 0 semantic mismatches;
+- rebuilt UBIFS = 568 LEBs / 72,122,368 bytes;
+- rebuilt UBI = exactly 570 PEBs / 74,711,040 bytes;
+- no external UBI padding;
+- final WFI validates.
+
+This proves the **stock repack baseline only**, not flashability.
+
+### Immediate continuation — ACTIVE OVERLAY REPACK GATE
+Do **not** revisit the solved stock repack work.
+
+Next task is exactly:
+
+**Pass the current guarded active overlay through the proven 52334 extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.**
+
+The gate must prove:
+1. post-repack semantic changes are exactly manifest-authorized overlay targets plus unavoidable parent directories;
+2. protected ASUS `rc`, `httpd`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, kernel/HND and proprietary components remain stock-authoritative and byte-identical unless a separately approved source-delta gate exists;
+3. existing guarded feature contracts still pass on the re-extracted image;
+4. final UBI remains exactly 570 PEBs and final WFI validation passes;
+5. K2/K3 optional modules are **not** added or activated;
+6. no image is called flashable until this gate and the deferred real-router/runtime gates pass.
+
+The user's physical RT-AC86U still runs Merlin 386.14_2. Do not ask for a stock 52334 reflash merely to advance development.
+
+M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family, but all remain build-only until deferred K4 validation.
 
 ## Read only as needed
 Primary current state:
