@@ -1,0 +1,198 @@
+name: K3 build RT-AC86U 51997 optional module families
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/kernel-k3-optional-modules-51997.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k3-modules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact RT-AC86U 51997 build tree
+        run: |
+          set -euo pipefail
+          SRC_SHA=c553d8e4b0bf3289683368b0d57172649b030039
+          mkdir -p work/source
+          git -C work/source init
+          git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/source sparse-checkout init --cone
+          git -C work/source sparse-checkout set \
+            release/src-rt \
+            release/src-rt-5.02hnd/kernel/linux-4.1 \
+            release/src-rt-5.02hnd/bcmdrivers \
+            release/src-rt-5.02hnd/targets/94908HND \
+            release/src/router/fltr \
+            release/src/router/sch_cake
+          git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
+          git -C work/source checkout --detach FETCH_HEAD
+          test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
+          test -f work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/ipset/ip_set_core.c
+          test -L work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr
+          test "$(readlink work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr)" = '../../../../router/fltr'
+          test -f work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr/Kconfig
+          test -f work/source/release/src-rt-5.02hnd/targets/94908HND/94908HND.RT-AC86U
+
+      - name: Fetch pinned AArch64 GCC 5.3 HND toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains
+          git -C work/toolchains init
+          git -C work/toolchains remote add origin https://github.com/SWRT-dev/bcmhnd-toolchains.git
+          git -C work/toolchains sparse-checkout init --cone
+          git -C work/toolchains sparse-checkout set crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          git -C work/toolchains fetch --depth=1 --filter=blob:none origin 7710a1e09d994598ac6c2db8ab16dc54ca5aed3d
+          git -C work/toolchains checkout --detach FETCH_HEAD
+          DIR=crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR)" = 4239c9b4e94a91ecfafa55005404a829025302d1
+
+      - name: Reproduce K1 config
+        run: |
+          set -euo pipefail
+          mkdir -p reports work/k2
+          SRC="$PWD/work/source/release/src-rt-5.02hnd"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root = Path("work/source/release/src-rt-5.02hnd")
+          def extract(path, name):
+              lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+              start = next((i for i,l in enumerate(lines) if re.fullmatch(r"define\s+"+re.escape(name)+r"\s*", l.strip())), None)
+              if start is None:
+                  raise SystemExit(f"missing define {name} in {path}")
+              out=[]
+              for l in lines[start:]:
+                  out.append(l)
+                  if l.strip()=="endef":
+                      return "\n".join(out)+"\n"
+              raise SystemExit(f"unterminated define {name}")
+          text=extract(root/"Makefile","extraKernelConfig")+"\n"+extract(root/"platform.mak","platformKernelConfig")+"\n"+extract(root/"Makefile","KernelConfig")
+          Path("work/k2/kernel-macros.mk").write_text(text)
+          PY
+          cat > work/k2/print-target.mk <<'EOF'
+          SRC := __SRC__
+          include $(SRC)/target.mak
+          .PHONY: print
+          print:
+          	@printf '%s\n' '$(GENERAL_BASE)' > work/k2/general-vars.txt
+          	@printf '%s\n' '$(RT-AC86U)' > work/k2/rtac86u-vars.txt
+          EOF
+          sed -i "s#__SRC__#$SRC#g" work/k2/print-target.mk
+          make -f work/k2/print-target.mk print
+          python3 - <<'PY'
+          from pathlib import Path
+          import shlex
+          vals={}
+          for n in ("general-vars.txt","rtac86u-vars.txt"):
+              for token in shlex.split(Path("work/k2",n).read_text()):
+                  k,v=token.split("=",1); vals[k]=v
+          vals.update(HND_ROUTER="y",CONFIG_LINUX26="y",KERN_SIZE_OPT="n",RTAC86U="y",PROFILE="94908HND",BRCM_CHIP="4908",BCM_CHIP="4908")
+          with Path("work/k2/generated-vars.mk").open("w") as f:
+              for k in sorted(vals): f.write(f"override {k} := {vals[k].replace('$','$$')}\n")
+          PY
+          OUT="$PWD/work/k2/config_rt-ac86u.51997"
+          cp "$SRC/kernel/linux-4.1/config_base.6a" "$OUT"
+          cat > work/k2/run-config.mk <<'EOF'
+          include work/k2/generated-vars.mk
+          include __SRC__/targets/94908HND/94908HND.RT-AC86U
+          include work/k2/kernel-macros.mk
+          OUT := __OUT__
+          .PHONY: all
+          all:
+          	$(call KernelConfig,$(OUT))
+          EOF
+          sed -i "s#__SRC__#$SRC#g; s#__OUT__#$OUT#g" work/k2/run-config.mk
+          make -f work/k2/run-config.mk all
+          test "$(sha256sum "$OUT" | awk '{print $1}')" = 9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2
+          cp "$OUT" reports/config_rt-ac86u.51997
+          sha256sum reports/config_rt-ac86u.51997 > reports/config_rt-ac86u.51997.sha256
+
+      - name: Prepare pinned HND kernel tree
+        run: |
+          set -euo pipefail
+          K="$PWD/work/source/release/src-rt-5.02hnd/kernel/linux-4.1"
+          TC="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/bin"
+          export ARCH=arm64
+          export CROSS_COMPILE="$TC/aarch64-buildroot-linux-gnu-"
+          export LD_LIBRARY_PATH="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/lib:${LD_LIBRARY_PATH:-}"
+          # Keep kernel Kconfig and Broadcom router-build Make config separate.
+          cp reports/config_rt-ac86u.51997 "$K/.config"
+          test -f "$PWD/work/source/release/src/router/fltr/Kconfig"
+          # The kernel fltr link resolves through src-rt-5.02hnd/router; the
+          # top-level Asuswrt build normally provides this workspace link.
+          ln -sfn ../src/router "$PWD/work/source/release/src-rt-5.02hnd/router"
+          test -d "$PWD/work/source/release/src-rt-5.02hnd/router/fltr"
+          test -f "$K/net/netfilter/fltr/Kconfig"
+          cp work/k2/generated-vars.mk "$K/../../.config"
+          grep -q '^override BUILD_NAME := RT-AC86U$' "$K/../../.config"
+
+          # Reproduce make.hndrt bcmdrivers_autogen before kernel Kconfig.
+          B="$PWD/work/source/release/src-rt-5.02hnd/bcmdrivers"
+          bash scripts/k2-bcmdrivers-autogen.sh "$B"
+
+          make -C "$K" oldnoconfig
+          make -C "$K" prepare modules_prepare
+          test -f "$K/include/generated/autoconf.h"
+          "$CROSS_COMPILE"gcc --version | head -1 | tee reports/k2-compiler.txt
+
+      - name: Build remaining optional module families
+        run: |
+          set -euo pipefail
+          K="$PWD/work/source/release/src-rt-5.02hnd/kernel/linux-4.1"
+          TC="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/bin"
+          export ARCH=arm64
+          export CROSS_COMPILE="$TC/aarch64-buildroot-linux-gnu-"
+          export LD_LIBRARY_PATH="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/lib:${LD_LIBRARY_PATH:-}"
+          test -f "$K/net/sched/sch_cake/sch_cake.c"
+          make -C "$K" M=net/sunrpc modules
+          make -C "$K" M=fs/lockd modules
+          make -C "$K" M=fs/nfs modules
+          make -C "$K" M=fs/nfsd modules
+          make -C "$K" M=fs/cifs modules
+          make -C "$K" M=net/sched/sch_cake modules
+          make -C "$K" M=net/wireguard modules
+          mkdir -p reports/modules
+          find "$K/net/sunrpc" "$K/fs/lockd" "$K/fs/nfs" "$K/fs/nfsd" "$K/fs/cifs" "$K/net/sched/sch_cake" "$K/net/wireguard" -type f -name '*.ko' -print -exec cp -v {} reports/modules/ \;
+          test -f reports/modules/sunrpc.ko
+          test -f reports/modules/lockd.ko
+          test -f reports/modules/nfs.ko
+          test -f reports/modules/nfsd.ko
+          test -f reports/modules/cifs.ko
+          test -f reports/modules/sch_cake.ko
+          test -f reports/modules/wireguard.ko
+
+      - name: Capture K3 module metadata
+        run: |
+          set -euo pipefail
+          TC="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25/usr/bin"
+          READELF="$TC/aarch64-buildroot-linux-gnu-readelf"
+          NM="$TC/aarch64-buildroot-linux-gnu-nm"
+          : > reports/k3-modules-metadata.txt
+          for m in reports/modules/*.ko; do
+            echo "===== $(basename "$m") =====" | tee -a reports/k3-modules-metadata.txt
+            sha256sum "$m" | tee -a reports/k3-modules-metadata.txt
+            "$READELF" -h "$m" | grep -E 'Class:|Machine:|Type:' | tee -a reports/k3-modules-metadata.txt
+            strings "$m" | grep -m1 '^vermagic=' | tee -a reports/k3-modules-metadata.txt || true
+            "$NM" -u "$m" | sort | tee "reports/$(basename "$m").undefined.txt" >/dev/null
+          done
+          echo 'CLASSIFICATION K3_OPTIONAL_MODULE_FAMILIES_BUILD_COMPLETE' | tee -a reports/k3-modules-metadata.txt
+          echo 'NO_ACTIVATION modules are build artifacts only; K4 required for ASUS 52334' | tee -a reports/k3-modules-metadata.txt
+
+      - name: Publish K3 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-k3-optional-modules-51997
+          path: |
+            reports/
+          if-no-files-found: warn
+          retention-days: 30
