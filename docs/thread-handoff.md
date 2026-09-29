@@ -116,11 +116,11 @@ Do **not** load K2/K3 modules on the current Merlin runtime and do not treat a M
 
 ### Immediate continuation — continue non-hardware work
 Proceed with work that does not require the physical router:
-- continue the official ASUS runtime-lineage risk gate `51967 -> 52294 -> 52334`;
+- ASUS runtime-lineage risk gate `51967 -> 52294 -> 52334` is now **SUCCESS** (run `36570687943`); see `docs/asus-runtime-lineage-51967-52294-52334.md`;
 - advance source-side/core feature integration and repack/firmware-image work;
 - keep K2/K3 optional modules build-only and inactive until the deferred K4 gate.
 
-M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family.
+M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family. Runtime-lineage evidence materially raises the K4 bar because 137/142 protected paths changed from 51967 to 52294; do not infer 52334 module compatibility from build success alone.
 
 ## Read only as needed
 Primary current state:
