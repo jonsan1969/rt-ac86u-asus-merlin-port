@@ -26,8 +26,10 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            mtd-utils unzip file xxd
-          sudo python3 -m pip install --break-system-packages ubi-reader
+            mtd-utils unzip file xxd python3-venv
+          mkdir -p work reports
+          python3 -m venv work/ubi-reader-venv
+          work/ubi-reader-venv/bin/pip install --disable-pip-version-check ubi-reader
 
       - name: Download and verify ASUS 52334
         shell: bash
@@ -146,8 +148,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          EXTRACT="$(command -v ubireader_extract_files)"
-          DISPLAY="$(command -v ubireader_display_info)"
+          EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
+          DISPLAY="$PWD/work/ubi-reader-venv/bin/ubireader_display_info"
           test -x "$EXTRACT"
           test -x "$DISPLAY"
 
@@ -281,8 +283,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          EXTRACT="$(command -v ubireader_extract_files)"
-          DISPLAY="$(command -v ubireader_display_info)"
+          EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
+          DISPLAY="$PWD/work/ubi-reader-venv/bin/ubireader_display_info"
 
           rm -rf work/rebuilt-extracted
           mkdir -p work/rebuilt-extracted
