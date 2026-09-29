@@ -1,0 +1,213 @@
+name: Active overlay ASUS 52334 repack gate
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - ports/**
+      - tools/apply_port_overlay.py
+      - tools/check_port_overlay.py
+      - tools/fs_semantic_inventory.py
+      - .github/workflows/firmware-active-overlay-repack-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest and install tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_port_overlay.py ports/active.json
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mtd-utils unzip file xxd python3-venv
+          mkdir -p work/asus reports
+          python3 -m venv work/ubi-reader-venv
+          work/ubi-reader-venv/bin/pip install --disable-pip-version-check ubi-reader
+
+      - name: Fetch verified ASUS 52334 and pinned Merlin source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=work/asus-52334.zip
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o "$OUT"             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/asus-52334.zip' | sha256sum -c -
+          unzip -q "$OUT" -d work/asus
+          FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          test "$(stat -c '%s' "$FW")" = 78250004
+          test "$(sha256sum "$FW" | awk '{print $1}')" = 1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f
+          echo "FW=$FW" >> "$GITHUB_ENV"
+
+          git clone --depth 1 --branch 386.14_2 --single-branch             https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin-src
+          test "$(git -C work/merlin-src rev-parse HEAD)" = 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+
+      - name: Split stock container and extract rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          dd if="$FW" of=work/stock-prefix.bin bs=1M iflag=count_bytes count=3538944 status=none
+          dd if="$FW" of=work/stock.ubi bs=1M iflag=skip_bytes,count_bytes skip=3538944 count=74711040 status=none
+          EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
+          sudo "$EXTRACT" -o work/original-extracted work/stock.ubi > reports/stock-extract.txt 2>&1
+          ORIG_ROOT="$(find work/original-extracted -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ORIG_ROOT"
+          echo "ORIG_ROOT=$ORIG_ROOT" >> "$GITHUB_ENV"
+          sudo python3 tools/fs_semantic_inventory.py "$ORIG_ROOT" -o reports/stock-semantic.jsonl
+
+      - name: Snapshot protected stock paths and apply guarded overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo python3 - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          root=Path(os.environ["ORIG_ROOT"])
+          exact=["bin/busybox","sbin/rc","usr/sbin/httpd","usr/sbin/dnsmasq",
+                 "usr/sbin/openvpn","usr/bin/dropbearmulti","usr/lib/libssl.so.1.1",
+                 "usr/lib/libcrypto.so.1.1"]
+          def h(p):
+              x=hashlib.sha256()
+              with p.open("rb") as f:
+                  for b in iter(lambda:f.read(1048576),b""): x.update(b)
+              return x.hexdigest()
+          rows=[]
+          for rel in exact:
+              p=root/rel
+              if p.is_file(): rows.append((rel,h(p)))
+          mod=root/"lib/modules"
+          if mod.exists():
+              for p in sorted(mod.rglob("*")):
+                  if p.is_file() and not p.is_symlink(): rows.append((p.relative_to(root).as_posix(),h(p)))
+          Path("reports/protected-stock.tsv").write_text("path\tsha256\n"+"".join(f"{p}\t{x}\n" for p,x in rows))
+          PY
+          sudo python3 tools/apply_port_overlay.py             --rootfs "$ORIG_ROOT" --merlin-src work/merlin-src --repo-root .             --manifest ports/active.json --report reports/port-overlay-provenance.tsv
+          sudo python3 tools/fs_semantic_inventory.py "$ORIG_ROOT" -o reports/applied-semantic.jsonl
+
+      - name: Verify pre-repack overlay delta is manifest-authorized
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+          def load(p):
+              return {r["path"]:r for r in map(json.loads,Path(p).read_text().splitlines())}
+          a=load("reports/stock-semantic.jsonl"); b=load("reports/applied-semantic.jsonl")
+          changed=sorted(p for p in set(a)|set(b) if a.get(p)!=b.get(p))
+          m=json.loads(Path("ports/active.json").read_text())
+          targets={e["target"].lstrip("/") for e in m["entries"]}
+          parents=set()
+          for t in targets:
+              q=Path(t).parent
+              while str(q) not in ("","."):
+                  s=q.as_posix()
+                  if s not in a: parents.add(s)
+                  q=q.parent
+          allowed=targets|parents
+          bad=[p for p in changed if p not in allowed]
+          Path("reports/pre-repack-changed-paths.txt").write_text("\n".join(changed)+"\n")
+          if bad: raise SystemExit(f"unauthorized pre-repack semantic deltas: {bad}")
+          PY
+
+      - name: Rebuild UBIFS and exact-size UBI
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x zlib             -r "$ORIG_ROOT" -o work/overlay.ubifs > reports/mkfs-ubifs.txt 2>&1
+          cat > work/ubi.ini <<EOF
+          [rootfs]
+          mode=ubi
+          image=$PWD/work/overlay.ubifs
+          vol_id=0
+          vol_type=dynamic
+          vol_name=rootfs_ubifs
+          vol_flags=autoresize
+          EOF
+          ubinize -v -o work/overlay.ubi -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 work/ubi.ini             > reports/ubinize.txt 2>&1
+          test "$(stat -c '%s' work/overlay.ubi)" = 74711040
+          test $(( $(stat -c '%s' work/overlay.ubi) / 131072 )) -eq 570
+          printf 'ubi_bytes=%s\nubi_pebs=%s\n' "$(stat -c '%s' work/overlay.ubi)"             "$(( $(stat -c '%s' work/overlay.ubi) / 131072 ))" > reports/overlay-ubi-layout.txt
+
+      - name: Build and validate final WFI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat work/stock-prefix.bin work/overlay.ubi > work/overlay-body.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,struct,zlib
+          body=Path("work/overlay-body.bin").read_bytes()
+          if len(body)!=78249984: raise SystemExit(f"bad body size {len(body)}")
+          crc=(zlib.crc32(body)^0xffffffff)&0xffffffff
+          token=struct.pack("<IIIII",crc,0x5732,0x4908,3,2)
+          image=body+token
+          Path("work/overlay-final.w").write_bytes(image)
+          c,v,ch,ft,fl=struct.unpack("<IIIII",image[-20:])
+          calc=(zlib.crc32(image[:-20])^0xffffffff)&0xffffffff
+          if (c,v,ch,ft,fl)!=(calc,0x5732,0x4908,3,2): raise SystemExit("WFI validation failed")
+          Path("reports/overlay-wfi.txt").write_text(
+              f"crc=0x{c:08x}\nversion=0x{v:08x}\nchip=0x{ch:08x}\nflash_type={ft}\nflags={fl}\n"
+              f"image_bytes={len(image)}\nimage_sha256={hashlib.sha256(image).hexdigest()}\n")
+          PY
+          test "$(stat -c '%s' work/overlay-final.w)" = 78250004
+          cmp -n 3538944 "$FW" work/overlay-final.w
+
+      - name: Re-extract and enforce semantic/protected gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
+          DISPLAY="$PWD/work/ubi-reader-venv/bin/ubireader_display_info"
+          sudo "$EXTRACT" -o work/reextracted work/overlay.ubi > reports/reextract.txt 2>&1
+          "$DISPLAY" work/overlay.ubi > reports/overlay-ubi-info.txt 2>&1
+          FINAL_ROOT="$(find work/reextracted -type d -name rootfs_ubifs -print -quit)"
+          test -n "$FINAL_ROOT"
+          echo "FINAL_ROOT=$FINAL_ROOT" >> "$GITHUB_ENV"
+          sudo python3 tools/fs_semantic_inventory.py "$FINAL_ROOT" -o reports/final-semantic.jsonl
+          sudo python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          def load(p):
+              return {r["path"]:r for r in map(json.loads,Path(p).read_text().splitlines())}
+          applied=load("reports/applied-semantic.jsonl"); final=load("reports/final-semantic.jsonl")
+          bad=[p for p in sorted(set(applied)|set(final)) if applied.get(p)!=final.get(p)]
+          if bad: raise SystemExit(f"post-repack semantic drift: {bad[:20]} count={len(bad)}")
+          root=Path(os.environ["FINAL_ROOT"])
+          def h(p):
+              x=hashlib.sha256()
+              with p.open("rb") as f:
+                  for b in iter(lambda:f.read(1048576),b""): x.update(b)
+              return x.hexdigest()
+          for line in Path("reports/protected-stock.tsv").read_text().splitlines()[1:]:
+              rel,want=line.split("\t")
+              p=root/rel
+              if not p.is_file() or h(p)!=want: raise SystemExit(f"protected ASUS path changed: {rel}")
+          # K2/K3 are build-only and must not leak into the active image.
+          forbidden={"ip_set.ko","xt_set.ko","cifs.ko","sch_cake.ko","wireguard.ko",
+                     "sunrpc.ko","lockd.ko","nfs.ko","nfsv2.ko","nfsv3.ko","nfsd.ko"}
+          leaked=[p.as_posix() for p in root.rglob("*.ko") if p.name in forbidden]
+          if leaked: raise SystemExit(f"K2/K3 module leak into firmware: {leaked}")
+          Path("reports/final-gate.txt").write_text(
+              f"applied_entries={len(applied)}\nfinal_entries={len(final)}\nsemantic_drift=0\n"
+              "protected_stock_byte_identity=PASS\nk2_k3_module_leak=0\n"
+              "ubi_pebs=570\nwfi=PASS\n"
+              "CLASSIFICATION=ACTIVE_OVERLAY_REPACK_GATE_PASS\n")
+          PY
+          cat reports/final-gate.txt
+
+      - name: Publish reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-active-overlay-repack-52334
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30
