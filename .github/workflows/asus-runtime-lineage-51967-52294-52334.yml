@@ -34,7 +34,7 @@ jobs:
           fetch_fw() {
             local ver="$1" code="$2" sha="$3"
             local out="work/downloads/${ver}.zip"
-            curl -fL --retry 5 --retry-all-errors --connect-timeout 30               -o "$out"               "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_${code}.zip?model=RT-AC86U"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 30               -o "$out"               "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_${code}.zip?model=RT-AC86U"
             printf '%s  %s\n' "$sha" "$out" | sha256sum -c -
           }
 
