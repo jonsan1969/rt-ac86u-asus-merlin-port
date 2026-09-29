@@ -104,8 +104,8 @@ jobs:
           UBI_SIZE=74711040
           BODY_SIZE=78249984
 
-          dd if="$FW" of=work/stock-prefix.bin bs=1 count="$PREFIX" status=none
-          dd if="$FW" of=work/stock.ubi bs=1 skip="$PREFIX" count="$UBI_SIZE" status=none
+          dd if="$FW" of=work/stock-prefix.bin bs=1M iflag=count_bytes count="$PREFIX" status=none
+          dd if="$FW" of=work/stock.ubi bs=1M iflag=skip_bytes,count_bytes skip="$PREFIX" count="$UBI_SIZE" status=none
           head -c "$BODY_SIZE" "$FW" > work/stock-body.bin
           tail -c 20 "$FW" > work/stock-vtoken.bin
 
