@@ -171,3 +171,34 @@ Both are modified firmware trees, so neither is treated as clean ASUS source. Th
 ## Stock runtime callback surfaces
 
 ASUS 52334 itself exposes a few narrow callbacks, notably executable `/etc/ppp/ip-up.local` and `/etc/ppp/ip-down.local` hooks from the stock PPP scripts. These are useful only for PPP-specific adaptations and are **not** substitutes for Merlin's generic WAN/DHCP/services/firewall/USB lifecycle API. See `docs/asus-stock-event-surfaces-52334.md` and probe run `36415137373`.
+
+
+## Final 386 GPL boundary and late stock-runtime delta
+
+Public Merlin development history records ASUS GPL `386_51997` as the final GPL merge made available for the 386 AC-router line. Later official RT-AC86U stock releases continued as binary firmware:
+
+- `386_51967` — 2025-03-25;
+- `386_52294` — 2025-10-28;
+- `386_52334` — 2026-05-07, final EOL firmware.
+
+The official 52294 notes describe substantial input-validation, AiCloud, Web History and VPN-upload hardening. The final 52334 notes add DNS-name handling and execution-module substitution safeguards.
+
+This means the source gap after 51997 is structural, not merely an incomplete repository search. There is no known later clean 386 GPL merge to use as a direct source base.
+
+The project therefore adds a new evidence layer:
+
+`/.github/workflows/asus-runtime-lineage-51967-52294-52334.yml`
+
+It extracts the three official ASUS images, builds whole-rootfs SHA-256 manifests and reports exactly which protected/security-sensitive components changed across:
+
+- 51967 -> 52294;
+- 52294 -> 52334;
+- 51967 -> 52334.
+
+Interpretation rule:
+
+- a component that changed in later stock security releases remains **strictly 52334-runtime-authoritative** and must not be replaced by a rebuild from the older source anchor;
+- an unchanged component still does **not** automatically become safe to rebuild, but unchanged lineage materially lowers uncertainty and can justify deeper source/binary equivalence analysis;
+- `httpd`, `rc`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, shared libraries, kernel modules and proprietary HND components remain protected until component-specific evidence proves otherwise.
+
+The runtime-lineage report is therefore a gating input to any future source-rebuilt core component.
