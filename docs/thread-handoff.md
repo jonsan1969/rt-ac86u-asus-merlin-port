@@ -70,22 +70,26 @@ Relevant final materialization detail: the three `src-rt-5.02hnd` Makefile entri
 
 Old failed K1 runs and their superseded troubleshooting are intentionally omitted.
 
-### Immediate continuation — K2
-Build **one coherent ipset module family** from the exact K1 lineage.
+### K2 — SUCCESS
+Run: `36556899650`  
+Commit: `2f423c2daa61924001675c04358bac156210c635`  
+Artifact: `kernel-k2-ipset-51997`, archive digest `sha256:66b79e481390880a8c1e9c3e57aeca1d498fca8940638be53e9ce1e714afb9f2`.
 
-Current Action: `36556760837` — **FAILURE before job start (0 jobs)**. The attempted autogen insertion still does not parse as a runnable workflow, so no kernel result was produced. Underlying kernel blocker remains `bcmdrivers/Kconfig.autogen` generation before `oldnoconfig`; fix the workflow definition itself first. The previous `fltr` workspace-link blocker is resolved; do not revisit older K2 failures.
+K2 rebuilt the coherent ipset family from the exact K1 lineage: 17 `ip_set*.ko` modules plus `xt_set.ko`. Every module is ELF64/AArch64 and reports vermagic `4.1.27 SMP preempt mod_unload aarch64`. Generated config SHA-256 remains `9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2`.
 
-K2 must:
-- prepare the real HND Linux 4.1 build tree/config using the same source/profile/toolchain;
-- build the ipset kernel module family as one coherent unit;
-- publish SHA-256, ELF architecture, vermagic, imported symbols and dependency/module metadata;
-- publish artifacts only;
-- perform **no activation** and make **no overlay/ports/active.json change**.
+Representative SHA-256:
+- `ip_set.ko`: `19c47ab22f38c50e3ddfea153e54c10e4c4ecb244fe1fa77e225c0bca94162b6`
+- `ip_set_hash_ip.ko`: `e1179e36ebad16843537338fae3134f75c672161a1702f518a64cebeab1cb93d`
+- `ip_set_list_set.ko`: `060bce188e4f4ac42064e4c9774f637dcee84b0cea5bb0d3e858a0ae28464cf5`
+- `xt_set.ko`: `6ed89a951afdabf5b93158d7ef8edc0c7804b51df0c98f3f8c64500a47fb0b3a`
 
-K2 success authorizes K3. K2 compilation does **not** prove ASUS 52334 runtime compatibility.
+No activation or overlay change was made. All intermediate K2 troubleshooting is intentionally omitted now that K2 is solved.
+
+### Immediate continuation — K3
+Build the remaining optional module families for M22 NFS, M23 CIFS, M32 Cake and M33 WireGuard from the **same prepared source/config/toolchain lineage**. Preserve coherent dependency families and publish metadata only. Do not activate modules and do not change `ports/active.json`.
 
 ### After K2
-- K3: build remaining optional M22/M23/M27/M32/M33 module families from the exact same prepared tree/config/toolchain.
+- K3: build remaining optional M22/M23/M32/M33 module families from the exact same prepared tree/config/toolchain; M27/ipset is complete at K2 build level.
 - K4: controlled real-router load/function validation against ASUS 52334.
 - Runtime lineage `51967 -> 52294 -> 52334` remains the parallel risk gate.
 
