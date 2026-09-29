@@ -317,35 +317,60 @@ The smoke step now exports:
 
 `LD_LIBRARY_PATH="$DIR/usr/lib:$LD_LIBRARY_PATH"`
 
-Current K1 rerun at handoff creation:
+Second K1 run:
 
-`36522285065` — **IN PROGRESS**
+`36522285065` — **FAILURE**
 
-Do not start K2 until this run is resolved.
+The host-library fix worked: the exact GCC 5.3 compiler smoke step now passes and produces an AArch64 object.
+
+The failure moved to the next step, **Extract original Asuswrt kernel-config macros**.
+
+Actual traceback:
+
+`FileNotFoundError: work/source/release/src-rt-5.02hnd/Makefile`
+
+So the remaining K1 problem is the workflow's source materialization/sparse-checkout pattern, not the compiler, kernel source lineage, or toolchain.
+
+Preferred next fix: stop relying on the fragile no-cone sparse checkout for K1's few files. Fetch `c553d8e4...` with `--filter=blob:none`, then materialize the exact required build/config/source files with `git show <sha>:<path>` into `work/source/<path>`, followed immediately by explicit `test -f` assertions before macro extraction.
+
+Do not start K2 until K1 is green.
 
 ## Immediate continuation
 
-### 1. Resolve K1 first
+### 1. Fix K1 source materialization, then rerun
 
-Check run:
+Run `36522285065` is already diagnosed.
 
-`36522285065`
+What is proven:
 
-If green:
+- pinned toolchain download is correct;
+- GCC 5.3 starts;
+- pinned `usr/lib` host libraries fix `cc1`;
+- compiler smoke now passes;
+- failure is only that the sparse checkout did not materialize `release/src-rt-5.02hnd/Makefile`.
+
+Next concrete change:
+
+1. keep the exact source pin `c553d8e4...`;
+2. replace K1's fragile source sparse-checkout step with deterministic exact-path materialization, preferably `git show <sha>:<path> > work/source/<path>` for the small K1 file set;
+3. add explicit `test -f` checks for:
+   - `release/src-rt-5.02hnd/Makefile`;
+   - `platform.mak`;
+   - `target.mak`;
+   - RT-AC86U profile;
+   - `config_base.6a`;
+   - the individual NFS/CIFS/ipset/WireGuard/Cake source files used by assertions;
+4. push the minimal workflow fix;
+5. inspect the new Action automatically.
+
+When K1 becomes green:
 
 - inspect artifact `kernel-build-anchor-51997`;
 - verify compiler smoke object is AArch64;
 - verify generated RT-AC86U config;
-- record config SHA-256 and key feature settings;
-- update `STATUS.md` / `docs/kernel-build-lineage-51997.md` from "K1 READY" to K1 verified;
+- record config SHA-256 and feature settings;
+- update `STATUS.md` / `docs/kernel-build-lineage-51997.md` to K1 verified;
 - continue immediately to K2.
-
-If red:
-
-- read job logs;
-- fix the actual host/build problem minimally;
-- rerun through a commit;
-- continue automatically.
 
 ### 2. K2 — real one-module build smoke
 
