@@ -126,6 +126,7 @@ jobs:
           echo 'CLASSIFICATION=STOCK_52334_VTOKEN_EXACTLY_REPRODUCED' | tee -a reports/vtoken-roundtrip.txt
 
       - name: Publish token reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: firmware-vtoken-roundtrip-52334
