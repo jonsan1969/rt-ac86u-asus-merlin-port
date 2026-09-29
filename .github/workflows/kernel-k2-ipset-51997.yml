@@ -96,15 +96,16 @@ jobs:
           PY
           OUT="$PWD/work/k2/config_rt-ac86u.51997"
           cp "$SRC/kernel/linux-4.1/config_base.6a" "$OUT"
-          cat > work/k2/run-config.mk <<EOF
+          cat > work/k2/run-config.mk <<'EOF'
           include work/k2/generated-vars.mk
-          include $SRC/targets/94908HND/94908HND.RT-AC86U
+          include __SRC__/targets/94908HND/94908HND.RT-AC86U
           include work/k2/kernel-macros.mk
-          OUT := $OUT
+          OUT := __OUT__
           .PHONY: all
           all:
           	$(call KernelConfig,$(OUT))
           EOF
+          sed -i "s#__SRC__#$SRC#g; s#__OUT__#$OUT#g" work/k2/run-config.mk
           make -f work/k2/run-config.mk all
           test "$(sha256sum "$OUT" | awk '{print $1}')" = 9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2
           cp "$OUT" reports/config_rt-ac86u.51997
