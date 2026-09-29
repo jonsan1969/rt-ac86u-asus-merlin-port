@@ -1,0 +1,90 @@
+name: Verify M48 HND cstats donor exclusion
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/per-ip-traffic-hnd-donor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned Merlin donor
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/merlin sparse-checkout init --cone
+          git -C work/merlin sparse-checkout set             release/src/router/Makefile             release/src/router/rc             release/src/router/httpd             release/src/router/shared             release/src/router/www             tools
+          git -C work/merlin fetch --depth=1 --filter=blob:none origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+
+      - name: Verify HND exclusion boundary
+        run: |
+          set -euo pipefail
+          M=work/merlin
+          OUT=reports/per-ip-traffic-hnd-donor.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          have() { grep -Fq "$2" "$1" && pass "$3" || fail "$3"; }
+
+          MAKE="$M/release/src/router/Makefile"
+          SVC="$M/release/src/router/rc/services.c"
+          FW="$M/release/src/router/rc/firewall.c"
+          SH="$M/release/src/router/shared/shared.h"
+          DAH="$M/release/src/router/httpd/data_arrays.h"
+          DAC="$M/release/src/router/httpd/data_arrays.c"
+          WWW="$M/release/src/router/www/Makefile"
+
+          echo '===== RT-AC86U HND MODEL =====' | tee -a "$OUT"
+          have "$M/tools/build-all" 'release/src-rt-5.02hnd rt-ac86u'             "RT-AC86U build uses HND source tree"
+
+          echo '===== DAEMON BUILD =====' | tee -a "$OUT"
+          have "$MAKE" 'ifneq ($(HND_ROUTER),y)' "Router Makefile has HND exclusion guard"
+          have "$MAKE" 'obj-y += cstats' "cstats daemon is conditionally built"
+
+          echo '===== RC LIFECYCLE =====' | tee -a "$OUT"
+          have "$SVC" '#if !defined(HND_ROUTER)' "rc/services.c has non-HND guard"
+          have "$SVC" 'void start_cstats(int new)' "cstats start lifecycle exists only in guarded source"
+          have "$SVC" 'void stop_cstats(void)' "cstats stop lifecycle exists only in guarded source"
+          have "$SVC" 'else if (strcmp(script, "cstats") == 0)' "rc_service cstats dispatcher exists in guarded source"
+
+          echo '===== ACCOUNTING BACKEND =====' | tee -a "$OUT"
+          have "$SH" '#if !defined(HND_ROUTER)' "shared helper declarations have non-HND guard"
+          have "$SH" 'extern void ipt_account(FILE *fp, char *interface);' "legacy ipt_account helper is non-HND"
+          have "$DAC" 'fopen("/proc/net/ipt_account/lan", "r")' "legacy handlers depend on ipt_account procfs"
+
+          echo '===== HTTPD =====' | tee -a "$OUT"
+          have "$DAH" '#if !defined(HND_ROUTER)' "HTTPD per-IP handler declarations are non-HND"
+          for fn in ej_iptmon ej_ipt_bandwidth ej_iptraffic; do
+            have "$DAH" "$fn" "HTTPD handler $fn belongs to non-HND block"
+          done
+
+          echo '===== WEBUI INSTALL =====' | tee -a "$OUT"
+          have "$WWW" 'ifeq ($(HND_ROUTER),y)' "WebUI Makefile has HND removal block"
+          for page in Main_TrafficMonitor_devdaily.asp Main_TrafficMonitor_devmonthly.asp Main_TrafficMonitor_devrealtime.asp; do
+            have "$WWW" "rm -rf \$(INSTALLDIR)/www/$page" "HND image removes $page"
+          done
+
+          echo 'CLASSIFICATION M48_NO_PORT_PINNED_HND_DONOR_EXCLUDES_FEATURE' | tee -a "$OUT"
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: per-ip-traffic-hnd-donor
+          path: reports/per-ip-traffic-hnd-donor.txt
+          if-no-files-found: warn
+          retention-days: 30
