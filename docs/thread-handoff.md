@@ -153,7 +153,7 @@ This proves the **stock repack baseline only**, not flashability.
 ### Immediate continuation — ACTIVE OVERLAY REPACK GATE
 Do **not** revisit the solved stock repack work.
 
-First implementation run `36607825944` failed before overlay application: an inline Python snapshot was invoked through `sudo`, which dropped `ORIG_ROOT` and raised `KeyError: ORIG_ROOT`. This is a workflow environment-propagation defect only; no firmware/repack contract failed. Correct by passing root variables explicitly through `sudo env`, then rerun this same gate. The log for `36607825944` has already been fetched once; **never fetch it again**.
+Run `36609601459` supersedes the first workflow-scope failure: the `ORIG_ROOT` propagation fix worked and the guarded overlay applied all **49 entries** successfully. The next authorization step falsely rejected those legitimate deltas because manifest targets were stripped of their leading `/` while `fs_semantic_inventory.py` records absolute-style paths with `/`. Firmware repack was therefore not reached. Fix only that path-domain normalization and rerun the same gate. Logs for both `36607825944` and `36609601459` have already been fetched once; **never fetch either again**.
 
 Next task is exactly:
 
