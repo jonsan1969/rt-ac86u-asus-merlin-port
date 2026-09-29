@@ -97,6 +97,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           root = Path("work/source/release/src-rt-5.02hnd")
 
@@ -104,14 +105,12 @@ jobs:
               lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
               start = None
               for i, line in enumerate(lines):
-                  if line.strip().startswith(f"define {name}"):
-                      tail = line.strip()[len(f"define {name}"):]
-                      if tail and not tail.isspace():
-                          continue
+                  if re.fullmatch(r"define\\s+" + re.escape(name) + r"\\s*", line.strip()):
                       start = i
                       break
               if start is None:
-                  raise SystemExit(f"missing define {name} in {path}")
+                  near = [repr(line) for line in lines if name in line]
+                  raise SystemExit(f"missing define {name} in {path}; matching lines={near[:10]}")
               out = []
               for line in lines[start:]:
                   out.append(line)
