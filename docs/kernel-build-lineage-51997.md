@@ -362,6 +362,6 @@ Generated config SHA-256:
 
 All expected NFS/CIFS/ipset/Cake/WireGuard config assertions passed. The final K1 source-materialization fix preserves the three `src-rt-5.02hnd` symlinks to `../src-rt`; flattening those Git symlink blobs had previously produced 18-byte pointer files instead of the referenced Makefiles.
 
-**K2 AUTHORIZED:** build one coherent ipset module family from this exact prepared lineage and publish metadata only. No activation or overlay.
+**K2 SUCCESS.** Run `36556899650` on `2f423c2daa61924001675c04358bac156210c635` rebuilt the coherent ipset family: 17 `ip_set*.ko` modules plus `xt_set.ko`. All are ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`. Artifact archive digest: `66b79e481390880a8c1e9c3e57aeca1d498fca8940638be53e9ce1e714afb9f2`. Representative hashes: `ip_set.ko=19c47ab2...`, `ip_set_hash_ip.ko=e1179e36...`, `ip_set_list_set.ko=060bce18...`, `xt_set.ko=6ed89a95...`. No activation or overlay was performed.
 
-**K3-K4 still required before any kernel feature can become active.**
+**K3 AUTHORIZED:** build the remaining NFS/CIFS/Cake/WireGuard families from the same prepared lineage. **K4 remains mandatory** before any kernel feature can become active on ASUS 52334.
