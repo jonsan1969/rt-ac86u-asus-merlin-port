@@ -107,7 +107,7 @@ jobs:
           parents=set()
           for t in targets:
               q=Path(t).parent
-              while str(q) not in ("","."):
+              while q != q.parent:
                   s=q.as_posix()
                   if s not in a: parents.add(s)
                   q=q.parent
