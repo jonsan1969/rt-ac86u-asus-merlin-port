@@ -1,0 +1,267 @@
+name: Reproduce RT-AC86U 51997 kernel build anchor
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/kernel-build-anchor-51997.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact RT-AC86U 51997 source inputs
+        run: |
+          set -euo pipefail
+          mkdir -p work/source reports
+
+          git -C work/source init
+          git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/source sparse-checkout init --no-cone
+          git -C work/source sparse-checkout set             /release/src-rt-5.02hnd/Makefile             /release/src-rt-5.02hnd/platform.mak             /release/src-rt-5.02hnd/target.mak             /release/src-rt-5.02hnd/targets/94908HND/94908HND.RT-AC86U             /release/src-rt-5.02hnd/kernel/linux-4.1/config_base.6a             /release/src-rt-5.02hnd/kernel/linux-4.1/net/wireguard/             /release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/ipset/             /release/src-rt-5.02hnd/kernel/linux-4.1/fs/nfs/             /release/src-rt-5.02hnd/kernel/linux-4.1/fs/cifs/             /release/src/router/sch_cake/
+          git -C work/source fetch --depth=1 --filter=blob:none origin             c553d8e4b0bf3289683368b0d57172649b030039
+          git -C work/source checkout --detach FETCH_HEAD
+
+          test "$(git -C work/source rev-parse HEAD)" =             c553d8e4b0bf3289683368b0d57172649b030039
+
+      - name: Fetch pinned AArch64 GCC 5.3 HND toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains
+          git -C work/toolchains init
+          git -C work/toolchains remote add origin https://github.com/SWRT-dev/bcmhnd-toolchains.git
+          git -C work/toolchains sparse-checkout init --cone
+          git -C work/toolchains sparse-checkout set             crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          git -C work/toolchains fetch --depth=1 --filter=blob:none origin             7710a1e09d994598ac6c2db8ab16dc54ca5aed3d
+          git -C work/toolchains checkout --detach FETCH_HEAD
+
+          DIR=crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR)" =             4239c9b4e94a91ecfafa55005404a829025302d1
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR/usr/bin/aarch64-buildroot-linux-gnu-gcc.br_real)" =             ccd88f3016081109e8110fbf00537149590028d0
+
+      - name: Smoke-test exact compiler
+        run: |
+          set -euo pipefail
+          DIR="$PWD/work/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25"
+          CC="$DIR/usr/bin/aarch64-buildroot-linux-gnu-gcc"
+          READELF="$DIR/usr/bin/aarch64-buildroot-linux-gnu-readelf"
+
+          "$CC" --version | tee reports/toolchain-version.txt
+          grep -Fq '5.3.0' reports/toolchain-version.txt
+
+          cat > work/k1-smoke.c <<'EOF'
+          int rtac86u_k1_smoke(void) { return 51997; }
+          EOF
+          "$CC" -c -O2 -o reports/k1-smoke.o work/k1-smoke.c
+          "$READELF" -h reports/k1-smoke.o | tee reports/k1-smoke-elf.txt
+          grep -Fq 'AArch64' reports/k1-smoke-elf.txt
+          sha256sum reports/k1-smoke.o | tee reports/k1-smoke.sha256
+
+      - name: Extract original Asuswrt kernel-config macros
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("work/source/release/src-rt-5.02hnd")
+
+          def extract_define(path, name):
+              lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+              start = None
+              for i, line in enumerate(lines):
+                  if line.strip() == f"define {name}":
+                      start = i
+                      break
+              if start is None:
+                  raise SystemExit(f"missing define {name} in {path}")
+              out = []
+              for line in lines[start:]:
+                  out.append(line)
+                  if line.strip() == "endef":
+                      return "\n".join(out) + "\n"
+              raise SystemExit(f"unterminated define {name} in {path}")
+
+          text = ""
+          text += extract_define(root / "Makefile", "extraKernelConfig")
+          text += "\n"
+          text += extract_define(root / "platform.mak", "platformKernelConfig")
+          text += "\n"
+          text += extract_define(root / "Makefile", "KernelConfig")
+          Path("work/kernel-macros.mk").write_text(text, encoding="utf-8")
+          PY
+
+          grep -Fq 'define KernelConfig' work/kernel-macros.mk
+          grep -Fq 'define platformKernelConfig' work/kernel-macros.mk
+          grep -Fq 'define extraKernelConfig' work/kernel-macros.mk
+          sha256sum work/kernel-macros.mk | tee reports/kernel-macros.sha256
+
+      - name: Expand the real RT-AC86U target variables
+        run: |
+          set -euo pipefail
+          SRC="$PWD/work/source/release/src-rt-5.02hnd"
+
+          cat > work/print-target.mk <<'EOF'
+          SRC := __SRC__
+          include $(SRC)/target.mak
+
+          .PHONY: print
+          print:
+          	@printf '%s\n' '$(GENERAL_BASE)' > work/general-vars.txt
+          	@printf '%s\n' '$(RT-AC86U)' > work/rtac86u-vars.txt
+          EOF
+          sed -i "s#__SRC__#$SRC#g" work/print-target.mk
+          make -f work/print-target.mk print
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import shlex
+
+          tokens = []
+          for name in ("general-vars.txt", "rtac86u-vars.txt"):
+              tokens.extend(shlex.split(Path("work", name).read_text()))
+
+          vals = {}
+          for token in tokens:
+              if "=" not in token:
+                  raise SystemExit(f"unexpected target token: {token!r}")
+              key, value = token.split("=", 1)
+              vals[key] = value
+
+          # Model-derived globals normally set by the top-level build.
+          vals["HND_ROUTER"] = "y"
+          vals["CONFIG_LINUX26"] = "y"
+          vals["KERN_SIZE_OPT"] = "n"
+          vals["RTAC86U"] = "y"
+          vals["PROFILE"] = "94908HND"
+          vals["BRCM_CHIP"] = "4908"
+          vals["BCM_CHIP"] = "4908"
+
+          with Path("work/generated-vars.mk").open("w") as f:
+              for key in sorted(vals):
+                  value = vals[key].replace("$", "$$")
+                  f.write(f"override {key} := {value}\n")
+
+          with Path("reports/rtac86u-target-vars.txt").open("w") as f:
+              for key in sorted(vals):
+                  f.write(f"{key}={vals[key]}\n")
+          PY
+
+          grep -Fxq 'BUILD_NAME=RT-AC86U' reports/rtac86u-target-vars.txt
+          grep -Fxq 'WIREGUARD=y' reports/rtac86u-target-vars.txt
+          grep -Fxq 'NFS=y' reports/rtac86u-target-vars.txt
+          grep -Fxq 'HND_ROUTER=y' reports/rtac86u-target-vars.txt
+
+      - name: Execute original Asuswrt kernel config macros
+        run: |
+          set -euo pipefail
+          SRC="$PWD/work/source/release/src-rt-5.02hnd"
+          PROFILE="$SRC/targets/94908HND/94908HND.RT-AC86U"
+          BASE="$SRC/kernel/linux-4.1/config_base.6a"
+          OUT="$PWD/reports/config_rt-ac86u.51997"
+
+          cp "$BASE" "$OUT"
+
+          cat > work/run-kernel-config.mk <<'EOF'
+          include work/generated-vars.mk
+          include __PROFILE__
+          include work/kernel-macros.mk
+
+          OUT := __OUT__
+
+          .PHONY: all
+          all:
+          	$(call KernelConfig,$(OUT))
+          EOF
+          sed -i "s#__PROFILE__#$PROFILE#g; s#__OUT__#$OUT#g" work/run-kernel-config.mk
+
+          make -f work/run-kernel-config.mk all
+
+          # Normalize through Kconfig is intentionally deferred to K2, where
+          # the full HND kernel tree and Broadcom autogen links are prepared.
+          sort -o reports/config_rt-ac86u.51997.sorted "$OUT"
+          sha256sum "$OUT" | tee reports/config_rt-ac86u.51997.sha256
+
+      - name: Assert feature build lineage in generated config
+        run: |
+          set -euo pipefail
+          C=reports/config_rt-ac86u.51997
+          OUT=reports/kernel-build-anchor-51997.txt
+          : > "$OUT"
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          need() {
+            local line="$1" label="$2"
+            grep -Fxq "$line" "$C" && pass "$label: $line" || fail "$label: missing $line"
+          }
+
+          echo '===== SOURCE ANCHOR =====' | tee -a "$OUT"
+          echo 'RMerl/asuswrt-merlin.ng c553d8e4b0bf3289683368b0d57172649b030039' | tee -a "$OUT"
+          echo 'SWRT-dev/bcmhnd-toolchains 7710a1e09d994598ac6c2db8ab16dc54ca5aed3d' | tee -a "$OUT"
+
+          echo '===== M22 NFS =====' | tee -a "$OUT"
+          need 'CONFIG_NFSD=m' 'NFSD module'
+          need 'CONFIG_LOCKD=m' 'lockd module'
+          need 'CONFIG_SUNRPC=m' 'sunrpc module'
+          need 'CONFIG_NFS_FS=m' 'NFS client module'
+          need 'CONFIG_NFS_V3=m' 'NFS v3 module'
+
+          echo '===== M23 CIFS =====' | tee -a "$OUT"
+          need 'CONFIG_CIFS=m' 'CIFS module'
+          need 'CONFIG_CIFS_SMB2=y' 'CIFS SMB2 support'
+
+          echo '===== M27 IPSET =====' | tee -a "$OUT"
+          need 'CONFIG_NETFILTER_XT_SET=m' 'xt_set module'
+          need 'CONFIG_IP_SET=m' 'ip_set core module'
+          need 'CONFIG_IP_SET_HASH_IP=m' 'ip_set hash:ip module'
+          need 'CONFIG_IP_SET_LIST_SET=m' 'ip_set list:set module'
+
+          echo '===== M32 CAKE =====' | tee -a "$OUT"
+          need 'CONFIG_NET_SCH_CAKE=m' 'Cake module'
+          if grep -Eq '^CONFIG_NET_ACT_CTINFO=' "$C"; then
+            fail 'act_ctinfo unexpectedly appears in verified 51997 config'
+          else
+            pass 'act_ctinfo is not part of verified 51997 RT-AC86U anchor'
+          fi
+
+          echo '===== M33 WIREGUARD =====' | tee -a "$OUT"
+          need 'CONFIG_WIREGUARD=m' 'WireGuard module'
+          need '# CONFIG_WIREGUARD_DEBUG is not set' 'WireGuard debug disabled'
+
+          echo '===== PINNED SOURCE PATHS =====' | tee -a "$OUT"
+          S=work/source/release/src-rt-5.02hnd/kernel/linux-4.1
+          test -f "$S/fs/nfs/client.c" && pass 'NFS source present' || fail 'NFS source missing'
+          test -f "$S/fs/cifs/cifsfs.c" && pass 'CIFS source present' || fail 'CIFS source missing'
+          test -f "$S/net/netfilter/ipset/ip_set_core.c" && pass 'ipset source present' || fail 'ipset source missing'
+          test -f "$S/net/wireguard/main.c" && pass 'WireGuard source present' || fail 'WireGuard source missing'
+          test -f work/source/release/src/router/sch_cake/sch_cake.c && pass 'Cake source present' || fail 'Cake source missing'
+
+          echo 'CLASSIFICATION K1_RTAC86U_51997_BUILD_LINEAGE_REPRODUCED' | tee -a "$OUT"
+          echo 'NEXT_GATE K2_REAL_KERNEL_MODULE_BUILD' | tee -a "$OUT"
+
+      - name: Publish K1 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build-anchor-51997
+          path: |
+            reports/kernel-build-anchor-51997.txt
+            reports/config_rt-ac86u.51997
+            reports/config_rt-ac86u.51997.sorted
+            reports/config_rt-ac86u.51997.sha256
+            reports/kernel-macros.sha256
+            reports/rtac86u-target-vars.txt
+            reports/toolchain-version.txt
+            reports/k1-smoke.o
+            reports/k1-smoke.sha256
+            reports/k1-smoke-elf.txt
+          if-no-files-found: warn
+          retention-days: 30
