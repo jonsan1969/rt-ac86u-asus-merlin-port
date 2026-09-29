@@ -73,6 +73,8 @@ Old failed K1 runs and their superseded troubleshooting are intentionally omitte
 ### Immediate continuation — K2
 Build **one coherent ipset module family** from the exact K1 lineage.
 
+Current Action: `36556488419` — **FAILURE** at kernel prepare. K1 config reproduction still passes. The previous `fltr` workspace-link blocker is resolved. Current sole blocker: kernel `oldconfig` reaches `Kconfig.bcm` but cannot open `../../bcmdrivers/Kconfig.autogen`. Next work is to reproduce the pinned HND Broadcom `bcmdrivers` autogen/config preparation required by the original build before `oldnoconfig`; do not revisit older K2 failures.
+
 K2 must:
 - prepare the real HND Linux 4.1 build tree/config using the same source/profile/toolchain;
 - build the ipset kernel module family as one coherent unit;
