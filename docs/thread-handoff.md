@@ -73,7 +73,7 @@ Old failed K1 runs and their superseded troubleshooting are intentionally omitte
 ### Immediate continuation — K2
 Build **one coherent ipset module family** from the exact K1 lineage.
 
-Current Action: `36556708965` — **FAILURE before job start (0 jobs)** after adding the `bcmdrivers` autogen step; this is a workflow syntax/parse blocker, not a kernel result. The underlying kernel blocker remains generation of `bcmdrivers/Kconfig.autogen` before `oldnoconfig`. Fix workflow syntax first, then rerun. The previous `fltr` workspace-link blocker is resolved; do not revisit older K2 failures.
+Current Action: `36556760837` — **FAILURE before job start (0 jobs)**. The attempted autogen insertion still does not parse as a runnable workflow, so no kernel result was produced. Underlying kernel blocker remains `bcmdrivers/Kconfig.autogen` generation before `oldnoconfig`; fix the workflow definition itself first. The previous `fltr` workspace-link blocker is resolved; do not revisit older K2 failures.
 
 K2 must:
 - prepare the real HND Linux 4.1 build tree/config using the same source/profile/toolchain;
