@@ -354,6 +354,14 @@ A successful 51997 build is evidence of reproducibility, not evidence of 52334 l
 
 ## Current classification
 
-**K1 READY: exact RT-AC86U 51997 source/config/toolchain lineage verified.**
+**K1 SUCCESS.** Run `36531249746` on `fc60abc315d0bf1e7b6f50beaad879533a67db7a` reproduced the pinned RT-AC86U 51997 source/config/toolchain lineage end-to-end.
 
-**K2-K4 still required before any kernel feature can become active.**
+Generated config SHA-256:
+
+`9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2`
+
+All expected NFS/CIFS/ipset/Cake/WireGuard config assertions passed. The final K1 source-materialization fix preserves the three `src-rt-5.02hnd` symlinks to `../src-rt`; flattening those Git symlink blobs had previously produced 18-byte pointer files instead of the referenced Makefiles.
+
+**K2 AUTHORIZED:** build one coherent ipset module family from this exact prepared lineage and publish metadata only. No activation or overlay.
+
+**K3-K4 still required before any kernel feature can become active.**
