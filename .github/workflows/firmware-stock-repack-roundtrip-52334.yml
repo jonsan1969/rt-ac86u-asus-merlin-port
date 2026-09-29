@@ -1,0 +1,363 @@
+name: Stock ASUS 52334 semantic repack round-trip
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - tools/fs_semantic_inventory.py
+      - .github/workflows/firmware-stock-repack-roundtrip-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install firmware tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mtd-utils unzip file xxd
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify ASUS 52334
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus reports
+          OUT=work/asus-52334.zip
+          SHA=e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61
+
+          urls=(
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U'
+          )
+
+          ok=0
+          for url in "${urls[@]}"; do
+            if curl -fL --retry 2 --connect-timeout 20 -o "$OUT" "$url"; then
+              echo "download_url=$url" > reports/download.txt
+              ok=1
+              break
+            fi
+          done
+
+          if (( ! ok )); then
+            API=work/asus-api.json
+            curl -fsSL --retry 3 --connect-timeout 30 \
+              -o "$API" \
+              'https://www.asus.com/support/api/product.asmx/GetPDBIOS?website=global&model=RT-AC86U&cpu='
+            url="$(python3 - "$API" <<'PY'
+          import json, sys
+          d=json.load(open(sys.argv[1], encoding='utf-8'))
+          def walk(x):
+              if isinstance(x,dict):
+                  if '52334' in str(x.get('Version','')):
+                      u=x.get('DownloadUrl')
+                      if isinstance(u,dict):
+                          for k in ('Global','global','Url','URL'):
+                              z=u.get(k)
+                              if isinstance(z,str) and z.startswith('http'):
+                                  print(z); raise SystemExit
+                      for k in ('DownloadUrl','DownloadURL','Url','URL'):
+                          z=x.get(k)
+                          if isinstance(z,str) and z.startswith('http'):
+                              print(z); raise SystemExit
+                  for z in x.values():
+                      walk(z)
+              elif isinstance(x,list):
+                  for z in x:
+                      walk(z)
+          walk(d)
+          raise SystemExit('ASUS support API did not expose 52334 download URL')
+          PY
+          )"
+            curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o "$OUT" "$url"
+            echo "download_url=$url" > reports/download.txt
+          fi
+
+          printf '%s  %s\n' "$SHA" "$OUT" | sha256sum -c -
+          unzip -q "$OUT" -d work/asus
+
+          FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          test "$(stat -c '%s' "$FW")" = 78250004
+          test "$(sha256sum "$FW" | awk '{print $1}')" = 1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f
+          echo "FW=$FW" >> "$GITHUB_ENV"
+          sha256sum "$FW" > reports/stock-firmware-sha256.txt
+
+      - name: Split and validate stock container
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX=3538944
+          UBI_SIZE=74711040
+          BODY_SIZE=78249984
+
+          dd if="$FW" of=work/stock-prefix.bin bs=1 count="$PREFIX" status=none
+          dd if="$FW" of=work/stock.ubi bs=1 skip="$PREFIX" count="$UBI_SIZE" status=none
+          head -c "$BODY_SIZE" "$FW" > work/stock-body.bin
+          tail -c 20 "$FW" > work/stock-vtoken.bin
+
+          test "$(stat -c '%s' work/stock-prefix.bin)" = "$PREFIX"
+          test "$(stat -c '%s' work/stock.ubi)" = "$UBI_SIZE"
+          test "$(stat -c '%s' work/stock-body.bin)" = "$BODY_SIZE"
+          test "$(stat -c '%s' work/stock-vtoken.bin)" = 20
+          test $((UBI_SIZE % 131072)) -eq 0
+          test $((UBI_SIZE / 131072)) -eq 570
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+
+          body=Path("work/stock-body.bin").read_bytes()
+          token=Path("work/stock-vtoken.bin").read_bytes()
+          crc,version,chip,flash_type,flags=struct.unpack("<IIIII",token)
+
+          calc=0xffffffff
+          for b in body:
+              calc ^= b
+              for _ in range(8):
+                  calc=(calc >> 1) ^ (0xEDB88320 if calc & 1 else 0)
+          calc &= 0xffffffff
+
+          if (crc,version,chip,flash_type,flags) != (calc,0x5732,0x4908,3,2):
+              raise SystemExit(
+                  f"stock WFI mismatch crc={crc:08x}/{calc:08x} "
+                  f"version={version:08x} chip={chip:08x} flash={flash_type} flags={flags}"
+              )
+          Path("reports/stock-wfi.txt").write_text(
+              f"crc=0x{crc:08x}\nversion=0x{version:08x}\nchip=0x{chip:08x}\n"
+              f"flash_type={flash_type}\nflags={flags}\n",
+              encoding="utf-8",
+          )
+          PY
+
+          sha256sum work/stock-prefix.bin work/stock.ubi work/stock-body.bin work/stock-vtoken.bin \
+            > reports/stock-parts-sha256.txt
+          xxd -g1 work/stock-vtoken.bin > reports/stock-vtoken.hex
+
+      - name: Extract stock UBI as root
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXTRACT="$(command -v ubireader_extract_files)"
+          DISPLAY="$(command -v ubireader_display_info)"
+          test -x "$EXTRACT"
+          test -x "$DISPLAY"
+
+          rm -rf work/original-extracted
+          mkdir -p work/original-extracted
+          sudo "$EXTRACT" -o work/original-extracted work/stock.ubi \
+            > reports/stock-ubireader-extract.txt 2>&1
+          "$DISPLAY" work/stock.ubi > reports/stock-ubi-info.txt 2>&1
+
+          ORIG_ROOT="$(find work/original-extracted -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ORIG_ROOT"
+          echo "ORIG_ROOT=$ORIG_ROOT" >> "$GITHUB_ENV"
+          echo "$ORIG_ROOT" > reports/original-root-path.txt
+
+          sudo python3 tools/fs_semantic_inventory.py "$ORIG_ROOT" \
+            -o reports/original-semantic.jsonl
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[json.loads(x) for x in Path("reports/original-semantic.jsonl").read_text().splitlines()]
+          nonroot=[r["path"] for r in rows if r["uid"] != 0 or r["gid"] != 0]
+          Path("reports/original-semantic-summary.txt").write_text(
+              f"entries={len(rows)}\nnonroot_uid_gid={len(nonroot)}\n"
+              + ("\n".join(nonroot[:100]) + "\n" if nonroot else ""),
+              encoding="utf-8",
+          )
+          if nonroot:
+              raise SystemExit(f"stock rootfs has nonzero uid/gid entries; Broadcom --squash-uids would not be semantic-safe: {nonroot[:20]}")
+          PY
+
+      - name: Rebuild UBIFS using Broadcom HND contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo mkfs.ubifs \
+            --squash-uids \
+            -F -v \
+            -c 2048 \
+            -m 2048 \
+            -e 126976 \
+            -x zlib \
+            -r "$ORIG_ROOT" \
+            -o work/rebuilt.ubifs \
+            > reports/mkfs-ubifs.txt 2>&1
+
+          test -s work/rebuilt.ubifs
+          sha256sum work/rebuilt.ubifs > reports/rebuilt-ubifs-sha256.txt
+          stat -c 'rebuilt_ubifs_bytes=%s' work/rebuilt.ubifs > reports/rebuilt-ubifs-size.txt
+
+      - name: Rebuild and pad single-volume UBI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > work/ubi.ini <<EOF
+          [rootfs]
+          mode=ubi
+          image=$PWD/work/rebuilt.ubifs
+          vol_id=0
+          vol_type=dynamic
+          vol_name=rootfs_ubifs
+          vol_flags=autoresize
+          EOF
+
+          ubinize -v \
+            -o work/rebuilt-short.ubi \
+            -m 2048 \
+            -p 131072 \
+            -s 2048 \
+            -O 2048 \
+            -Q 0 \
+            work/ubi.ini \
+            > reports/ubinize.txt 2>&1
+
+          python3 - <<'PY'
+          from pathlib import Path
+          PEB=131072
+          TARGET=74711040
+          src=Path("work/rebuilt-short.ubi").read_bytes()
+          if not src or len(src) % PEB:
+              raise SystemExit(f"ubinize output is not PEB aligned: {len(src)}")
+          if len(src) > TARGET:
+              raise SystemExit(f"rebuilt UBI exceeds stock span: {len(src)} > {TARGET}")
+          pad=TARGET-len(src)
+          if pad % PEB:
+              raise SystemExit(f"padding is not whole PEBs: {pad}")
+          Path("work/rebuilt.ubi").write_bytes(src + b"\xff"*pad)
+          Path("reports/rebuilt-ubi-layout.txt").write_text(
+              f"short_bytes={len(src)}\nshort_pebs={len(src)//PEB}\n"
+              f"padding_bytes={pad}\npadding_pebs={pad//PEB}\n"
+              f"final_bytes={TARGET}\nfinal_pebs={TARGET//PEB}\n",
+              encoding="utf-8",
+          )
+          PY
+
+          test "$(stat -c '%s' work/rebuilt.ubi)" = 74711040
+          sha256sum work/rebuilt-short.ubi work/rebuilt.ubi > reports/rebuilt-ubi-sha256.txt
+
+      - name: Build final WFI container in-memory contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat work/stock-prefix.bin work/rebuilt.ubi > work/rebuilt-body.bin
+          test "$(stat -c '%s' work/rebuilt-body.bin)" = 78249984
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, struct
+
+          body=Path("work/rebuilt-body.bin").read_bytes()
+          calc=0xffffffff
+          for b in body:
+              calc ^= b
+              for _ in range(8):
+                  calc=(calc >> 1) ^ (0xEDB88320 if calc & 1 else 0)
+          calc &= 0xffffffff
+
+          token=struct.pack("<IIIII", calc, 0x5732, 0x4908, 3, 2)
+          image=body+token
+          Path("work/rebuilt-final.w").write_bytes(image)
+          Path("reports/rebuilt-wfi.txt").write_text(
+              f"crc=0x{calc:08x}\nversion=0x00005732\nchip=0x00004908\n"
+              f"flash_type=3\nflags=2\n"
+              f"body_sha256={hashlib.sha256(body).hexdigest()}\n"
+              f"image_sha256={hashlib.sha256(image).hexdigest()}\n"
+              f"image_bytes={len(image)}\n",
+              encoding="utf-8",
+          )
+          PY
+
+          test "$(stat -c '%s' work/rebuilt-final.w)" = 78250004
+          cmp -n 3538944 "$FW" work/rebuilt-final.w
+
+      - name: Re-extract rebuilt UBI and compare semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXTRACT="$(command -v ubireader_extract_files)"
+          DISPLAY="$(command -v ubireader_display_info)"
+
+          rm -rf work/rebuilt-extracted
+          mkdir -p work/rebuilt-extracted
+          sudo "$EXTRACT" -o work/rebuilt-extracted work/rebuilt.ubi \
+            > reports/rebuilt-ubireader-extract.txt 2>&1
+          "$DISPLAY" work/rebuilt.ubi > reports/rebuilt-ubi-info.txt 2>&1
+
+          REBUILT_ROOT="$(find work/rebuilt-extracted -type d -name rootfs_ubifs -print -quit)"
+          test -n "$REBUILT_ROOT"
+          echo "$REBUILT_ROOT" > reports/rebuilt-root-path.txt
+
+          sudo python3 tools/fs_semantic_inventory.py "$REBUILT_ROOT" \
+            -o reports/rebuilt-semantic.jsonl
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def load(path):
+              return {
+                  row["path"]: row
+                  for row in (
+                      json.loads(line)
+                      for line in Path(path).read_text(encoding="utf-8").splitlines()
+                      if line
+                  )
+              }
+
+          a=load("reports/original-semantic.jsonl")
+          b=load("reports/rebuilt-semantic.jsonl")
+          paths=sorted(set(a)|set(b))
+          mismatches=[]
+          for p in paths:
+              if a.get(p) != b.get(p):
+                  mismatches.append({
+                      "path":p,
+                      "original":a.get(p),
+                      "rebuilt":b.get(p),
+                  })
+
+          Path("reports/semantic-roundtrip-summary.txt").write_text(
+              f"original_entries={len(a)}\nrebuilt_entries={len(b)}\n"
+              f"mismatches={len(mismatches)}\n"
+              f"classification={'PASS' if not mismatches else 'FAIL'}\n",
+              encoding="utf-8",
+          )
+          Path("reports/semantic-mismatches.json").write_text(
+              json.dumps(mismatches[:250], indent=2, sort_keys=True)+"\n",
+              encoding="utf-8",
+          )
+
+          if mismatches:
+              raise SystemExit(f"semantic rootfs mismatch count={len(mismatches)}; first={mismatches[:3]}")
+          PY
+
+          grep -q 'rootfs_ubifs' reports/rebuilt-ubi-info.txt
+          grep -qi 'autoresize' reports/rebuilt-ubi-info.txt || true
+          echo 'CLASSIFICATION=ASUS_52334_STOCK_SEMANTIC_REPACK_ROUNDTRIP_PASS' \
+            >> reports/semantic-roundtrip-summary.txt
+          cat reports/semantic-roundtrip-summary.txt
+
+      - name: Publish reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-stock-repack-roundtrip-52334
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30
