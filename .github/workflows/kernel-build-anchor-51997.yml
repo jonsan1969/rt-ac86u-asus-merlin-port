@@ -49,6 +49,11 @@ jobs:
           materialize release/src-rt-5.02hnd/kernel/linux-4.1/fs/cifs/cifsfs.c
           materialize release/src/router/sch_cake/sch_cake.c
 
+          MAKEFILE=work/source/release/src-rt-5.02hnd/Makefile
+          echo "K1 Makefile blob $(git hash-object "$MAKEFILE") bytes $(wc -c < "$MAKEFILE")"
+          grep -n -m1 -F 'define extraKernelConfig' "$MAKEFILE"
+          grep -n -m1 -F 'define KernelConfig' "$MAKEFILE"
+
           test -f work/source/release/src-rt-5.02hnd/Makefile
           test -f work/source/release/src-rt-5.02hnd/platform.mak
           test -f work/source/release/src-rt-5.02hnd/target.mak
