@@ -38,9 +38,9 @@ Branch: `asus-52334-merlin-port`
 
 Snapshot base HEAD immediately before this handoff update:
 
-`2fbd983a7a71c88faa6414b5df968beba4e1e079`
+`c0baa420596bcd0addf9b7b85a8be944e45f5f79`
 
-That commit fixes the K1 toolchain host-library path.
+That commit fixes the second K1 blocker by replacing fragile no-cone sparse checkout with deterministic pinned `git show <sha>:<path>` materialization of the exact source files K1 uses. The earlier host-library fix from `2fbd983a...` remains in place.
 
 Read these first in the next thread:
 
@@ -337,95 +337,60 @@ Do not start K2 until K1 is green.
 
 ## Immediate continuation
 
-### 1. Fix K1 source materialization, then rerun
+### 1. Inspect the K1 run triggered by `c0baa420596bcd0addf9b7b85a8be944e45f5f79`
 
-Run `36522285065` is already diagnosed.
+Do **not** restart feature inventory work.
 
-What is proven:
+Do **not** restart M48/cstats. M48 is already **NO PORT** for pinned 386.14_2 on RT-AC86U/HND.
 
-- pinned toolchain download is correct;
-- GCC 5.3 starts;
-- pinned `usr/lib` host libraries fix `cc1`;
-- compiler smoke now passes;
-- failure is only that the sparse checkout did not materialize `release/src-rt-5.02hnd/Makefile`.
+K1 history:
 
-Next concrete change:
+- run `36516591962` — failed because GCC `cc1` could not load `libmpc.so.3`;
+- commit `2fbd983a7a71c88faa6414b5df968beba4e1e079` fixed the pinned toolchain host-library path;
+- run `36522285065` — compiler smoke passed, then failed because sparse checkout did not materialize `release/src-rt-5.02hnd/Makefile`;
+- commit `c0baa420596bcd0addf9b7b85a8be944e45f5f79` removed the fragile source sparse checkout and now:
+  - fetches exact source pin `c553d8e4b0bf3289683368b0d57172649b030039`;
+  - materializes only the exact K1 files via `git show`;
+  - asserts every required file exists before macro extraction.
 
-1. keep the exact source pin `c553d8e4...`;
-2. replace K1's fragile source sparse-checkout step with deterministic exact-path materialization, preferably `git show <sha>:<path> > work/source/<path>` for the small K1 file set;
-3. add explicit `test -f` checks for:
-   - `release/src-rt-5.02hnd/Makefile`;
-   - `platform.mak`;
-   - `target.mak`;
-   - RT-AC86U profile;
-   - `config_base.6a`;
-   - the individual NFS/CIFS/ipset/WireGuard/Cake source files used by assertions;
-4. push the minimal workflow fix;
-5. inspect the new Action automatically.
+Required next behavior:
 
-When K1 becomes green:
+- green K1 → inspect artifact `kernel-build-anchor-51997`, record generated config SHA-256 and feature assertions, update STATUS/kernel lineage, then proceed directly to K2;
+- red K1 → read the failed job log, fix only the real next blocker, push minimal patch and continue automatically.
 
-- inspect artifact `kernel-build-anchor-51997`;
-- verify compiler smoke object is AArch64;
-- verify generated RT-AC86U config;
-- record config SHA-256 and feature settings;
-- update `STATUS.md` / `docs/kernel-build-lineage-51997.md` to K1 verified;
-- continue immediately to K2.
+### 2. K2 after K1 is green
 
-### 2. K2 — real one-module build smoke
+Build one coherent **ipset** module family using:
 
-Preferred initial family: **ipset**, because it has a clear 51997 kernel lineage and can exercise real module build machinery without touching the running firmware.
+- source/SDK pin `c553d8e4b0bf3289683368b0d57172649b030039`;
+- RT-AC86U profile `94908HND.RT-AC86U`;
+- pinned toolchain `SWRT-dev/bcmhnd-toolchains@7710a1e09d994598ac6c2db8ab16dc54ca5aed3d`;
+- GCC 5.3 / AArch64 / glibc 2.22 / binutils 2.25.
 
-K2 should:
-
-1. fetch the exact `c553d8e4...` HND source/build tree;
-2. use the exact pinned GCC 5.3 toolchain and host-library path;
-3. execute the real RT-AC86U config preparation/oldnoconfig/required Broadcom build preparation;
-4. build one coherent ipset module family, not an arbitrary donor `.ko`;
-5. publish:
-   - SHA-256;
-   - ELF architecture;
-   - vermagic;
-   - module dependencies;
-   - undefined/imported symbols;
-   - section metadata;
-6. do **not** add it to `ports/active.json`;
-7. compare the built module's expectations with official ASUS 52334 runtime/kernel evidence;
-8. keep activation deferred until K4 real-router validation.
+Publish module metadata, but do not activate anything and do not add it to `ports/active.json`.
 
 ### 3. Then K3/K4
 
-K3: build the remaining required optional module families from the same config/toolchain.
+K3: build the remaining optional families needed by M22/M23/M27/M32/M33 from the exact same prepared tree/config/toolchain.
 
-K4: controlled real-router load/function tests against ASUS 52334. A successful 51997 build is not proof of 52334 runtime compatibility.
+K4: controlled real-router load/function validation against ASUS 52334. Compilation against 51997 lineage is not sufficient proof of 52334 runtime compatibility.
 
-### 4. Parallel source/runtime risk work
+### 4. Parallel runtime risk gate
 
-After K1/K2 is moving cleanly, continue the official ASUS runtime-lineage comparison `51967 -> 52294 -> 52334` and use that evidence to decide whether any protected core rebuild from 51997 is acceptable.
+Continue official ASUS runtime-lineage comparison `51967 -> 52294 -> 52334` only after K1/K2 is moving cleanly.
 
-## Important anti-loop reminders
+## Anti-loop rule for the next thread
 
-Do not restart these investigations:
+The previous conversation repeatedly timed out and resumed from stale conversational context.
 
-- M12 cru — settled NO PORT.
-- M20 WINS — already SUCCESS.
-- M21 wsdd2 binary compatibility — already proven/staged; waits on generic JFFS lifecycle.
-- M48 cstats — settled NO PORT for HND donor.
-- generic Merlin BusyBox command transplant — forbidden and already classified.
-- stock Dropbear SCP applet — absent; M16 standalone SCP is already SUCCESS.
-- WiFi Insight — cancelled.
-- speedtest VPN selector — outside donor baseline.
+**Repository handoff/status wins over conversational recollection.**
 
-## Flashable firmware
+Before doing work:
 
-Still **IN PROGRESS**.
+1. read this file;
+2. read `STATUS.md`;
+3. read `docs/kernel-build-lineage-51997.md`;
+4. inspect branch HEAD;
+5. continue from K1/K2 only.
 
-The project has not yet crossed:
-
-- protected-core source rebuild gates;
-- optional-module real-router ABI/load gates;
-- final firmware repack;
-- boot/runtime validation;
-- rollback/recovery validation.
-
-Do not describe the current branch as flash-ready.
+Do not re-open settled investigations merely because an older chat message mentioned them.
