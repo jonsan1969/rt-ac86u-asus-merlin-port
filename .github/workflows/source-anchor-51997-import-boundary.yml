@@ -1,0 +1,128 @@
+name: Verify exact 386.51997 RT-AC86U import boundary
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/source-anchor-51997-import-boundary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact Merlin history points
+        run: |
+          set -euo pipefail
+          mkdir -p work reports
+          git init work/merlin
+          git -C work/merlin remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          for sha in             bf59d7ec4339d3c1eb71fe03209243947084e754             28daa82377c5a9a68bf2c79aea429323a891ac08             2b13c8cc8cf821fa774371c18e3a68a8b6965ad8             c553d8e4b0bf3289683368b0d57172649b030039; do
+            git -C work/merlin fetch --filter=blob:none --no-tags origin "$sha"
+          done
+
+      - name: Verify commit provenance and source-shape invariants
+        run: |
+          set -euo pipefail
+          G=work/merlin
+          OUT=reports/source-anchor-51997-import-boundary.txt
+          : > "$OUT"
+
+          PRE=bf59d7ec4339d3c1eb71fe03209243947084e754
+          GPL=28daa82377c5a9a68bf2c79aea429323a891ac08
+          AC_PRE=2b13c8cc8cf821fa774371c18e3a68a8b6965ad8
+          AC=c553d8e4b0bf3289683368b0d57172649b030039
+
+          pass() { echo "PASS $*" | tee -a "$OUT"; }
+          fail() { echo "FAIL $*" | tee -a "$OUT"; return 1; }
+          assert_eq() {
+            local got="$1" want="$2" label="$3"
+            [ "$got" = "$want" ] && pass "$label" || fail "$label: got=$got want=$want"
+          }
+          blob() { git -C "$G" rev-parse "$1:$2"; }
+
+          echo '===== COMMIT IDENTITY =====' | tee -a "$OUT"
+          assert_eq "$(git -C "$G" show -s --format=%P "$GPL")" "$PRE"             "General 51997 import has exact single parent"
+          assert_eq "$(git -C "$G" show -s --format=%s "$GPL")"             "Merged with GPL 386_51997 + RT-AC88U SDK and binary blobs"             "General 51997 import message pinned"
+          assert_eq "$(git -C "$G" show -s --format=%P "$AC")" "$AC_PRE"             "RT-AC86U 51997 SDK/blob import has exact single parent"
+          assert_eq "$(git -C "$G" show -s --format=%s "$AC")"             "Merge RT-AC86U binary blobs + SDK from 386_51997"             "RT-AC86U 51997 import message pinned"
+
+          echo '===== STABLE HELPER / STORAGE SOURCE =====' | tee -a "$OUT"
+          assert_eq "$(blob "$PRE" release/src/router/shared/scripts.c)"             "be75c75b9a0b26f479bd1927f82dd32496bcc73a"             "pre-51997 scripts.c blob pinned"
+          assert_eq "$(blob "$GPL" release/src/router/shared/scripts.c)"             "be75c75b9a0b26f479bd1927f82dd32496bcc73a"             "general-51997 scripts.c unchanged"
+          assert_eq "$(blob "$AC" release/src/router/shared/scripts.c)"             "be75c75b9a0b26f479bd1927f82dd32496bcc73a"             "RT-AC86U import leaves scripts.c unchanged"
+          assert_eq "$(blob "$PRE" release/src/router/rc/ubifs.c)"             "$(blob "$GPL" release/src/router/rc/ubifs.c)"             "ubifs.c unchanged by general 51997 import"
+          assert_eq "$(blob "$GPL" release/src/router/rc/ubifs.c)"             "$(blob "$AC" release/src/router/rc/ubifs.c)"             "ubifs.c unchanged by RT-AC86U import"
+
+          echo '===== GENERAL GPL SOURCE-SHAPE TRANSITION =====' | tee -a "$OUT"
+          cat > reports/source-shape-51997.tsv <<'EOF'
+          path	pre51997	general51997	rtac86u51997
+          EOF
+
+          changed_general=0
+          while IFS='|' read -r path pre_sha gpl_sha; do
+            got_pre="$(blob "$PRE" "$path")"
+            got_gpl="$(blob "$GPL" "$path")"
+            assert_eq "$got_pre" "$pre_sha" "$path pre-51997 blob"
+            assert_eq "$got_gpl" "$gpl_sha" "$path general-51997 blob"
+            [ "$got_pre" != "$got_gpl" ] || fail "$path expected to change in general GPL import"
+            got_ac="$(blob "$AC" "$path")"
+            assert_eq "$got_ac" "$got_gpl" "$path unchanged by RT-AC86U SDK/blob import"
+            printf '%s	%s	%s	%s
+' "$path" "$got_pre" "$got_gpl" "$got_ac" >> reports/source-shape-51997.tsv
+            changed_general=$((changed_general + 1))
+          done <<'EOF'
+          release/src/router/shared/shared.h|e118cf717c52a374b3704c37a9a54ef8cc75b5f4|4502576edeedf8a7a72f10c6ed2fe5bc6090f52c
+          release/src/router/shared/defaults.c|4395df600f4d6f9ae431d6c25b492a25b9214e73|5499734a55cecdb0500b412f0a2a7ad0a21dbe2a
+          release/src/router/rc/services.c|aabaa70cc7e1d94b9d1f616afe2bae244feb5ccf|08e2dcdd9c3c18bb2adae1a773b00c1ee54fff03
+          release/src/router/rc/firewall.c|0d9855a4975f62346a5bfd4f42a97ec92b669436|c11eab8f857495cc132bbbe97c23d8c9e6e611a6
+          release/src/router/rc/udhcpc.c|1b70b9586efdf8129cb1e24472834571dff1a8ac|a424e353e738481f8f1213ff2efda8db4d1cad65
+          release/src/router/rc/qos.c|293861ecfe5a36321d50082e3edaf85c0644a9a2|2fb7e64cc23890f9dbf6f46e5318635c2a420c2f
+          release/src/router/rc/usb.c|41614c4021172445f482651760fad075fce35c48|d8018a7753cd870df6ef673470ff7a88be6e68f3
+          release/src/router/rc/wan.c|78b6629bb07c50228d5d6f4ca9009ac61201fb1a|b6c9551869365d8088b35cca267918dc923ba8a2
+          release/src/router/rc/init.c|4313eb7e6355719327640d2ac8fa62e9804e7914|e38c7fa5ba7f7b35d0c5b216c14163b410ff40dd
+          release/src/router/rc/watchdog.c|4baf7ac4928d84f105cdefc6a66e021360e00cf6|1ada970ac8b185aff0f906b767277330aba7634a
+          release/src/router/httpd/web.c|99187a2982268c234eaf29f6930d7955a5453a83|27377f8f3d917d8e5d2e3df9d76976eeab118418
+          release/src/router/httpd/httpd.c|9730cb5d69d5e058be93b97e875d1c5aafd0081e|dbbb9358cf46cf10dd28f7df47cf216007894b25
+          EOF
+          pass "$changed_general critical shared source files pinned across 51997 transition"
+
+          echo '===== UNCHANGED DOES NOT MEAN ASUS-OWNED =====' | tee -a "$OUT"
+          assert_eq "$(blob "$PRE" release/src/router/libdisk/write_smb_conf.c)"             "$(blob "$GPL" release/src/router/libdisk/write_smb_conf.c)"             "Samba generator unchanged by general GPL import"
+          assert_eq "$(blob "$PRE" release/src/router/libovpn/openvpn_control.c)"             "$(blob "$GPL" release/src/router/libovpn/openvpn_control.c)"             "Merlin libovpn control source unchanged by general GPL import"
+          pass "Authorship must be established independently of unchanged import status"
+
+          echo '===== COMPLETE DIFF INVENTORIES =====' | tee -a "$OUT"
+          git -C "$G" diff --name-status "$PRE" "$GPL" > reports/general-gpl-51997-files.tsv
+          git -C "$G" diff --name-status "$AC_PRE" "$AC" > reports/rtac86u-51997-sdk-blob-files.tsv
+
+          grep -Fq $'M	release/src-rt-5.02hnd/kernel/linux-4.1/net/ipv6/ip6_tunnel.c'             reports/rtac86u-51997-sdk-blob-files.tsv             && pass "RT-AC86U import contains HND IPv6 tunnel source update"             || fail "Expected RT-AC86U HND kernel source update missing"
+
+          for path in             release/src/router/httpd/prebuild/RT-AC86U/pwenc.o             release/src/router/httpd/prebuild/RT-AC86U/web_hook.o             release/src/router/hnd_extra/prebuilt/RT-AC86U/dhd.o             release/src/router/hnd_extra/prebuilt/RT-AC86U/wl.o             release/src/router/shared/prebuild/RT-AC86U/notify_rc.o; do
+            grep -Fq "$path" reports/rtac86u-51997-sdk-blob-files.tsv               && pass "RT-AC86U import refreshes $path"               || fail "Expected RT-AC86U prebuilt refresh missing: $path"
+          done
+
+          echo 'CLASSIFICATION EXACT_51997_IMPORT_BOUNDARY_VERIFIED' | tee -a "$OUT"
+          echo 'CLEAN_ASUS_SECOND_PARENT_NOT_PRESENT' | tee -a "$OUT"
+          echo "GENERAL_GPL_COMMIT=$GPL" | tee -a "$OUT"
+          echo "RTAC86U_SDK_BLOB_COMMIT=$AC" | tee -a "$OUT"
+
+      - name: Publish provenance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-anchor-51997-import-boundary
+          path: |
+            reports/source-anchor-51997-import-boundary.txt
+            reports/source-shape-51997.tsv
+            reports/general-gpl-51997-files.tsv
+            reports/rtac86u-51997-sdk-blob-files.tsv
+          if-no-files-found: warn
+          retention-days: 30
