@@ -124,12 +124,8 @@ jobs:
           token=Path("work/stock-vtoken.bin").read_bytes()
           crc,version,chip,flash_type,flags=struct.unpack("<IIIII",token)
 
-          calc=0xffffffff
-          for b in body:
-              calc ^= b
-              for _ in range(8):
-                  calc=(calc >> 1) ^ (0xEDB88320 if calc & 1 else 0)
-          calc &= 0xffffffff
+          import zlib
+          calc=(zlib.crc32(body) ^ 0xffffffff) & 0xffffffff
 
           if (crc,version,chip,flash_type,flags) != (calc,0x5732,0x4908,3,2):
               raise SystemExit(
@@ -263,12 +259,8 @@ jobs:
           import hashlib, struct
 
           body=Path("work/rebuilt-body.bin").read_bytes()
-          calc=0xffffffff
-          for b in body:
-              calc ^= b
-              for _ in range(8):
-                  calc=(calc >> 1) ^ (0xEDB88320 if calc & 1 else 0)
-          calc &= 0xffffffff
+          import zlib
+          calc=(zlib.crc32(body) ^ 0xffffffff) & 0xffffffff
 
           token=struct.pack("<IIIII", calc, 0x5732, 0x4908, 3, 2)
           image=body+token
