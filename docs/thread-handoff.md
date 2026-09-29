@@ -153,6 +153,8 @@ This proves the **stock repack baseline only**, not flashability.
 ### Immediate continuation — ACTIVE OVERLAY REPACK GATE
 Do **not** revisit the solved stock repack work.
 
+First implementation run `36607825944` failed before overlay application: an inline Python snapshot was invoked through `sudo`, which dropped `ORIG_ROOT` and raised `KeyError: ORIG_ROOT`. This is a workflow environment-propagation defect only; no firmware/repack contract failed. Correct by passing root variables explicitly through `sudo env`, then rerun this same gate. The log for `36607825944` has already been fetched once; **never fetch it again**.
+
 Next task is exactly:
 
 **Pass the current guarded active overlay through the proven 52334 extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.**
