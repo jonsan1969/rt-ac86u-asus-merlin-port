@@ -26,14 +26,16 @@ jobs:
 
           git -C work/source init
           git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
-          git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
+          git -C work/source fetch --depth=2 --filter=blob:none origin "$SRC_SHA"
           test "$(git -C work/source rev-parse FETCH_HEAD)" = "$SRC_SHA"
+          git -C work/source cat-file -e "$SRC_SHA^{tree}"
 
           materialize() {
             local path="$1"
             mkdir -p "work/source/$(dirname "$path")"
-            git -C work/source show "$SRC_SHA:$path" > "work/source/$path"
+            git -C work/source cat-file blob "$SRC_SHA:$path" > "work/source/$path"
             test -s "work/source/$path"
+            test "$(git -C work/source hash-object "work/source/$path")" = "$(git -C work/source rev-parse "$SRC_SHA:$path")"
           }
 
           materialize release/src-rt-5.02hnd/Makefile
