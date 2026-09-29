@@ -70,13 +70,15 @@ UBIFS parameters recovered by ubi-reader:
 - journal size: `8388608`;
 - orphan LEBs: `1`.
 
-Equivalent tool parameters:
+The pinned Broadcom HND build path uses:
 
-`mkfs.ubifs -m 2048 -e 126976 -c 2048 -x zlib -f 8 -k r5 -l 5 -j 8388608 -p 1`
+`mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x zlib`
+
+For the round-trip gate, modern `ubinize` is invoked explicitly with the stock-equivalent geometry:
 
 `ubinize -p 131072 -m 2048 -s 2048 -O 2048 -Q 0`
 
-The UBI config uses one dynamic volume, id 0, named `rootfs_ubifs`, `vol_size=72122368`, `vol_alignment=1`, `vol_flags=autoresize`.
+The UBI config uses one dynamic volume, id 0, named `rootfs_ubifs`, with `vol_flags=autoresize`. The rebuilt UBIFS is exactly `72122368` bytes = 568 LEBs, and ubinize produces exactly 570 PEBs (2 layout + 568 data) with no external padding required.
 
 ## Final Broadcom WFI tag
 
@@ -120,19 +122,51 @@ The pinned 51997 RT-AC86U HND build path uses Broadcom `bcmImageMaker`, `addvtok
 
 For project repacking, the final image contract is therefore validated directly at the WFI level; an already-final ASUS image is not expected to be idempotent through the earlier `addvtoken` intermediate step.
 
+## Stock semantic round-trip — SUCCESS
+
+Workflow run: `36593572826`  
+Commit: `4b6ce8f675d7cdfa54b7ba71257bc645369a1a63`  
+Artifact: `firmware-stock-repack-roundtrip-52334`  
+Artifact digest: `sha256:8fddaed20326f10435d383a59006d33075c90ee3938939e642d1e5638b6107fe`
+
+The gate performs the full stock-only path:
+
+1. preserves the first `0x360000` bytes byte-for-byte;
+2. extracts stock `rootfs_ubifs` as root;
+3. inventories file type, content/symlink/device payload, mode, UID/GID, xattrs and hardlink relationships;
+4. rebuilds UBIFS with the pinned Broadcom HND `--squash-uids -F -c 2048 -m 2048 -e 126976 -x zlib` contract;
+5. rebuilds the single autoresize `rootfs_ubifs` volume with image sequence 0;
+6. requires exactly 570 PEBs;
+7. joins the immutable stock prefix and rebuilt UBI;
+8. recalculates the final Broadcom WFI token;
+9. re-extracts the rebuilt UBI and compares semantic inventories.
+
+Observed result:
+
+- original semantic entries: `3992`;
+- rebuilt semantic entries: `3992`;
+- non-root UID/GID entries in stock: `0`;
+- semantic mismatches: `0`;
+- rebuilt UBIFS: `72122368` bytes / 568 LEBs;
+- rebuilt UBI: `74711040` bytes / 570 PEBs;
+- external UBI padding: `0`;
+- rebuilt WFI CRC: `0x10fff90e`;
+- rebuilt full-image SHA-256: `5926ceb58c039bf44a76657ba571b7dcc82d34206ff474ad076e8b3f0beb4cac`.
+
+The rebuilt image is not expected to be byte-identical to ASUS stock because UBIFS generation includes new filesystem metadata (for example a new UUID), but the extracted rootfs is semantically identical under the inventory contract and the final WFI container is structurally valid.
+
+This establishes the **stock repack baseline**, not flashability.
+
 ## Next gate
 
-Perform a stock semantic round-trip:
+Pass the current guarded active overlay through the same extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.
 
-1. retain the 0x360000-byte prefix unchanged;
-2. extract stock `rootfs_ubifs`;
-3. build UBIFS with the recovered geometry;
-4. ubinize the same single volume;
-5. require exactly 570 PEBs;
-6. join original prefix + rebuilt UBI;
-7. generate a valid final WFI tag using the verified algorithm;
-8. re-extract the rebuilt image;
-9. compare file content, type, symlink target, mode, UID/GID, device metadata and hardlink relationships;
-10. do not call the result flashable and do not activate optional K2/K3 modules.
+The overlay repack gate must prove:
 
-Only after stock semantic round-trip succeeds may the active guarded overlay be passed through the same repack pipeline.
+- the post-repack semantic change set is exactly the manifest-authorized targets plus required parent directories;
+- all protected ASUS core/runtime files remain byte-identical to stock;
+- all existing guarded feature contracts still pass after re-extraction;
+- final UBI remains exactly 570 PEBs and final WFI validation passes;
+- no K2/K3 optional modules are activated or added.
+
+Do not publish or call the resulting image flashable until the overlay-repack gate and later real-router/runtime gates pass.
