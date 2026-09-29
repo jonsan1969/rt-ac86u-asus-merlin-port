@@ -129,7 +129,7 @@ A kernel feature may move beyond SOURCE_BUILD_REQUIRED only when all are true:
 
 ## Current classification
 
-**ABI DIAGNOSTIC IMPROVED; ALL FIVE FEATURES REMAIN SOURCE-BUILD REQUIRED.**
+**ABI IMAGE DIAGNOSTIC EXHAUSTED; EXACT 51997 RT-AC86U BUILD LINEAGE NOW AVAILABLE. K1-K4 BUILD/LOAD GATES STILL APPLY.**
 
 
 ## Firmware-image CRC probe result
@@ -145,3 +145,55 @@ Observed result:
 Therefore the firmware images do not expose enough symbol-version metadata to upgrade binary compatibility confidence. This is a diagnostic limitation, not evidence of ABI equality.
 
 The source-build requirement and no-donor-`.ko` rule remain unchanged.
+
+
+## Exact 51997 RT-AC86U build lineage now available
+
+The source-build prerequisite has materially improved.
+
+Pinned RT-AC86U HND anchor:
+
+`RMerl/asuswrt-merlin.ng@c553d8e4b0bf3289683368b0d57172649b030039`
+
+Pinned toolchain:
+
+`SWRT-dev/bcmhnd-toolchains@7710a1e09d994598ac6c2db8ab16dc54ca5aed3d`
+
+Toolchain tree:
+
+`crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25`
+
+tree SHA:
+
+`4239c9b4e94a91ecfafa55005404a829025302d1`.
+
+The exact HND model config lineage already carries:
+
+- NFS/NFSD/lockd/sunrpc as modules;
+- CIFS as a module;
+- the full ipset/xt_set module family;
+- Cake as a module wired to `release/src/router/sch_cake`;
+- WireGuard source in the HND Linux 4.1 tree, enabled to module form by the RT-AC86U target's `WIREGUARD=y`.
+
+See `docs/kernel-build-lineage-51997.md`.
+
+This changes the diagnostic state from "target build provenance unresolved" to "K1 reproducible source/config/toolchain anchor available".
+
+It does **not** change the final activation rule: all optional modules still require 52334 runtime/load validation.
+
+### M32 correction
+
+The verified RT-AC86U 51997 anchor contains Cake but does not contain a matching `act_ctinfo` implementation.
+
+Therefore Cake can proceed through the K1/K2 build gates independently.
+
+If later QoS integration requires ctinfo, ctinfo must be treated as a separate source/backport project and may not be imported silently from a newer kernel tree.
+
+## Revised build gates
+
+- **K1** — reproduce target variables, original Asuswrt kernel-config macros and exact GCC 5.3 AArch64 toolchain.
+- **K2** — build one real optional module family with the exact HND build system and capture module metadata.
+- **K3** — build all required feature module families from one prepared tree/config.
+- **K4** — controlled real-router load/unload and functional validation against ASUS 52334.
+
+A K1/K2 success is a source reproducibility result, not permission to install modules in the active overlay.
