@@ -1,0 +1,233 @@
+name: Compare ASUS 51967 52294 52334 runtime lineage
+
+on:
+  push:
+    branches:
+      - asus-52334-merlin-port
+    paths:
+      - .github/workflows/asus-runtime-lineage-51967-52294-52334.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             binwalk mtd-utils squashfs-tools p7zip-full unzip file binutils
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify official ASUS images
+        run: |
+          set -euo pipefail
+          mkdir -p work/downloads reports
+
+          fetch_fw() {
+            local ver="$1" code="$2" sha="$3"
+            local out="work/downloads/${ver}.zip"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 30               -o "$out"               "https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_${code}.zip?model=RT-AC86U"
+            printf '%s  %s\n' "$sha" "$out" | sha256sum -c -
+          }
+
+          fetch_fw 51967 300438651967 297c02cce8bb227497cfaab46df3c34fefc241649e2cbcbf2509e1396cdb5bdb
+          fetch_fw 52294 300438652294 6107d58ad49c767b64a69b125e20349c21a28a4729e67422ef5ac179688d7c32
+          fetch_fw 52334 300438652334 e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61
+
+      - name: Extract root filesystems
+        run: |
+          set -euo pipefail
+          for ver in 51967 52294 52334; do
+            mkdir -p "work/fw/$ver"
+            unzip -q "work/downloads/$ver.zip" -d "work/fw/$ver"
+            (
+              cd "work/fw/$ver"
+              FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+              test -n "$FW"
+              echo "$ver firmware=$FW"
+              binwalk -Me "$FW" >/dev/null
+            )
+            ROOT="$(find "work/fw/$ver" -type d -name rootfs_ubifs -print -quit)"
+            test -n "$ROOT"
+            printf '%s\n' "$ROOT" > "work/fw/$ver/root.path"
+          done
+
+      - name: Build manifests
+        run: |
+          set -euo pipefail
+          for ver in 51967 52294 52334; do
+            ROOT="$(cat "work/fw/$ver/root.path")"
+            python3 - "$ROOT" "reports/manifest-$ver.tsv" "reports/symlinks-$ver.tsv" <<'PY'
+          import hashlib, os, stat, sys
+          root, manifest_out, symlink_out = sys.argv[1:]
+          files = []
+          links = []
+          for base, dirs, names in os.walk(root, followlinks=False):
+              dirs.sort()
+              names.sort()
+              for name in names:
+                  p = os.path.join(base, name)
+                  rel = "/" + os.path.relpath(p, root)
+                  try:
+                      st = os.lstat(p)
+                  except FileNotFoundError:
+                      continue
+                  if stat.S_ISLNK(st.st_mode):
+                      links.append((rel, os.readlink(p)))
+                  elif stat.S_ISREG(st.st_mode):
+                      h = hashlib.sha256()
+                      with open(p, "rb") as f:
+                          for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                              h.update(chunk)
+                      files.append((rel, str(st.st_size), f"{st.st_mode & 0o7777:04o}", h.hexdigest()))
+          with open(manifest_out, "w", encoding="utf-8") as f:
+              for row in sorted(files):
+                  f.write("\t".join(row) + "\n")
+          with open(symlink_out, "w", encoding="utf-8") as f:
+              for row in sorted(links):
+                  f.write("\t".join(row) + "\n")
+          PY
+          done
+
+      - name: Compare manifests and protected components
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          versions = ["51967", "52294", "52334"]
+
+          def load_manifest(v):
+              d = {}
+              for line in Path(f"reports/manifest-{v}.tsv").read_text().splitlines():
+                  path, size, mode, sha = line.split("\t")
+                  d[path] = (int(size), mode, sha)
+              return d
+
+          man = {v: load_manifest(v) for v in versions}
+
+          def rel_state(a, b, path):
+              av, bv = man[a].get(path), man[b].get(path)
+              if av is None and bv is None: return "absent"
+              if av is None: return "added"
+              if bv is None: return "removed"
+              return "same" if av[2] == bv[2] else "changed"
+
+          protected_exact = [
+              "/sbin/rc",
+              "/usr/sbin/httpd",
+              "/usr/sbin/dnsmasq",
+              "/bin/busybox",
+              "/usr/sbin/openvpn",
+              "/usr/sbin/dropbear",
+              "/usr/bin/dropbear",
+              "/usr/lib/libshared.so",
+              "/usr/lib/libnvram.so",
+              "/usr/lib/libovpn.so",
+          ]
+          protected_prefixes = (
+              "/usr/lib/libssl.so",
+              "/usr/lib/libcrypto.so",
+              "/lib/libssl.so",
+              "/lib/libcrypto.so",
+              "/lib/modules/",
+          )
+
+          all_paths = sorted(set().union(*(m.keys() for m in man.values())))
+          core_paths = sorted(set(
+              [p for p in protected_exact if any(p in man[v] for v in versions)] +
+              [p for p in all_paths if p.startswith(protected_prefixes)]
+          ))
+
+          out = []
+          out.append("ASUS RT-AC86U runtime lineage: 51967 -> 52294 -> 52334")
+          out.append("")
+          out.append("PINNED OFFICIAL ZIP SHA256")
+          out.append("51967 297c02cce8bb227497cfaab46df3c34fefc241649e2cbcbf2509e1396cdb5bdb")
+          out.append("52294 6107d58ad49c767b64a69b125e20349c21a28a4729e67422ef5ac179688d7c32")
+          out.append("52334 e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61")
+          out.append("")
+          out.append("PROTECTED / SECURITY-SENSITIVE COMPONENTS")
+          out.append("path\t51967_sha\t52294_sha\t52334_sha\t51967->52294\t52294->52334")
+          for p in core_paths:
+              def sh(v):
+                  x = man[v].get(p)
+                  return x[2] if x else "-"
+              out.append("\t".join([
+                  p, sh("51967"), sh("52294"), sh("52334"),
+                  rel_state("51967","52294",p),
+                  rel_state("52294","52334",p),
+              ]))
+
+          for a,b in [("51967","52294"),("52294","52334"),("51967","52334")]:
+              added=[]; removed=[]; changed=[]; same=0
+              for p in all_paths:
+                  st=rel_state(a,b,p)
+                  if st=="added": added.append(p)
+                  elif st=="removed": removed.append(p)
+                  elif st=="changed": changed.append(p)
+                  elif st=="same": same+=1
+              out += ["", f"SUMMARY {a}->{b}",
+                      f"same={same} changed={len(changed)} added={len(added)} removed={len(removed)}",
+                      "", f"CHANGED {a}->{b}"]
+              out += changed
+              out += ["", f"ADDED {a}->{b}"] + added
+              out += ["", f"REMOVED {a}->{b}"] + removed
+
+          Path("reports/asus-runtime-lineage.txt").write_text("\n".join(out) + "\n")
+
+          rows=["path\t51967\t52294\t52334\t51967_52294\t52294_52334"]
+          for p in core_paths:
+              rows.append("\t".join([
+                  p,
+                  man["51967"].get(p, ("","","-"))[2],
+                  man["52294"].get(p, ("","","-"))[2],
+                  man["52334"].get(p, ("","","-"))[2],
+                  rel_state("51967","52294",p),
+                  rel_state("52294","52334",p),
+              ]))
+          Path("reports/protected-core-lineage.tsv").write_text("\n".join(rows) + "\n")
+          PY
+
+          cat reports/protected-core-lineage.tsv
+          grep -E '^SUMMARY |^same=' reports/asus-runtime-lineage.txt || true
+
+      - name: Capture ELF metadata for key binaries
+        run: |
+          set -euo pipefail
+          OUT=reports/core-elf-metadata.txt
+          : > "$OUT"
+          for ver in 51967 52294 52334; do
+            ROOT="$(cat "work/fw/$ver/root.path")"
+            echo "===== $ver =====" >> "$OUT"
+            for rel in               sbin/rc usr/sbin/httpd usr/sbin/dnsmasq bin/busybox               usr/sbin/openvpn usr/sbin/dropbear usr/lib/libshared.so usr/lib/libovpn.so; do
+              p="$ROOT/$rel"
+              [ -e "$p" ] || continue
+              echo "--- /$rel" >> "$OUT"
+              file "$p" >> "$OUT" 2>&1 || true
+              readelf -n "$p" >> "$OUT" 2>&1 || true
+              readelf -d "$p" >> "$OUT" 2>&1 || true
+            done
+          done
+
+      - name: Publish lineage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asus-runtime-lineage-51967-52294-52334
+          path: |
+            reports/asus-runtime-lineage.txt
+            reports/protected-core-lineage.tsv
+            reports/core-elf-metadata.txt
+            reports/manifest-*.tsv
+            reports/symlinks-*.tsv
+          if-no-files-found: warn
+          retention-days: 30
