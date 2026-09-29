@@ -31,8 +31,7 @@ jobs:
             release/src-rt-5.02hnd/kernel/linux-4.1 \
             release/src-rt-5.02hnd/targets/94908HND \
             release/src/router/fltr \
-            release/src/router/sch_cake \
-            release/src/router/fltr
+            release/src/router/sch_cake
           git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
           git -C work/source checkout --detach FETCH_HEAD
           test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
@@ -127,7 +126,10 @@ jobs:
           # Keep kernel Kconfig and Broadcom router-build Make config separate.
           cp reports/config_rt-ac86u.51997 "$K/.config"
           test -f "$PWD/work/source/release/src/router/fltr/Kconfig"
-          ln -sfn ../../../../router/fltr "$K/net/netfilter/fltr"
+          # The kernel fltr link resolves through src-rt-5.02hnd/router; the
+          # top-level Asuswrt build normally provides this workspace link.
+          ln -sfn ../src/router "$PWD/work/source/release/src-rt-5.02hnd/router"
+          test -d "$PWD/work/source/release/src-rt-5.02hnd/router/fltr"
           test -f "$K/net/netfilter/fltr/Kconfig"
           cp work/k2/generated-vars.mk "$K/../../.config"
           grep -q '^override BUILD_NAME := RT-AC86U$' "$K/../../.config"
