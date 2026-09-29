@@ -85,13 +85,30 @@ Representative SHA-256:
 
 No activation or overlay change was made. All intermediate K2 troubleshooting is intentionally omitted now that K2 is solved.
 
-### Immediate continuation — K3
-Build the remaining optional module families for M22 NFS, M23 CIFS, M32 Cake and M33 WireGuard from the **same prepared source/config/toolchain lineage**. Preserve coherent dependency families and publish metadata only. Do not activate modules and do not change `ports/active.json`.
+### K3 — SUCCESS
+Run: `36561957525`  
+Commit: `fb0dc42e34a17ddbe50c43672d0e8bf59cdafdb2`  
+Artifact: `kernel-k3-optional-modules-51997`, archive digest `sha256:231f190223dc220008b6aab211cee9a017f9619e40327d3bd19d9ffa424021f3`.
 
-### After K2
-- K3: build remaining optional M22/M23/M32/M33 module families from the exact same prepared tree/config/toolchain; M27/ipset is complete at K2 build level.
-- K4: controlled real-router load/function validation against ASUS 52334.
-- Runtime lineage `51967 -> 52294 -> 52334` remains the parallel risk gate.
+K3 rebuilt the remaining optional families from the exact K1 lineage:
+- NFS: `sunrpc.ko`, `lockd.ko`, `nfs.ko`, `nfsv2.ko`, `nfsv3.ko`, `nfsd.ko`;
+- CIFS: `cifs.ko`;
+- Cake: `sch_cake.ko`;
+- WireGuard: `wireguard.ko`.
+
+All are ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`. No activation or overlay change was made.
+
+### Immediate continuation — K4
+Prepare a **non-persistent real-router validation bundle** for ASUS 52334. It must:
+- stage modules under `/tmp` only;
+- collect stock kernel release/module evidence before loading anything;
+- load coherent dependency families in controlled order;
+- capture `dmesg` and return codes;
+- unload where safe/supported;
+- make no boot, JFFS startup, NVRAM or firmware-image changes;
+- keep every feature disabled unless its K4 load/function test passes.
+
+M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family. Runtime lineage `51967 -> 52294 -> 52334` remains a parallel risk gate.
 
 ## Read only as needed
 Primary current state:
