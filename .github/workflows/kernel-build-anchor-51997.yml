@@ -104,7 +104,10 @@ jobs:
               lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
               start = None
               for i, line in enumerate(lines):
-                  if line.strip() == f"define {name}":
+                  if line.strip().startswith(f"define {name}"):
+                      tail = line.strip()[len(f"define {name}"):]
+                      if tail and not tail.isspace():
+                          continue
                       start = i
                       break
               if start is None:
