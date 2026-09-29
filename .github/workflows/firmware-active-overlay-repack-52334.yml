@@ -103,7 +103,7 @@ jobs:
           a=load("reports/stock-semantic.jsonl"); b=load("reports/applied-semantic.jsonl")
           changed=sorted(p for p in set(a)|set(b) if a.get(p)!=b.get(p))
           m=json.loads(Path("ports/active.json").read_text())
-          targets={e["target"].lstrip("/") for e in m["entries"]}
+          targets={"/"+e["target"].lstrip("/") for e in m["entries"]}
           parents=set()
           for t in targets:
               q=Path(t).parent
