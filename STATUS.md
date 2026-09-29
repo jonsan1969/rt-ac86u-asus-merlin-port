@@ -101,7 +101,7 @@ Only these project states are used:
 
 | ASUS 52334 stock event surfaces | **VERIFIED / LIMITED** | run `36415137373`: stock PPP scripts execute `/etc/ppp/ip-up.local` and `ip-down.local`, but no generic user lifecycle equivalent to M03 is proven; these are PPP-only supplemental callbacks. See `docs/asus-stock-event-surfaces-52334.md` |
 
-| ASUS late-runtime lineage 51967→52294→52334 | **IN PROGRESS** | workflow `asus-runtime-lineage-51967-52294-52334.yml` pins all three official firmware SHA-256 values and compares whole-rootfs manifests plus protected `rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear/OpenSSL/libshared/libovpn/kernel-module` fingerprints; this is now the source-rebuild risk gate after final GPL 386_51997 |
+| ASUS late-runtime lineage 51967→52294→52334 | **SUCCESS** | run `36570687943`, artifact digest `6cd8d988...`: 51967→52294 = 476 changed/2650 same/1 removed; 52294→52334 = 61 changed/3065 same/2 added. Of 142 protected paths, 137 changed in 51967→52294; only 9 changed in 52294→52334, including BusyBox, `rc`, `httpd`, `dnsmasq`, OpenVPN, `libshared`, `libcrypto` and `dhd.ko`. Confirms 52334 core/runtime authority and keeps K4 mandatory. See `docs/asus-runtime-lineage-51967-52294-52334.md` |
 
 | Exact RT-AC86U GPL 386_51997 import boundary | **SUCCESS** | Git provenance pinned: general GPL import `28daa823...` (parent `bf59d7ec...`) and RT-AC86U SDK/blob import `c553d8e4...` (parent `2b13c8cc...`); critical source blob matrix and complete import diffs are CI-locked by `source-anchor-51997-import-boundary.yml`. See `docs/source-anchor-51997-import-boundary.md` |
 
