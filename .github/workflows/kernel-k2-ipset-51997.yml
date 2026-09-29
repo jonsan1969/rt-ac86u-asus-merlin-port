@@ -30,11 +30,15 @@ jobs:
             release/src-rt \
             release/src-rt-5.02hnd/kernel/linux-4.1 \
             release/src-rt-5.02hnd/targets/94908HND \
+            release/src/router/fltr \
             release/src/router/sch_cake
           git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
           git -C work/source checkout --detach FETCH_HEAD
           test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
           test -f work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/ipset/ip_set_core.c
+          test -L work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr
+          test "$(readlink work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr)" = '../../../../router/fltr'
+          test -f work/source/release/src-rt-5.02hnd/kernel/linux-4.1/net/netfilter/fltr/Kconfig
           test -f work/source/release/src-rt-5.02hnd/targets/94908HND/94908HND.RT-AC86U
 
       - name: Fetch pinned AArch64 GCC 5.3 HND toolchain
