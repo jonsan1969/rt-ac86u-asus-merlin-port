@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo python3 - <<'PY'
+          sudo env ORIG_ROOT="$ORIG_ROOT" python3 - <<'PY'
           import hashlib, os
           from pathlib import Path
           root=Path(os.environ["ORIG_ROOT"])
@@ -172,7 +172,7 @@ jobs:
           test -n "$FINAL_ROOT"
           echo "FINAL_ROOT=$FINAL_ROOT" >> "$GITHUB_ENV"
           sudo python3 tools/fs_semantic_inventory.py "$FINAL_ROOT" -o reports/final-semantic.jsonl
-          sudo python3 - <<'PY'
+          sudo env FINAL_ROOT="$FINAL_ROOT" python3 - <<'PY'
           import hashlib,json,os
           from pathlib import Path
           def load(p):
