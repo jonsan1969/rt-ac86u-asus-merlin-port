@@ -38,9 +38,14 @@ jobs:
             test "$(git hash-object "work/source/$path")" = "$(git -C work/source rev-parse "$SRC_SHA:$path")"
           }
 
-          materialize release/src-rt-5.02hnd/Makefile
-          materialize release/src-rt-5.02hnd/platform.mak
-          materialize release/src-rt-5.02hnd/target.mak
+          # These three 5.02hnd entries are symlinks to ../src-rt/* in the pinned tree.
+          materialize release/src-rt/Makefile
+          materialize release/src-rt/platform.mak
+          materialize release/src-rt/target.mak
+          mkdir -p work/source/release/src-rt-5.02hnd
+          ln -s ../src-rt/Makefile work/source/release/src-rt-5.02hnd/Makefile
+          ln -s ../src-rt/platform.mak work/source/release/src-rt-5.02hnd/platform.mak
+          ln -s ../src-rt/target.mak work/source/release/src-rt-5.02hnd/target.mak
           materialize release/src-rt-5.02hnd/targets/94908HND/94908HND.RT-AC86U
           materialize release/src-rt-5.02hnd/kernel/linux-4.1/config_base.6a
           materialize release/src-rt-5.02hnd/kernel/linux-4.1/net/wireguard/main.c
@@ -50,7 +55,7 @@ jobs:
           materialize release/src/router/sch_cake/sch_cake.c
 
           MAKEFILE=work/source/release/src-rt-5.02hnd/Makefile
-          echo "K1 Makefile blob $(git hash-object "$MAKEFILE") bytes $(wc -c < "$MAKEFILE")"
+          echo "K1 Makefile resolved bytes $(wc -c < "$MAKEFILE")"
           grep -n -m1 -F 'define extraKernelConfig' "$MAKEFILE"
           grep -n -m1 -F 'define KernelConfig' "$MAKEFILE"
 
