@@ -107,7 +107,7 @@ jobs:
               lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
               start = None
               for i, line in enumerate(lines):
-                  if re.fullmatch(r"define\\s+" + re.escape(name) + r"\\s*", line.strip()):
+                  if re.fullmatch(r"define\s+" + re.escape(name) + r"\s*", line.strip()):
                       start = i
                       break
               if start is None:
