@@ -136,6 +136,51 @@ jobs:
           print(Path("reports/add-only-size-profile.tsv").read_text())
           PY
 
+      - name: Measure zlib capacity variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/capacity reports
+          cp -a "$ORIG_ROOT" work/capacity/base
+          python3 - <<'PY'
+          from pathlib import Path
+          groups={
+            "no_oui":["www/ajax/ouiDB.json"],
+            "no_ntpd":["usr/libexec/rtac86u-ntpd"],
+            "no_scp":["usr/bin/scp"],
+            "no_nano":["usr/bin/nano","usr/bin/rnano","usr/lib/libncurses.so.6","usr/lib/libncurses.so.6.0"],
+            "no_oui_ntpd":["www/ajax/ouiDB.json","usr/libexec/rtac86u-ntpd"],
+            "no_oui_scp":["www/ajax/ouiDB.json","usr/bin/scp"],
+            "no_ntpd_scp":["usr/libexec/rtac86u-ntpd","usr/bin/scp"],
+          }
+          out=Path("work/capacity")
+          base=out/"base"
+          for name,rels in groups.items():
+              import shutil
+              dst=out/name
+              shutil.copytree(base,dst,symlinks=True)
+              for rel in rels:
+                  p=dst/rel
+                  if p.is_symlink() or p.is_file(): p.unlink()
+          PY
+          printf 'variant\tubifs_bytes\tubi_bytes\tpebs\n' > reports/capacity-matrix.tsv
+          for v in no_oui no_ntpd no_scp no_nano no_oui_ntpd no_oui_scp no_ntpd_scp; do
+            sudo mkfs.ubifs --squash-uids -F -c 2048 -m 2048 -e 126976 -x zlib -r "work/capacity/$v" -o "work/capacity/$v.ubifs" >/dev/null 2>&1
+            cat > "work/capacity/$v.ini" <<EOF
+          [rootfs]
+          mode=ubi
+          image=$PWD/work/capacity/$v.ubifs
+          vol_id=0
+          vol_type=dynamic
+          vol_name=rootfs_ubifs
+          vol_flags=autoresize
+          EOF
+            ubinize -o "work/capacity/$v.ubi" -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 "work/capacity/$v.ini" >/dev/null 2>&1
+            ubifs=$(stat -c '%s' "work/capacity/$v.ubifs")
+            ubi=$(stat -c '%s' "work/capacity/$v.ubi")
+            printf '%s\t%s\t%s\t%s\n' "$v" "$ubifs" "$ubi" "$((ubi/131072))" | tee -a reports/capacity-matrix.tsv
+          done
+
       - name: Rebuild UBIFS and exact-size UBI
         shell: bash
         run: |
@@ -172,7 +217,7 @@ jobs:
               raise SystemExit(f"padding is not whole PEBs: {pad}")
           Path("work/overlay.ubi").write_bytes(src+b"\xff"*pad)
           Path("reports/overlay-ubi-layout.txt").write_text(
-              f"compression=lzo\nshort_bytes={len(src)}\nshort_pebs={len(src)//PEB}\n"
+              f"compression=zlib\nshort_bytes={len(src)}\nshort_pebs={len(src)//PEB}\n"
               f"padding_bytes={pad}\npadding_pebs={pad//PEB}\nfinal_bytes={TARGET}\nfinal_pebs={TARGET//PEB}\n")
           print(f"overlay_short_ubi_bytes={len(src)}")
           print(f"overlay_short_ubi_pebs={len(src)//PEB}")
