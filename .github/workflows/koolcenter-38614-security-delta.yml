@@ -95,6 +95,29 @@ jobs:
               strings -a "$KC$p" | grep -Ei 'kool|softcenter|https?://|version|openssl|ssl|curl|wget|upgrade|upload|jffs|asus' | head -n 500 >> reports/kc-binary-strings.txt || true
             fi
           done
+      - name: Component lineage probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          : > reports/component-lineage.txt
+          for p in /lib/libcrypto.so.1.1 /lib/libssl.so.1.1 /usr/lib/libcurl.so.4 /usr/sbin/httpd /usr/sbin/lighttpd /usr/sbin/miniupnpd /usr/bin/wget /bin/busybox /sbin/rc; do
+            echo "===== $p =====" >> reports/component-lineage.txt
+            for pair in "KC:$KC" "MERLIN:$ME" "ASUS52334:$AS"; do
+              n="${pair%%:*}"; r="${pair#*:}"; q="$r$p"
+              echo "--- $n ---" >> reports/component-lineage.txt
+              if [ -e "$q" ]; then
+                readlink "$q" >> reports/component-lineage.txt 2>/dev/null || true
+                file "$q" >> reports/component-lineage.txt || true
+                sha256sum "$q" >> reports/component-lineage.txt || true
+                strings -a "$q" 2>/dev/null | grep -Ei 'OpenSSL [0-9]|libcurl|curl [0-9]|lighttpd|miniupnp|BusyBox v|wget [0-9]|version|ASUSWRT|Merlin|kool' | head -n 80 >> reports/component-lineage.txt || true
+              else
+                echo MISSING >> reports/component-lineage.txt
+              fi
+            done
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
