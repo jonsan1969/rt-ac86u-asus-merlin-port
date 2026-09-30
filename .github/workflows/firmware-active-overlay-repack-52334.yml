@@ -136,7 +136,7 @@ jobs:
           print(Path("reports/add-only-size-profile.tsv").read_text())
           PY
 
-      - name: Measure minimal fourth-group zlib capacity
+      - name: Measure final one-PEB margin candidates
         shell: bash
         run: |
           set -euo pipefail
@@ -146,12 +146,14 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import shutil
-          common=["www/ajax/ouiDB.json","usr/libexec/rtac86u-ntpd","usr/bin/scp"]
+          common=["www/ajax/ouiDB.json","usr/libexec/rtac86u-ntpd","usr/bin/scp",
+                  "usr/bin/nano","usr/bin/rnano","usr/lib/libncurses.so.6","usr/lib/libncurses.so.6.0"]
           groups={
-            "plus_wsdd2":common+["usr/sbin/wsdd2"],
             "plus_chart":common+["www/js/chart.min.js"],
-            "plus_nano":common+["usr/bin/nano","usr/bin/rnano","usr/lib/libncurses.so.6","usr/lib/libncurses.so.6.0"],
+            "plus_wsdd2":common+["usr/sbin/wsdd2"],
             "plus_qrcode":common+["www/js/qrcode.min.js"],
+            "plus_dnsfilter_page":common+["www/DNSFilter.asp"],
+            "plus_tools_pages":common+["www/Tools_OtherSettings.asp","www/Main_TrafficMonitor_monthly.asp","www/Advanced_Wireless_Survey.asp","www/Advanced_PerformanceTuning_Content.asp"],
           }
           base=Path("work/capacity/base")
           for name,rels in groups.items():
@@ -162,7 +164,7 @@ jobs:
                   if p.is_symlink() or p.is_file(): p.unlink()
           PY
           printf 'variant\tubifs_bytes\tubi_bytes\tpebs\n' > reports/capacity-matrix.tsv
-          for v in plus_wsdd2 plus_chart plus_nano plus_qrcode; do
+          for v in plus_chart plus_wsdd2 plus_qrcode plus_dnsfilter_page plus_tools_pages; do
             sudo mkfs.ubifs --squash-uids -F -c 2048 -m 2048 -e 126976 -x zlib -r "work/capacity/$v" -o "work/capacity/$v.ubifs" >/dev/null 2>&1
             cat > "work/capacity/$v.ini" <<EOF
           [rootfs]
