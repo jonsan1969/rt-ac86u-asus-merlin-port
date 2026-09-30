@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! sudo mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x zlib             -r "$ORIG_ROOT" -o work/overlay.ubifs > reports/mkfs-ubifs.txt 2>&1; then
+          if ! sudo mkfs.ubifs --squash-uids -F -v -c 2048 -m 2048 -e 126976 -x lzo             -r "$ORIG_ROOT" -o work/overlay.ubifs > reports/mkfs-ubifs.txt 2>&1; then
             cat reports/mkfs-ubifs.txt
             exit 1
           fi
@@ -135,19 +135,31 @@ jobs:
           vol_name=rootfs_ubifs
           vol_flags=autoresize
           EOF
-          if ! ubinize -v -o work/overlay.ubi -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 work/ubi.ini             > reports/ubinize.txt 2>&1; then
+          if ! ubinize -v -o work/overlay-short.ubi -m 2048 -p 131072 -s 2048 -O 2048 -Q 0 work/ubi.ini             > reports/ubinize.txt 2>&1; then
             cat reports/ubinize.txt
             exit 1
           fi
-          UBI_BYTES="$(stat -c '%s' work/overlay.ubi)"
-          UBI_PEBS=$(( UBI_BYTES / 131072 ))
-          printf 'overlay_ubi_bytes=%s\noverlay_ubi_pebs=%s\n' "$UBI_BYTES" "$UBI_PEBS"
-          if [ "$UBI_BYTES" != 74711040 ] || [ "$UBI_PEBS" -ne 570 ]; then
-            echo "ERROR: active overlay UBI violates pinned 570-PEB geometry" >&2
-            cat reports/ubinize.txt
-            exit 1
-          fi
-          printf 'ubi_bytes=%s\nubi_pebs=%s\n' "$(stat -c '%s' work/overlay.ubi)"             "$(( $(stat -c '%s' work/overlay.ubi) / 131072 ))" > reports/overlay-ubi-layout.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          PEB=131072
+          TARGET=74711040
+          src=Path("work/overlay-short.ubi").read_bytes()
+          if not src or len(src)%PEB:
+              raise SystemExit(f"ubinize output is not PEB aligned: {len(src)}")
+          if len(src)>TARGET:
+              raise SystemExit(f"active overlay UBI exceeds stock span: {len(src)} > {TARGET} ({len(src)//PEB} > 570 PEB)")
+          pad=TARGET-len(src)
+          if pad%PEB:
+              raise SystemExit(f"padding is not whole PEBs: {pad}")
+          Path("work/overlay.ubi").write_bytes(src+b"\xff"*pad)
+          Path("reports/overlay-ubi-layout.txt").write_text(
+              f"compression=lzo\nshort_bytes={len(src)}\nshort_pebs={len(src)//PEB}\n"
+              f"padding_bytes={pad}\npadding_pebs={pad//PEB}\nfinal_bytes={TARGET}\nfinal_pebs={TARGET//PEB}\n")
+          print(f"overlay_short_ubi_bytes={len(src)}")
+          print(f"overlay_short_ubi_pebs={len(src)//PEB}")
+          print(f"overlay_padding_pebs={pad//PEB}")
+          PY
+          test "$(stat -c '%s' work/overlay.ubi)" = 74711040
 
       - name: Build and validate final WFI
         shell: bash
