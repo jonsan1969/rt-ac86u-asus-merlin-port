@@ -74,6 +74,27 @@ jobs:
             echo '=== executable scripts network/update indicators ==='
             grep -RInaE 'curl |wget |http://|https://|eval |system\(|/jffs/|koolshare|softcenter' "$KC"/koolshare "$KC"/usr "$KC"/etc 2>/dev/null | head -n 5000 || true
           } > reports/security-probes.txt
+          mkdir -p reports/kc-selected
+          for p in \
+            /rom/etc/koolshare/scripts/center_config.sh \
+            /rom/etc/koolshare/scripts/ks_app_install.sh \
+            /rom/etc/koolshare/scripts/ks_tar_install.sh \
+            /rom/etc/koolshare/bin/kscore.sh \
+            /usr/sbin/webs_update.sh \
+            /usr/sbin/webs_upgrade.sh \
+            /usr/sbin/webs_note.sh \
+            /usr/bin/jffsinit.sh; do
+            if [ -f "$KC$p" ]; then
+              mkdir -p "reports/kc-selected$(dirname "$p")"
+              cp -a "$KC$p" "reports/kc-selected$p"
+            fi
+          done
+          for p in /usr/sbin/httpd /sbin/rc /bin/busybox /usr/sbin/lighttpd /usr/sbin/miniupnpd /usr/sbin/wget; do
+            if [ -f "$KC$p" ]; then
+              echo "=== $p ===" >> reports/kc-binary-strings.txt
+              strings -a "$KC$p" | grep -Ei 'kool|softcenter|https?://|version|openssl|ssl|curl|wget|upgrade|upload|jffs|asus' | head -n 500 >> reports/kc-binary-strings.txt || true
+            fi
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
