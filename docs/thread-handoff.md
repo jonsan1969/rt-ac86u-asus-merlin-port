@@ -1,3 +1,5 @@
+Run `36663266938` targeted three-group matrix: `no_oui_ntpd_scp=573` PEB, `no_oui_ntpd_nano=574`, `no_oui_ntpd_wsdd2=575`, `no_oui_ntpd_chart=575`. Its log has been fetched exactly once; never fetch it again. Best candidate is only 3 PEB over the immutable span. Measure the smallest fourth group atop `ouiDB+ntpd+scp`; do not broaden removals blindly.
+
 Run `36662877291` capacity matrix proves no tested one- or two-group footprint reduction fits: full `585` PEB; `no_oui=580`, `no_ntpd=580`, `no_scp=581`, `no_nano=582`, `no_oui_ntpd=576`, `no_oui_scp=577`, `no_ntpd_scp=577`. Its log has been fetched exactly once; never fetch it again. At least a third payload reduction is required; measure targeted three-group candidates next.
 
 Run `36660637095` reconfirms the full active overlay under pinned zlib at `74,027,008`-byte UBIFS and `76,677,120`-byte UBI / `585` PEB: exactly 15 PEB over the immutable span. Its log has been fetched exactly once; never fetch it again. The next Action must be a capacity matrix, not another identical full-overlay retry.
