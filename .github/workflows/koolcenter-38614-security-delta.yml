@@ -1,0 +1,84 @@
+name: KoolCenter 386.14_2 security delta
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths: [.github/workflows/koolcenter-38614-security-delta.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full file unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Download exact candidate and references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/kc work/merlin work/asus52334 reports
+          curl -fL --retry 4 --retry-all-errors -o work/kc/RT-AC86U_386.14_2_cferom_ubi-87b7285.w 'https://fw.koolcenter.com/KoolCenter_Merlin_New_Gen_386/RT-AC86U/RT-AC86U_386.14_2_cferom_ubi-87b7285.w'
+          echo '0e640a4ac8f7b30a29485c26f14c3e564c9f391a4800333ffa21e67af021615e  work/kc/RT-AC86U_386.14_2_cferom_ubi-87b7285.w' | sha256sum -c -
+          curl -fL --retry 4 --retry-all-errors -o work/merlin.zip 'https://sourceforge.net/projects/asuswrt-merlin/files/RT-AC86U/Release/RT-AC86U_386.14_2.zip/download'
+          echo '1dedab53b08b93c529920c791291d04e36089a9c85d672a5a0fff9dea45bb49a  work/merlin.zip' | sha256sum -c -
+          curl -fL --retry 4 --retry-all-errors -o work/asus52334.zip 'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          unzip -q work/merlin.zip -d work/merlin
+          unzip -q work/asus52334.zip -d work/asus52334
+          sha256sum work/kc/*.w work/merlin/*.w work/asus52334/*.w > reports/image-sha256.txt
+      - name: Extract rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in kc merlin asus52334; do
+            (cd work/$d; FW="$(find . -maxdepth 1 -name '*.w' -print -quit)"; binwalk -Me "$FW") > ../../reports/binwalk-$d.txt
+          done
+          for d in kc merlin asus52334; do
+            R="$(find work/$d -type d -name rootfs_ubifs -print -quit)"; test -n "$R"; echo "$d=$R" >> reports/rootfs-paths.txt
+          done
+      - name: Inventory, deltas and security probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          python3 tools/tree_inventory.py "$KC" -o reports/koolcenter-inventory.tsv
+          python3 tools/tree_inventory.py "$ME" -o reports/merlin-inventory.tsv
+          python3 tools/tree_inventory.py "$AS" -o reports/asus52334-inventory.tsv
+          python3 tools/compare_trees.py "$ME" "$KC" -o reports/merlin-vs-koolcenter.tsv | tee reports/merlin-vs-koolcenter-summary.txt
+          python3 tools/compare_trees.py "$AS" "$KC" -o reports/asus52334-vs-koolcenter.tsv | tee reports/asus52334-vs-koolcenter-summary.txt
+          python3 - "$KC" "$ME" "$AS" > reports/security-sensitive-hashes.tsv <<'PY'
+import os,sys,hashlib
+roots=dict(kc=sys.argv[1],merlin=sys.argv[2],asus52334=sys.argv[3])
+need=['/usr/sbin/httpd','/sbin/rc','/usr/sbin/dnsmasq','/usr/sbin/dropbear','/usr/bin/openssl','/usr/sbin/openvpn','/bin/busybox']
+print('path\tkc\tmerlin\tasus52334\tkc_eq_merlin\tkc_eq_asus52334')
+for p in need:
+ def h(root):
+  f=root+p
+  if not os.path.isfile(f): return '-'
+  return hashlib.sha256(open(f,'rb').read()).hexdigest()
+ a,b,c=(h(roots[x]) for x in ('kc','merlin','asus52334'))
+ print(f'{p}\t{a}\t{b}\t{c}\t{a==b and a!="-"}\t{a==c and a!="-"}')
+PY
+          {
+            echo '=== kool/softcenter files ==='
+            find "$KC" -iname '*kool*' -o -iname '*softcenter*' | sort
+            echo '=== cloud components ==='
+            find "$KC" -type f | grep -Ei '/(asd|awsiot|ifttt|alexa)(/|$)|/(asd|awsiot|ifttt|alexa)$' || true
+            echo '=== executable scripts network/update indicators ==='
+            grep -RInaE 'curl |wget |http://|https://|eval |system\(|/jffs/|koolshare|softcenter' "$KC"/koolshare "$KC"/usr "$KC"/etc 2>/dev/null | head -n 5000 || true
+          } > reports/security-probes.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: koolcenter-38614-security-delta
+          path: reports/
+          retention-days: 14
