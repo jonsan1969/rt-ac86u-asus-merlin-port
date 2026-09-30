@@ -1,3 +1,5 @@
+Run `36659212017` closes the LZO experiment: LZO is materially worse (`81,264,640`-byte UBIFS; `84,148,224`-byte UBI / `642` PEB) than zlib (`585` PEB). Its log has been fetched exactly once; never fetch it again. Keep zlib and the immutable 570-PEB span. Largest repo add-only payloads are `ouiDB.json` 1,285,908 B, `rtac86u-ntpd` 925,720 B, `scp` 663,424 B, `nano` 223,780 B and `libncurses.so.6.0` 222,880 B. Continue by reducing/optionalizing feature payload footprint; do not enlarge the partition or replace the ASUS kernel.
+
 # New-thread handoff
 
 Updated: 2026-09-29
