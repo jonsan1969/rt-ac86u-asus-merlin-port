@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           for d in kc merlin asus52334; do
-            (cd work/$d; FW="$(find . -maxdepth 1 -name '*.w' -print -quit)"; binwalk -Me "$FW") > ../reports/binwalk-$d.txt
+            (cd work/$d; FW="$(find . -maxdepth 1 -name '*.w' -print -quit)"; binwalk -Me "$FW") > reports/binwalk-$d.txt
           done
           for d in kc merlin asus52334; do
             R="$(find work/$d -type d -name rootfs_ubifs -print -quit)"; test -n "$R"; echo "$d=$R" >> reports/rootfs-paths.txt
