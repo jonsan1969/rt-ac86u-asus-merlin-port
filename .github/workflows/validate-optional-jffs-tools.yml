@@ -29,8 +29,8 @@ jobs:
       - name: Install into disposable JFFS analogue
         run: |
           root="$RUNNER_TEMP/jffs/addons/merlin-tools"
-          optional/install-tools.sh "$root"
-          optional/verify-tools.sh "$root"
+          sh optional/install-tools.sh "$root"
+          sh optional/verify-tools.sh "$root"
           test -x "$root/bin/nano.real"
           test -x "$root/bin/nano"
           test -x "$root/bin/scp"
@@ -46,9 +46,9 @@ jobs:
       - name: Verify uninstall boundary
         run: |
           root="$RUNNER_TEMP/jffs/addons/merlin-tools"
-          optional/uninstall-tools.sh "$root"
+          sh optional/uninstall-tools.sh "$root"
           test ! -e "$root"
-          if optional/uninstall-tools.sh /tmpx/unsafe; then
+          if sh optional/uninstall-tools.sh /tmpx/unsafe; then
             echo "unsafe uninstall path was accepted" >&2
             exit 1
           fi
