@@ -1,0 +1,42 @@
+name: Materialize pinned AMTM optional payload
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/materialize-optional-amtm.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned Merlin source only
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin
+          git -C work/merlin fetch --depth=1 origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
+          git -C work/merlin checkout --detach FETCH_HEAD
+      - name: Verify dormant AMTM donor
+        run: |
+          set -euo pipefail
+          p=work/merlin/release/src/router/others/amtm
+          test -f "$p"
+          echo '283fa24cec4cb7df84fa6d7f1e5cde82b164f28a675ebe5167127c8a891bc7ba  ' "$p" | tr -d '\n' > /tmp/check
+          printf '\n' >> /tmp/check
+          sha256sum -c /tmp/check
+          sh -n "$p"
+          grep -Fq '/jffs/addons/amtm' "$p"
+          grep -Fq 'jffs2_scripts' "$p"
+          grep -Fq '/usr/sbin/curl' "$p"
+      - name: Publish verified donor only
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinned-amtm-dormant
+          path: work/merlin/release/src/router/others/amtm
+          if-no-files-found: error
+          retention-days: 14
