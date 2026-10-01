@@ -17,10 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install extraction tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
-          python3 -m pip install --user --break-system-packages ubi-reader
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          python3 -m venv work/ubi-reader-venv
+          work/ubi-reader-venv/bin/pip install --disable-pip-version-check ubi-reader
+          command -v unzip >/dev/null
       - name: Extract verified ASUS 52334
         run: |
           set -euo pipefail
@@ -29,12 +28,21 @@ jobs:
             'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
           echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/asus.zip' | sha256sum -c -
           unzip -q work/asus.zip -d work/asus
-          cd work/asus
-          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
-          binwalk -Me "$FW" >/dev/null
-          ROOT="$(find . -type d -name rootfs_ubifs -print -quit)"
+          FW="$(find work/asus -maxdepth 1 -type f -name '*.w' -print -quit)"
+          test -n "$FW"
+          python3 - "$FW" work/stock.ubi <<'PY'
+import sys
+p=open(sys.argv[1],'rb').read()
+off=p.find(b'UBI#')
+assert off >= 0
+open(sys.argv[2],'wb').write(p[off:-20])
+print(off)
+PY
+          mkdir -p work/extracted
+          sudo work/ubi-reader-venv/bin/ubireader_extract_files -k -x -o work/extracted work/stock.ubi
+          ROOT="$(find work/extracted -type d -name rootfs_ubifs -print -quit)"
           test -n "$ROOT"
-          echo "ROOT=$PWD/${ROOT#./}" >> "$GITHUB_ENV"
+          echo "ROOT=$PWD/$ROOT" >> "$GITHUB_ENV"
       - name: Probe HTTPD user-page and ASP handling
         run: |
           set -euo pipefail
