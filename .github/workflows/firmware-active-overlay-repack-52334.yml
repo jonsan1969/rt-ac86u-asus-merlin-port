@@ -56,7 +56,7 @@ jobs:
           dd if="$FW" of=work/stock-prefix.bin bs=1M iflag=count_bytes count=3538944 status=none
           dd if="$FW" of=work/stock.ubi bs=1M iflag=skip_bytes,count_bytes skip=3538944 count=74711040 status=none
           EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
-          sudo "$EXTRACT" -o work/original-extracted work/stock.ubi > reports/stock-extract.txt 2>&1
+          sudo "$EXTRACT" -k -x -o work/original-extracted work/stock.ubi > reports/stock-extract.txt 2>&1
           ORIG_ROOT="$(find work/original-extracted -type d -name rootfs_ubifs -print -quit)"
           test -n "$ORIG_ROOT"
           echo "ORIG_ROOT=$ORIG_ROOT" >> "$GITHUB_ENV"
@@ -221,7 +221,7 @@ jobs:
           set -euo pipefail
           EXTRACT="$PWD/work/ubi-reader-venv/bin/ubireader_extract_files"
           DISPLAY="$PWD/work/ubi-reader-venv/bin/ubireader_display_info"
-          sudo "$EXTRACT" -o work/reextracted work/overlay.ubi > reports/reextract.txt 2>&1
+          sudo "$EXTRACT" -k -x -o work/reextracted work/overlay.ubi > reports/reextract.txt 2>&1
           "$DISPLAY" work/overlay.ubi > reports/overlay-ubi-info.txt 2>&1
           FINAL_ROOT="$(find work/reextracted -type d -name rootfs_ubifs -print -quit)"
           test -n "$FINAL_ROOT"
