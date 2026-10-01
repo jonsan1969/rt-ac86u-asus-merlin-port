@@ -9,7 +9,7 @@
 | ASUS 386_52334 GPL/source acquisition | **IN PROGRESS** | no matching public archive located; legacy `gpl@asus.com` request bounced with SMTP 550 #5.1.0; current support route deferred |
 | Clean ASUS 386.45956 source-lineage anchor | **SUCCESS** | pinned community mirror `a9179fc...`; helper/build-gate/lifecycle/JFFS call-site matrix documented in `docs/source-anchor-45956-findings.md`; this is archaeology only, not the 52334 build base |
 | Firmware artifact verification | **SUCCESS** | all three comparison images verified in run 35987265109 |
-| Active guarded-overlay firmware repack | **SUCCESS** | Run `36858448891`, commit `03bf584e...`: permission/xattr-preserving extraction (`-k -x`) closes the false 0755→0644 validation drift. Full guarded overlay → UBIFS → exact 570-PEB UBI → WFI → re-extract gate passes with zero semantic drift, protected ASUS core byte identity, and zero K2/K3 module leakage. This proves the software repack gate, not flashability. |
+| Active guarded-overlay firmware repack | **SUCCESS** | Run `36858759179` reconfirms the corrected `-k -x` pipeline after removing the dead Monthly Traffic menu link: exact 570-PEB UBI, valid WFI, zero semantic drift, protected ASUS core byte identity, zero K2/K3 leakage. Not a flashability claim. |
 | Direct ASUS 52334 vs Merlin diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
 | ASUS 51955 vs Merlin diff | **SUCCESS** | 2017 identical, 59 ASUS-only, 267 Merlin-only, 1914 different |
 | ASUS 51955 vs ASUS 52334 diff | **SUCCESS** | 3505 identical, 1 51955-only, 2 52334-only, 484 different |
@@ -20,7 +20,7 @@
 | JFFS/custom-script port specification | **SUCCESS** | behavioral/helper/hook patch series + pinned source contract documented in `docs/jffs-custom-script-port-plan.md` and `docs/jffs-custom-script-source-contract.md` |
 | ASUS 52334 DNSFilter runtime map | **SUCCESS** | Action 35993309478 verified retained stock backend/UI-support pieces |
 | DNS Director phase-1 overlay implementation | **SUCCESS** | guarded overlay changes only `DNSFilter.asp` + exact-patched `state.js`; validation run 36121711046 passed |
-| Guarded Merlin overlay validation | **SUCCESS** | latest feature-aware active-overlay validation run 36382734032 passed; WINS UI contract is checked and ASUS rc/httpd/dnsmasq/BusyBox/OpenVPN/Dropbear remain protected |
+| Guarded Merlin overlay validation | **SUCCESS** | Run `36858785201` passes after aligning validation with capacity-optionalized payloads. Monthly Traffic/Chart.js, Nano/ncurses and local OUI are no longer required built-ins; dead Monthly Traffic Tools-menu exposure was removed. Run `36858759242` was the superseded stale-validator failure and its log was fetched once. |
 | Merlin A/B/C/D implementation classification | **IN PROGRESS** | exact source patch boundaries continue per feature |
 | JFFS image-safe subphase | **SUCCESS** | `/rom/etc/profile` exact patch, pinned `/usr/sbin/helper.sh` add-only, 20 custom WebUI aliases add-only; helper includes M05 postconf helpers plus M06 `am_settings_get/set` and `/jffs/addons/custom_settings.txt`; no core binary replacement |
 | M12 Scheduled jobs / `cru` | **SUCCESS** | NO PORT: ASUS `cru` is retained. Runs through 36383042773 proved the direct QEMU harness cannot execute ASUS BusyBox reliably (`true`/`sh`/`flock` all rc=1), so Merlin's fd-278 lock delta cannot be safely validated; no unproven script patch and no BusyBox/crond transplant |
