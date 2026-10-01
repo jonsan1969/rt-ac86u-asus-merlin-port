@@ -161,7 +161,7 @@ jobs:
           import csv, pathlib, collections
           p=pathlib.Path("reports/merlin-vs-koolcenter.tsv")
           rows=list(csv.DictReader(p.open(), delimiter="\t"))
-          keys=("http","www","web","auth","login","upload","upgrade","update","ssl","crypto","curl","wget","dns","dropbear","openvpn","upnp","iptables","firewall","jffs","kool","softcenter")
+          keys=("/http","/www/","httpd","auth","login","upload","upgrade","update","ssl","crypto","curl","wget","dnsmasq","dropbear","openvpn","miniupnp","iptables","firewall","jffs","koolshare","softcenter")
           out=[]
           for r in rows:
               path=(r.get("path") or r.get("Path") or next(iter(r.values()))).lower()
@@ -180,7 +180,7 @@ jobs:
             echo '=== passwd/shadow/default credential material ==='
             for root in "$KC" "$ME" "$AS"; do
               echo "--- $root ---"
-              for q in /etc/passwd /etc/shadow /etc/group; do [ -f "$root$q" ] && { echo "[$q]"; cat "$root$q"; }; done
+              for q in /etc/passwd /etc/shadow /etc/group; do if [ -f "$root$q" ]; then echo "[$q]"; cat "$root$q"; fi; done
             done
           } > reports/security-gap-to-52334.txt
       - uses: actions/upload-artifact@v4
