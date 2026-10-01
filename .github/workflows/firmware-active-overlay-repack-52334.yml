@@ -263,9 +263,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f work/repacked.w
+          test -f work/overlay-final.w
           mkdir -p candidate
-          cp work/repacked.w candidate/RT-AC86U_386_52334_merlin-port-UNVALIDATED.w
+          cp work/overlay-final.w candidate/RT-AC86U_386_52334_merlin-port-UNVALIDATED.w
           sha256sum candidate/*.w > candidate/SHA256SUMS
           cat > candidate/README-NOT-FLASHABLE.txt <<'EOF'
           DEVELOPMENT CANDIDATE — NOT APPROVED FOR FLASHING
