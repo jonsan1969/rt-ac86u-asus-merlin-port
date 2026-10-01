@@ -1,0 +1,40 @@
+name: Validate candidate evidence skeleton
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/prepare-candidate-evidence.sh
+      - .github/workflows/validate-candidate-evidence.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and mutation guard
+        run: |
+          set -euo pipefail
+          sh -n scripts/prepare-candidate-evidence.sh
+          forbidden='mtd|flash|reboot|nvram[[:space:]]+(set|unset|commit)|insmod|modprobe|rmmod|/jffs/.*>|rm[[:space:]].*/jffs'
+          if grep -Ein "$forbidden" scripts/prepare-candidate-evidence.sh | grep -Ev 'NO_(FLASH|REBOOT|NVRAM_WRITE|JFFS_WRITE|MODULE_LOAD)='; then
+            echo "unsafe operation found" >&2
+            exit 1
+          fi
+      - name: Positive and fail-closed tests
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          printf 'dummy' > work/test-UNVALIDATED.w
+          sh scripts/prepare-candidate-evidence.sh work/test-UNVALIDATED.w work/evidence
+          test -s work/evidence/candidate-sha256.txt
+          grep -Fq 'K4 ASUS-52334' work/evidence/REQUIRED-EVIDENCE.txt
+          printf 'dummy' > work/test.w
+          if sh scripts/prepare-candidate-evidence.sh work/test.w work/bad; then
+            echo "accepted unmarked candidate" >&2
+            exit 1
+          fi
