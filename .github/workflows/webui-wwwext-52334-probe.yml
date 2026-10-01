@@ -40,6 +40,13 @@ PY
           ROOT="$(find work/extracted -type d -name rootfs_ubifs -print -quit)"
           test -n "$ROOT"
           echo "ROOT=$PWD/$ROOT" >> "$GITHUB_ENV"
+      - name: Assert metadata-faithful stock WebUI symlink
+        run: |
+          set -euo pipefail
+          test -L "$ROOT/www/user"
+          printf 'ubi-reader /www/user -> %s\n' "$(readlink "$ROOT/www/user")"
+          test "$(readlink "$ROOT/www/user")" = "/var/wwwext"
+
       - name: Probe HTTPD user-page and ASP handling
         run: |
           set -euo pipefail
