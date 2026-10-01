@@ -140,8 +140,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # mkfs.ubifs device table makes executable modes deterministic for
-          # add-only executables that ubi-reader otherwise observes as 0644.
+          # Materialize executable modes in the staging tree immediately before
+          # mkfs; the device table below remains a second explicit contract.
+          sudo chmod 0755 "$ORIG_ROOT/usr/sbin/helper.sh" "$ORIG_ROOT/usr/sbin/wsdd2"
+          test "$(stat -c '%a' "$ORIG_ROOT/usr/sbin/helper.sh")" = 755
+          test "$(stat -c '%a' "$ORIG_ROOT/usr/sbin/wsdd2")" = 755
+          stat -c '%a %u:%g %n' "$ORIG_ROOT/usr/sbin/helper.sh" "$ORIG_ROOT/usr/sbin/wsdd2" \
+            | tee reports/pre-mkfs-executable-modes.txt
           printf '%s\\n' \
             '/usr/sbin/helper.sh f 0755 0 0 - - - - -' \
             '/usr/sbin/wsdd2 f 0755 0 0 - - - - -' \
