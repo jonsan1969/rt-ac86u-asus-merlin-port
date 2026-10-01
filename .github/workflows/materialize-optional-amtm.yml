@@ -1,6 +1,6 @@
 name: Materialize pinned AMTM optional payload
 
-on:
+'on':
   workflow_dispatch:
 
 permissions:
