@@ -18,13 +18,16 @@ def safe_target(root,target):
  if not target.startswith("/"): raise ValueError(f"absolute target required: {target}")
  lexical=root/target.lstrip("/")
  cur=root
- for part in Path(target.lstrip("/")).parts:
+ parts=Path(target.lstrip("/")).parts
+ for n,part in enumerate(parts):
   cur=cur/part
-  if cur.is_symlink():
+  if cur.is_symlink() and n < len(parts)-1:
    rel=cur.relative_to(root).as_posix()
    raise ValueError(f"target traverses rootfs symlink /{rel}; use canonical target: {target}")
- out=lexical.resolve(strict=False)
- try: out.relative_to(root.resolve())
+ # Never resolve the final component: exact symlink operations must inspect the
+ # link itself, while traversal through parent symlinks remains fail-closed.
+ out=lexical.parent.resolve(strict=False)/lexical.name
+ try: out.parent.relative_to(root.resolve())
  except ValueError: raise ValueError(f"target escapes rootfs: {target}")
  return out
 def protected(t): return t in PROTECTED_EXACT or any(t.startswith(p) for p in PROTECTED_PREFIXES)
