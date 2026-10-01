@@ -1,10 +1,6 @@
 name: Probe ASUS 52334 custom WebUI CGI surface
 
 on:
-  push:
-    branches: [asus-52334-merlin-port]
-    paths:
-      - .github/workflows/webui-wwwext-52334-probe.yml
   workflow_dispatch:
 
 permissions:
