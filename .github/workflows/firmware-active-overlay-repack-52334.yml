@@ -258,7 +258,30 @@ jobs:
           PY
           cat reports/final-gate.txt
 
-      - name: Publish reports only
+      - name: Stage non-flashable candidate artifact
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f work/repacked.w
+          mkdir -p candidate
+          cp work/repacked.w candidate/RT-AC86U_386_52334_merlin-port-UNVALIDATED.w
+          sha256sum candidate/*.w > candidate/SHA256SUMS
+          cat > candidate/README-NOT-FLASHABLE.txt <<'EOF'
+          DEVELOPMENT CANDIDATE — NOT APPROVED FOR FLASHING
+
+          This image passed software extraction/overlay/repack/semantic/protected-core gates only.
+          It has NOT passed the required physical ASUS RT-AC86U 386_52334 runtime/hardware gates.
+          Do not flash this image based on this CI artifact alone.
+
+          Required before flashability can be claimed:
+          - K4 runtime/module compatibility on actual ASUS 386_52334 runtime;
+          - read-only runtime feature preflight;
+          - feature-specific runtime gates including M49 HTTPD/EJ dispatch where applicable;
+          - explicit project status update promoting a tested candidate.
+          EOF
+
+      - name: Publish reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -266,3 +289,12 @@ jobs:
           path: reports/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish quarantined development candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RT-AC86U-52334-merlin-port-UNVALIDATED
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 7
