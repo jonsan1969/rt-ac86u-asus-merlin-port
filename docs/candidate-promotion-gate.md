@@ -10,7 +10,7 @@ All of the following must be recorded against the exact candidate SHA-256:
 2. protected ASUS 52334 core byte-identity PASS;
 3. no K2/K3 optional kernel module leakage into the immutable image;
 4. K4a read-only preflight collected from an actual ASUS RT-AC86U running the 386_52334 runtime;
-5. candidate module families that are intended for use pass the separately documented K4 compatibility/load/unload gates before activation;
+5. candidate module families that are intended for use pass `docs/k4-controlled-module-validation.md` before activation; K4 is deliberately operator-controlled because it mutates live kernel state;
 6. general runtime feature preflight collected from the same 52334 runtime;
 7. runtime-sensitive WebUI/JFFS features pass their own contracts before they are advertised as available; M49 specifically requires HTTPD EJ-dispatch proof;
 8. configuration/JFFS backup and recovery path are prepared before first candidate flash;
