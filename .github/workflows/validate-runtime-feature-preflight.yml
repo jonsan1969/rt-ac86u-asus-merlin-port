@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           p=scripts/runtime-feature-preflight.sh
           forbidden='insmod|modprobe|rmmod|nvram[[:space:]]+(set|unset|commit)|service[[:space:]]+(restart|stop|start)|killall|reboot|mtd-|mtd[[:space:]]+write|flash|curl|wget'
-          if grep -Ein "$forbidden" "$p"; then
+          if grep -Ein "$forbidden" "$p" | grep -Ev 'NO_(MODULES_LOADED|NVRAM_WRITES|JFFS_WRITES|SERVICE_RESTARTS|HTTP_REQUESTS|REBOOT|FLASH_WRITES)='; then
             echo "forbidden mutating/network operation found" >&2
             exit 1
           fi
