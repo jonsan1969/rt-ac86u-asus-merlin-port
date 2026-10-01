@@ -27,7 +27,7 @@ Do not replace newer ASUS core components with older Merlin binaries merely to r
 
 Completed analysis milestones include verified firmware artifacts, UBI/UBIFS extraction, three-way ASUS-51955/Merlin/ASUS-52334 classification, complete Merlin feature inventory, compatibility probes and the JFFS/custom-script source-delta specification.
 
-The current implementation focus is a guarded DNS Director phase-1 overlay that reuses the DNSFilter backend already present in ASUS 52334 without replacing `rc`, `httpd` or `dnsmasq`.
+The active image-safe overlay now contains the proven source-independent Merlin deltas and passes an exact-size 570-PEB ASUS 52334 repack gate without replacing protected ASUS core binaries. Capacity-heavy features are optionalized rather than forcing partition growth. Shared-core features remain source-contract work until matching ASUS 52334 source is available; kernel/runtime features remain behind explicit physical-router gates.
 
 For continuation in a fresh ChatGPT thread, start with:
 
@@ -36,4 +36,4 @@ For continuation in a fresh ChatGPT thread, start with:
 - `docs/merlin-feature-inventory.md`
 - `docs/source-base-strategy.md`
 
-No firmware is considered flashable yet.
+No firmware is considered flashable yet. CI may publish artifacts explicitly named `UNVALIDATED`; these are quarantined development candidates only and must not be flashed until the documented ASUS-52334 hardware/runtime gates pass.
