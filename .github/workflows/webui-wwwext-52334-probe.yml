@@ -1,6 +1,6 @@
 name: Probe ASUS 52334 custom WebUI CGI surface
 
-on:
+'on':
   workflow_dispatch:
 
 permissions:
