@@ -60,13 +60,6 @@
       "policy": "add_only"
     },
     {
-      "type": "symlink_replace",
-      "target": "/www/user",
-      "target_link": "/dev/null",
-      "link_target": "/tmp/var/wwwext",
-      "policy": "replace_exact"
-    },
-    {
       "type": "symlink",
       "target": "/www/user1.asp",
       "link_target": "user/user1.asp",
