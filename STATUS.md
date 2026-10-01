@@ -10,7 +10,7 @@
 | Clean ASUS 386.45956 source-lineage anchor | **SUCCESS** | pinned community mirror `a9179fc...`; helper/build-gate/lifecycle/JFFS call-site matrix documented in `docs/source-anchor-45956-findings.md`; this is archaeology only, not the 52334 build base |
 | Firmware artifact verification | **SUCCESS** | all three comparison images verified in run 35987265109 |
 | ASUS 52334 stock semantic repack round-trip | **SUCCESS** | Run `36859123113` re-certifies stock extract/rebuild/WFI/re-extract with permission/xattr-preserving `ubi-reader -k -x`; semantic equality and geometry pass. Stock baseline only, not flashability. |
-| Active guarded-overlay firmware repack | **SUCCESS** | Run `36858759179` reconfirms the corrected `-k -x` pipeline after removing the dead Monthly Traffic menu link: exact 570-PEB UBI, valid WFI, zero semantic drift, protected ASUS core byte identity, zero K2/K3 leakage. Not a flashability claim. |
+| Active guarded-overlay firmware repack | **SUCCESS** | Run `36864883221` is the current clean repack reference after resolving M07 extraction-tool ambiguity: exact 570-PEB UBI, valid WFI, zero semantic drift, protected ASUS core byte identity, zero K2/K3 leakage. `/www/user` is not modified. Not a flashability claim. |
 | Direct ASUS 52334 vs Merlin diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
 | ASUS 51955 vs Merlin diff | **SUCCESS** | 2017 identical, 59 ASUS-only, 267 Merlin-only, 1914 different |
 | ASUS 51955 vs ASUS 52334 diff | **SUCCESS** | 3505 identical, 1 51955-only, 2 52334-only, 484 different |
