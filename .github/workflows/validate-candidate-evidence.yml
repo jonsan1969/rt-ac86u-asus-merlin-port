@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           sh -n scripts/prepare-candidate-evidence.sh
           forbidden='mtd|flash|reboot|nvram[[:space:]]+(set|unset|commit)|insmod|modprobe|rmmod|/jffs/.*>|rm[[:space:]].*/jffs'
-          if grep -Ein "$forbidden" scripts/prepare-candidate-evidence.sh | grep -Ev 'NO_(FLASH|REBOOT|NVRAM_WRITE|JFFS_WRITE|MODULE_LOAD)='; then
+          if sed '/^#/d' scripts/prepare-candidate-evidence.sh | grep -Ein "$forbidden" | grep -Ev 'NO_(FLASH|REBOOT|NVRAM_WRITE|JFFS_WRITE|MODULE_LOAD)='; then
             echo "unsafe operation found" >&2
             exit 1
           fi
