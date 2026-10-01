@@ -1,0 +1,20 @@
+name: Candidate artifact self-check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Contract marker
+        run: |
+          cat <<'EOF'
+          Candidate identity is the SHA-256 of the .w file, never the GitHub artifact ZIP digest.
+          Current pinned UNVALIDATED WFI:
+          eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          EOF
