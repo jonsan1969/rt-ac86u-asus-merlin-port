@@ -45,7 +45,8 @@ jobs:
           file "$root/bin/nano.real" "$root/bin/scp"
       - name: Verify uninstall boundary
         run: |
-          root="$RUNNER_TEMP/jffs/addons/merlin-tools"
+          root="/tmp/rtac86u-optional-tools-uninstall-test"
+          sh optional/install-tools.sh "$root"
           sh optional/uninstall-tools.sh "$root"
           test ! -e "$root"
           if sh optional/uninstall-tools.sh /tmpx/unsafe; then
