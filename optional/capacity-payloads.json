@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "purpose": "Capacity-optionalized Merlin payloads removed from built-in ASUS 52334 rootfs. This file is inventory only and is not consumed by ports/active.json.",
+  "source_checkpoint": "f6aa024ae69d3bb35a63e9bff2d93f51da454114",
+  "groups": {
+    "monthly_traffic": [
+      "/www/Main_TrafficMonitor_monthly.asp",
+      "/www/js/chart.min.js"
+    ],
+    "local_oui": [
+      "/www/ajax/ouiDB.json",
+      "/www/index.asp",
+      "/www/client_function.js",
+      "/www/device-map/clients.asp"
+    ],
+    "nano": [
+      "/usr/bin/nano",
+      "/usr/bin/rnano",
+      "/usr/lib/libncurses.so.6.0",
+      "/usr/lib/libncurses.so.6"
+    ],
+    "scp": [
+      "/usr/bin/scp"
+    ],
+    "local_ntpd": [
+      "/usr/libexec/rtac86u-ntpd"
+    ]
+  },
+  "delivery_status": "NOT_BUILT_IN; future optional/JFFS/Entware delivery only after its own runtime contract"
+}
