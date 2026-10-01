@@ -153,6 +153,36 @@ jobs:
             echo '=== Merlin crypto/ssl symlink topology ==='
             find "$ME"/lib "$ME"/usr/lib -maxdepth 2 \( -name 'libssl*' -o -name 'libcrypto*' -o -name 'libcurl*' \) -exec ls -l {} \; 2>/dev/null
           } > reports/runtime-exposure-persistence.txt
+      - name: Security delta classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv, pathlib, collections
+          p=pathlib.Path("reports/merlin-vs-koolcenter.tsv")
+          rows=list(csv.DictReader(p.open(), delimiter="\t"))
+          keys=("http","www","web","auth","login","upload","upgrade","update","ssl","crypto","curl","wget","dns","dropbear","openvpn","upnp","iptables","firewall","jffs","kool","softcenter")
+          out=[]
+          for r in rows:
+              path=(r.get("path") or r.get("Path") or next(iter(r.values()))).lower()
+              if any(k in path for k in keys):
+                  out.append(r)
+          with open("reports/security-delta-classified.tsv","w",newline="") as f:
+              w=csv.DictWriter(f,fieldnames=rows[0].keys(),delimiter="\t"); w.writeheader(); w.writerows(out)
+          print("security-relevant delta rows",len(out))
+          PY
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          {
+            echo '=== ASUS52334 vs KoolCenter security-sensitive changed paths ==='
+            awk -F '\t' 'NR==1 || $1 ~ /(http|www|web|auth|login|upload|upgrade|update|ssl|crypto|curl|wget|dns|dropbear|openvpn|upnp|iptables|firewall)/' reports/asus52334-vs-koolcenter.tsv
+            echo '=== passwd/shadow/default credential material ==='
+            for root in "$KC" "$ME" "$AS"; do
+              echo "--- $root ---"
+              for q in /etc/passwd /etc/shadow /etc/group; do [ -f "$root$q" ] && { echo "[$q]"; cat "$root$q"; }; done
+            done
+          } > reports/security-gap-to-52334.txt
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
