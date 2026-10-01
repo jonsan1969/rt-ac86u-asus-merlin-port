@@ -13,6 +13,7 @@ nvget(){ if have nvram; then nvram get "$1" 2>/dev/null || true; fi; }
 
 {
  echo "RTAC86U_MERLIN_RUNTIME_READ_ONLY_PROBE"
+ echo "expected_candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3"
  echo "timestamp=$(date 2>/dev/null || true)"
  echo "productid=$(nvget productid)"
  echo "firmver=$(nvget firmver)"
