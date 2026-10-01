@@ -287,7 +287,7 @@ Validated on the ASUS 52334 image:
 
 - exact patch of `/rom/etc/profile` for gated `profile.add` sourcing;
 - add-only pinned Merlin `/usr/sbin/helper.sh`;
-- add-only `/www/user1.asp` … `/www/user20.asp` aliases targeting the stock `/www/user -> /var/wwwext` namespace;
+- add-only `/www/user1.asp` … `/www/user20.asp` aliases targeting `user/userN.asp`; follow-up stock probe `36864164972` proves ASUS 52334 itself has `/www/user -> /dev/null`, so the earlier claim that stock provides a `/var/wwwext` namespace was incorrect. These aliases are image-safe but their runtime addon target requires a separately proven namespace/mount contract before use;
 - guarded overlay exact-change validation passes with protected ASUS core binaries unchanged.
 
 The custom WebUI-slot validation is run 36214921483. The helper validation is run 36132479605. The profile validation is run 36132166557.
