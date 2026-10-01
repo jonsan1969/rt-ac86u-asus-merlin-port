@@ -1,0 +1,39 @@
+name: Validate runtime feature preflight
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/runtime-feature-preflight.sh
+      - .github/workflows/validate-runtime-feature-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: POSIX syntax
+        run: sh -n scripts/runtime-feature-preflight.sh
+      - name: Enforce read-only safety contract
+        run: |
+          set -euo pipefail
+          p=scripts/runtime-feature-preflight.sh
+          forbidden='insmod|modprobe|rmmod|nvram[[:space:]]+(set|unset|commit)|service[[:space:]]+(restart|stop|start)|killall|reboot|mtd-|mtd[[:space:]]+write|flash|curl|wget'
+          if grep -Ein "$forbidden" "$p"; then
+            echo "forbidden mutating/network operation found" >&2
+            exit 1
+          fi
+          grep -Fq 'NO_MODULES_LOADED=1' "$p"
+          grep -Fq 'NO_NVRAM_WRITES=1' "$p"
+          grep -Fq 'NO_JFFS_WRITES=1' "$p"
+          grep -Fq 'NO_HTTP_REQUESTS=1' "$p"
+          grep -Fq 'NO_FLASH_WRITES=1' "$p"
+      - name: Execute safely on runner
+        run: |
+          sh scripts/runtime-feature-preflight.sh
+          test -f /tmp/rtac86u-merlin-runtime-probe/safety.txt
+          grep -Fq 'RTAC86U_MERLIN_RUNTIME_READ_ONLY_PROBE' /tmp/rtac86u-merlin-runtime-probe/summary.txt
