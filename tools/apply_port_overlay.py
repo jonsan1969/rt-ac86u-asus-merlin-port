@@ -58,6 +58,13 @@ def main():
    lt=e.get("link_target")
    if not lt: raise SystemExit(f"entry {i}: missing link target")
    dst.parent.mkdir(parents=True,exist_ok=True); os.symlink(lt,dst); rows.append((t,typ,"symlink",lt,"-","add_only"))
+  elif typ=="symlink_replace":
+   if e.get("policy")!="replace_exact" or not dst.is_symlink(): raise SystemExit(f"entry {i}: invalid exact symlink target")
+   old=e.get("target_link"); lt=e.get("link_target")
+   if not old or not lt: raise SystemExit(f"entry {i}: symlink replacement metadata missing")
+   actual=os.readlink(dst)
+   if actual!=old: raise SystemExit(f"entry {i}: symlink preimage mismatch expected {old!r} got {actual!r}")
+   dst.unlink(); os.symlink(lt,dst); rows.append((t,typ,"symlink-preimage",old,lt,"replace_exact"))
   elif typ in {"text_replace","text_replace_multi"}:
    if e.get("policy")!="patch_exact" or not dst.is_file(): raise SystemExit(f"entry {i}: invalid exact patch target")
    pre=e.get("target_sha256")
