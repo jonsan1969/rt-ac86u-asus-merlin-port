@@ -2,10 +2,6 @@ name: Materialize pinned AMTM optional payload
 
 on:
   workflow_dispatch:
-  push:
-    branches: [asus-52334-merlin-port]
-    paths:
-      - .github/workflows/materialize-optional-amtm.yml
 
 permissions:
   contents: read
