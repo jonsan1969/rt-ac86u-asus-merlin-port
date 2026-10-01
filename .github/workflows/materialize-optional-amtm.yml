@@ -18,13 +18,14 @@ jobs:
       - name: Fetch pinned Merlin source only
         run: |
           set -euo pipefail
-          git clone --filter=blob:none --no-checkout https://github.com/RMerl/asuswrt-merlin.ng.git work/merlin
-          git -C work/merlin fetch --depth=1 origin 6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b
-          git -C work/merlin checkout --detach FETCH_HEAD
+          mkdir -p work/merlin
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 \
+            -o work/merlin/amtm \
+            'https://raw.githubusercontent.com/RMerl/asuswrt-merlin.ng/6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b/release/src/router/others/amtm'
       - name: Verify dormant AMTM donor
         run: |
           set -euo pipefail
-          p=work/merlin/release/src/router/others/amtm
+          p=work/merlin/amtm
           test -f "$p"
           echo '283fa24cec4cb7df84fa6d7f1e5cde82b164f28a675ebe5167127c8a891bc7ba  ' "$p" | tr -d '\n' > /tmp/check
           printf '\n' >> /tmp/check
@@ -37,6 +38,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pinned-amtm-dormant
-          path: work/merlin/release/src/router/others/amtm
+          path: work/merlin/amtm
           if-no-files-found: error
           retention-days: 14
