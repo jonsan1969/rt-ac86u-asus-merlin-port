@@ -193,7 +193,7 @@
       "target": "/www/require/modules/menuTree.js",
       "target_sha256": "73163bdf1b9f20c056a3c2b90629521b0a0f2007ea4967b73c1b3d6d8d9583e2",
       "find": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
-      "replace": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n{\nmenuName: \"Tools\",\nindex: \"menu_Tools\",\ntab: [\n{url: \"Tools_OtherSettings.asp\", tabName: \"Other Settings\"},\n{url: \"Main_TrafficMonitor_monthly.asp\", tabName: \"Monthly Traffic\"},\n{url: \"Advanced_Wireless_Survey.asp\", tabName: \"Site Survey\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
+      "replace": "{url: \"cloud_syslog.asp\", tabName: \"<#2844#>\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n{\nmenuName: \"Tools\",\nindex: \"menu_Tools\",\ntab: [\n{url: \"Tools_OtherSettings.asp\", tabName: \"Other Settings\"},\n{url: \"Advanced_Wireless_Survey.asp\", tabName: \"Site Survey\"},\n{url: \"NULL\", tabName: \"__INHERIT__\"}\n]\n},\n/* ============================================================================================================ */",
       "count": 1,
       "encoding": "utf-8",
       "policy": "patch_exact"
