@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install extraction tools
         run: |
+          mkdir -p work
           python3 -m venv work/ubi-reader-venv
           work/ubi-reader-venv/bin/pip install --disable-pip-version-check ubi-reader
           command -v unzip >/dev/null
