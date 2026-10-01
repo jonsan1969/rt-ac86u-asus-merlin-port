@@ -9,6 +9,7 @@
 | ASUS 386_52334 GPL/source acquisition | **IN PROGRESS** | no matching public archive located; legacy `gpl@asus.com` request bounced with SMTP 550 #5.1.0; current support route deferred |
 | Clean ASUS 386.45956 source-lineage anchor | **SUCCESS** | pinned community mirror `a9179fc...`; helper/build-gate/lifecycle/JFFS call-site matrix documented in `docs/source-anchor-45956-findings.md`; this is archaeology only, not the 52334 build base |
 | Firmware artifact verification | **SUCCESS** | all three comparison images verified in run 35987265109 |
+| ASUS 52334 stock semantic repack round-trip | **SUCCESS** | Run `36859123113` re-certifies stock extract/rebuild/WFI/re-extract with permission/xattr-preserving `ubi-reader -k -x`; semantic equality and geometry pass. Stock baseline only, not flashability. |
 | Active guarded-overlay firmware repack | **SUCCESS** | Run `36858759179` reconfirms the corrected `-k -x` pipeline after removing the dead Monthly Traffic menu link: exact 570-PEB UBI, valid WFI, zero semantic drift, protected ASUS core byte identity, zero K2/K3 leakage. Not a flashability claim. |
 | Direct ASUS 52334 vs Merlin diff | **SUCCESS** | 1992 identical, 60 ASUS-only, 267 Merlin-only, 1939 different |
 | ASUS 51955 vs Merlin diff | **SUCCESS** | 2017 identical, 59 ASUS-only, 267 Merlin-only, 1914 different |
@@ -56,7 +57,7 @@
 | M38 OpenVPN DNS Exclusive | **IN PROGRESS** | donor-contract verification run `36478506416` is green: port-53 NAT-chain setup/order/teardown plus dnsmasq coordination are pinned in `docs/openvpn-dns-exclusive-source-contract.md`; ASUS 52334 OpenVPN remains authoritative and policy mode must align with M40/VPN Director |
 | M39 OpenVPN custom-option storage | **SUCCESS** | NO PORT: run 36384020800 confirms ASUS 52334 already stores OpenVPN material under `/jffs/openvpn` and provides a larger 15000-character `vpn_server_custom` field; preserve the newer ASUS storage model rather than graft Merlin `custom3` split storage |\n| M40 Merlin OpenVPN routing semantics | **IN PROGRESS** | run 36384020800: ASUS retains generic route primitives but lacks Merlin `ovpnc` policy tables, `vpn_client*_rgw/enforce`, and VPN Director routing integration; source-side integration required without replacing ASUS OpenVPN |\n
 | Merlin feature port | **IN PROGRESS** | DNS Director + image-safe JFFS/addon + ASUS-backed Other Settings + monthly traffic + local OUI + WiFi QR implemented; no unsafe core binary replacement |
-| Flashable firmware | **IN PROGRESS** | stock 52334 repack baseline is proven by run `36593572826`; next gate is active guarded-overlay repack/re-extract validation. No flashability claim until that passes and the deferred hardware/runtime gates pass. |
+| Flashable firmware | **IN PROGRESS** | stock and active-overlay software repack gates are green (`36859123113`, `36858759179`) and feature-aware overlay validation is green (`36858785201`). Flashability remains blocked by deferred real ASUS-52334 hardware/runtime validation and any still-unimplemented source-backed feature contracts. |
 
 ## Status vocabulary
 
