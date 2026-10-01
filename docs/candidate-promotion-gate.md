@@ -21,3 +21,7 @@ All of the following must be recorded against the exact candidate SHA-256:
 A candidate must remain UNVALIDATED if any prerequisite is missing, ambiguous, collected from Merlin 386.14_2 instead of ASUS 386_52334, or belongs to a different candidate hash.
 
 Passing CI alone is never sufficient for flashability.
+
+## Evidence preparation
+
+Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. CI run `36924149359` validates that this helper is non-mutating and rejects candidates that are not explicitly marked UNVALIDATED.
