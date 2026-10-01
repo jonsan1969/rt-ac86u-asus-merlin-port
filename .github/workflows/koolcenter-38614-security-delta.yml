@@ -118,6 +118,23 @@ jobs:
               fi
             done
           done
+      - name: Web and auth delta probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          {
+            echo '=== changed web/auth/security paths Merlin -> KoolCenter ==='
+            awk -F '\t' 'NR==1 || $1 ~ /(www|httpd|lighttpd|auth|login|passwd|shadow|ssl|crypto|curl|wget|upgrade|upload|update|jffs|koolshare|softcenter)/' reports/merlin-vs-koolcenter.tsv
+            echo '=== KoolCenter httpd strings ==='
+            strings -a "$KC/usr/sbin/httpd" | grep -Ei 'login|auth|passwd|upload|upgrade|update|jffs|kool|soft|csrf|token|referer|cookie|session|https?|ssl' | head -n 2000 || true
+            echo '=== Merlin httpd strings ==='
+            strings -a "$ME/usr/sbin/httpd" | grep -Ei 'login|auth|passwd|upload|upgrade|update|jffs|kool|soft|csrf|token|referer|cookie|session|https?|ssl' | head -n 2000 || true
+            echo '=== ASUS52334 httpd strings ==='
+            strings -a "$AS/usr/sbin/httpd" | grep -Ei 'login|auth|passwd|upload|upgrade|update|jffs|csrf|token|referer|cookie|session|https?|ssl' | head -n 2000 || true
+          } > reports/web-auth-delta.txt
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
