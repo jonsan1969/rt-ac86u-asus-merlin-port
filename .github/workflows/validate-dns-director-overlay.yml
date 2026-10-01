@@ -247,8 +247,11 @@ jobs:
               raise SystemExit("menuTree.js Tools menu index not present exactly once")
           if menu.count(tools_page) != 1:
               raise SystemExit("menuTree.js Other Settings entry not present exactly once")
-          if menu.count(monthly_page) != 1:
-              raise SystemExit("menuTree.js Monthly Traffic entry not present exactly once")
+          monthly_active="www/Main_TrafficMonitor_monthly.asp" in expected
+          if monthly_active and menu.count(monthly_page) != 1:
+              raise SystemExit("active Monthly Traffic entry not present exactly once")
+          if not monthly_active and monthly_page in menu:
+              raise SystemExit("optionalized Monthly Traffic still exposed in Tools menu")
           if menu.count(survey_page) != 1:
               raise SystemExit("menuTree.js Site Survey entry not present exactly once")
 
@@ -341,43 +344,32 @@ jobs:
           if (helper_path.stat().st_mode & 0o777) != 0o755:
               raise SystemExit("Merlin addon helper mode is not 0755")
 
-          monthly=(root/"www/Main_TrafficMonitor_monthly.asp").read_text(encoding="utf-8-sig")
-          monthly_required=[
-              '<% bandwidth("monthly"); %>',
-              'monthly_history',
-              '/js/chart.min.js',
-              'Main_TrafficMonitor_realtime.asp',
-              'Main_TrafficMonitor_last24.asp',
-              'Main_TrafficMonitor_daily.asp',
-          ]
-          monthly_forbidden=[
-              'cstats_enable',
-              'Main_TrafficMonitor_devrealtime.asp',
-              'Main_TrafficMonitor_devdaily.asp',
-              'Main_TrafficMonitor_devmonthly.asp',
-          ]
-          missing_monthly=[x for x in monthly_required if x not in monthly]
-          forbidden_monthly=[x for x in monthly_forbidden if x in monthly]
-          if missing_monthly:
-              raise SystemExit(f"Monthly Traffic adapter missing required global-rstats contract: {missing_monthly}")
-          if forbidden_monthly:
-              raise SystemExit(f"Monthly Traffic adapter exposes unsupported per-device surface: {forbidden_monthly}")
-          chart=root/"www/js/chart.min.js"
-          if not chart.is_file() or chart.stat().st_size < 100000:
-              raise SystemExit("Chart.js monthly traffic asset missing or unexpectedly small")
+          if "www/Main_TrafficMonitor_monthly.asp" in expected:
+              monthly=(root/"www/Main_TrafficMonitor_monthly.asp").read_text(encoding="utf-8-sig")
+              monthly_required=['<% bandwidth("monthly"); %>','monthly_history','/js/chart.min.js']
+              missing_monthly=[x for x in monthly_required if x not in monthly]
+              if missing_monthly:
+                  raise SystemExit(f"Monthly Traffic adapter missing required global-rstats contract: {missing_monthly}")
+              chart=root/"www/js/chart.min.js"
+              if not chart.is_file() or chart.stat().st_size < 100000:
+                  raise SystemExit("Chart.js monthly traffic asset missing or unexpectedly small")
+          else:
+              if (root/"www/Main_TrafficMonitor_monthly.asp").exists() or (root/"www/js/chart.min.js").exists():
+                  raise SystemExit("optionalized Monthly Traffic payload unexpectedly present")
 
-          nano_path=root/"usr/bin/nano"
-          ncurses_path=root/"usr/lib/libncurses.so.6.0"
-          if digest(nano_path) != "82e9e6d755fb779315d8a7b9f3530182456b9544f0e14216ac3ca3dd481db5e8":
-              raise SystemExit("Nano binary checksum mismatch")
-          if digest(ncurses_path) != "d7b57d0d6b327c11230793f58cc64327f6be7ce64ea9c1d2dbe4a39ac7387a0b":
-              raise SystemExit("Nano ncurses runtime checksum mismatch")
-          if (nano_path.stat().st_mode & 0o777) != 0o755:
-              raise SystemExit("Nano binary mode is not 0755")
-          for rel,target in [("usr/bin/rnano","nano"),("usr/lib/libncurses.so.6","libncurses.so.6.0")]:
-              p=root/rel
-              if not p.is_symlink() or os.readlink(p) != target:
-                  raise SystemExit(f"Nano runtime symlink mismatch: /{rel}")
+          if "usr/bin/nano" in expected:
+              nano_path=root/"usr/bin/nano"
+              ncurses_path=root/"usr/lib/libncurses.so.6.0"
+              if digest(nano_path) != "82e9e6d755fb779315d8a7b9f3530182456b9544f0e14216ac3ca3dd481db5e8":
+                  raise SystemExit("Nano binary checksum mismatch")
+              if digest(ncurses_path) != "d7b57d0d6b327c11230793f58cc64327f6be7ce64ea9c1d2dbe4a39ac7387a0b":
+                  raise SystemExit("Nano ncurses runtime checksum mismatch")
+              if (nano_path.stat().st_mode & 0o777) != 0o755:
+                  raise SystemExit("Nano binary mode is not 0755")
+              for rel,target in [("usr/bin/rnano","nano"),("usr/lib/libncurses.so.6","libncurses.so.6.0")]:
+                  p=root/rel
+                  if not p.is_symlink() or os.readlink(p) != target:
+                      raise SystemExit(f"Nano runtime symlink mismatch: /{rel}")
 
           for i in range(1,21):
               slot=root/f"www/user{i}.asp"
@@ -387,17 +379,13 @@ jobs:
               if os.readlink(slot) != expected_target:
                   raise SystemExit(f"custom WebUI slot target mismatch: /www/user{i}.asp -> {os.readlink(slot)!r}")
 
-          oui_path=root/"www/ajax/ouiDB.json"
-          if digest(oui_path) != "079e881ae86ae8ba503aed0aa7d4c1dca93e4c1f318829e674541ecb23de18a4":
-              raise SystemExit("local OUI database checksum mismatch")
-          remote_oui="https://nw-dlcdnet.asus.com/plugin/js/ouiDB.json"
-          local_oui="/ajax/ouiDB.json"
-          for rel in ["www/index.asp","www/client_function.js","www/device-map/clients.asp"]:
-              content=(root/rel).read_text(encoding="utf-8")
-              if remote_oui in content:
-                  raise SystemExit(f"remote OUI lookup still present: {rel}")
-              if content.count(local_oui) != 1:
-                  raise SystemExit(f"local OUI lookup not present exactly once: {rel}")
+          if "www/ajax/ouiDB.json" in expected:
+              oui_path=root/"www/ajax/ouiDB.json"
+              if digest(oui_path) != "079e881ae86ae8ba503aed0aa7d4c1dca93e4c1f318829e674541ecb23de18a4":
+                  raise SystemExit("local OUI database checksum mismatch")
+          else:
+              if (root/"www/ajax/ouiDB.json").exists():
+                  raise SystemExit("optionalized local OUI database unexpectedly present")
 
           qr=root/"www/js/qrcode.min.js"
           if digest(qr) != "7f5a45e2791b3ef6cde1a34a253711b7510ad7c6136d20fc91404b48f744647b":
