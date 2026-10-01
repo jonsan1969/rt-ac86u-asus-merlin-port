@@ -21,6 +21,7 @@ nvget() {
 
 {
 	echo "K4A_RTAC86U_52334_READ_ONLY_PREFLIGHT"
+	echo "expected_candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3"
 	echo "timestamp=$(date 2>/dev/null || true)"
 	echo "productid=$(nvget productid)"
 	echo "firmver=$(nvget firmver)"
