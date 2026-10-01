@@ -135,6 +135,24 @@ jobs:
             echo '=== ASUS52334 httpd strings ==='
             strings -a "$AS/usr/sbin/httpd" | grep -Ei 'login|auth|passwd|upload|upgrade|update|jffs|csrf|token|referer|cookie|session|https?|ssl' | head -n 2000 || true
           } > reports/web-auth-delta.txt
+      - name: Runtime exposure and persistence probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          {
+            echo '=== koolshare/softcenter startup and persistence ==='
+            grep -RInaE 'koolshare|softcenter|kscore|skipd|jffs2_scripts|service-event|services-start|nat-start|firewall-start' "$KC"/etc "$KC"/rom "$KC"/usr "$KC"/sbin 2>/dev/null | head -n 6000 || true
+            echo '=== listener/bind/port indicators in KoolCenter additions ==='
+            find "$KC"/rom/etc/koolshare "$KC"/koolshare -type f 2>/dev/null -print0 | xargs -0 grep -InaE '0\.0\.0\.0|127\.0\.0\.1|listen|server\.port|:[0-9]{2,5}|iptables|INPUT|ACCEPT|DROP|firewall|wan0|wan_if|lan_if' 2>/dev/null | head -n 5000 || true
+            echo '=== remote admin / web exposure indicators ==='
+            grep -RInaE 'http_enable|https_lanport|misc_http_x|misc_httpsport_x|http_lanport|webdav|enable_webdav|wan.*http|remote.*admin' "$KC"/etc "$KC"/rom "$KC"/usr "$KC"/sbin 2>/dev/null | head -n 4000 || true
+            echo '=== crypto/ssl symlink topology ==='
+            find "$KC"/lib "$KC"/usr/lib -maxdepth 2 \( -name 'libssl*' -o -name 'libcrypto*' -o -name 'libcurl*' \) -exec ls -l {} \; 2>/dev/null
+            echo '=== Merlin crypto/ssl symlink topology ==='
+            find "$ME"/lib "$ME"/usr/lib -maxdepth 2 \( -name 'libssl*' -o -name 'libcrypto*' -o -name 'libcurl*' \) -exec ls -l {} \; 2>/dev/null
+          } > reports/runtime-exposure-persistence.txt
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
