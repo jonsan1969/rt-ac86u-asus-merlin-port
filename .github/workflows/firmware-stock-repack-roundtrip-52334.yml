@@ -155,7 +155,7 @@ jobs:
 
           rm -rf work/original-extracted
           mkdir -p work/original-extracted
-          sudo "$EXTRACT" -o work/original-extracted work/stock.ubi \
+          sudo "$EXTRACT" -k -x -o work/original-extracted work/stock.ubi \
             > reports/stock-ubireader-extract.txt 2>&1
           "$DISPLAY" work/stock.ubi > reports/stock-ubi-info.txt 2>&1
 
@@ -288,7 +288,7 @@ jobs:
 
           rm -rf work/rebuilt-extracted
           mkdir -p work/rebuilt-extracted
-          sudo "$EXTRACT" -o work/rebuilt-extracted work/rebuilt.ubi \
+          sudo "$EXTRACT" -k -x -o work/rebuilt-extracted work/rebuilt.ubi \
             > reports/rebuilt-ubireader-extract.txt 2>&1
           "$DISPLAY" work/rebuilt.ubi > reports/rebuilt-ubi-info.txt 2>&1
 
