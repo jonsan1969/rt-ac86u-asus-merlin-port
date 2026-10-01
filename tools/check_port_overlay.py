@@ -9,9 +9,10 @@ def main():
  seen=set()
  for i,e in enumerate(d.get("entries",[]),1):
   t=e.get("target",""); typ=e.get("type","copy"); assert t.startswith("/") and t not in seen and not protected(t)
-  assert typ in {"copy","symlink","text_replace","text_replace_multi"}
+  assert typ in {"copy","symlink","symlink_replace","text_replace","text_replace_multi"}
   if typ=="copy": assert e.get("policy","add_only")=="add_only" and e.get("source") and e.get("sha256") and e.get("source_kind","merlin") in {"merlin","repo"}
   elif typ=="symlink": assert e.get("policy")=="add_only" and e.get("link_target")
+  elif typ=="symlink_replace": assert e.get("policy")=="replace_exact" and e.get("target_link") and e.get("link_target")
   elif typ=="text_replace": assert e.get("policy")=="patch_exact" and e.get("target_sha256") and "find" in e and "replace" in e and int(e.get("count",1))>0
   else:
    assert e.get("policy")=="patch_exact" and e.get("target_sha256")
