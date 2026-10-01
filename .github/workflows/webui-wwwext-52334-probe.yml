@@ -1,0 +1,55 @@
+name: Probe ASUS 52334 custom WebUI CGI surface
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/webui-wwwext-52334-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binwalk mtd-utils squashfs-tools p7zip-full unzip
+          python3 -m pip install --user --break-system-packages ubi-reader
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Extract verified ASUS 52334
+        run: |
+          set -euo pipefail
+          mkdir -p work/asus reports
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 30 -o work/asus.zip \
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+          echo 'e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61  work/asus.zip' | sha256sum -c -
+          unzip -q work/asus.zip -d work/asus
+          cd work/asus
+          FW="$(find . -maxdepth 1 -type f -name '*.w' -print -quit)"
+          binwalk -Me "$FW" >/dev/null
+          ROOT="$(find . -type d -name rootfs_ubifs -print -quit)"
+          test -n "$ROOT"
+          echo "ROOT=$PWD/${ROOT#./}" >> "$GITHUB_ENV"
+      - name: Probe HTTPD user-page and ASP handling
+        run: |
+          set -euo pipefail
+          R="$ROOT"; O=reports/wwwext-httpd.txt; : > "$O"
+          echo '=== FILE SURFACE ===' >> "$O"
+          find "$R/www" -maxdepth 2 \( -name 'user*' -o -path '*/user/*' \) -printf '%P %y %l\n' 2>/dev/null | sort >> "$O" || true
+          echo '=== HTTPD STRINGS ===' >> "$O"
+          strings -a "$R/usr/sbin/httpd" | grep -Ei 'wwwext|/var/www|user[0-9]|user/|\.asp|ej_|web_hook|do_ej|template' | sort -u >> "$O" || true
+          echo '=== USER SLOT REFERENCES ===' >> "$O"
+          grep -RInaE 'wwwext|/var/wwwext|user[0-9]+\.asp|/www/user' "$R/www" "$R/rom" 2>/dev/null | head -n 300 >> "$O" || true
+          echo '=== MONTHLY HANDLER CANARIES ===' >> "$O"
+          strings -a "$R/usr/sbin/httpd" | grep -E 'bandwidth|monthly_history|rstats' | sort -u >> "$O" || true
+          cat "$O"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wwwext-httpd-probe
+          path: reports/wwwext-httpd.txt
+          if-no-files-found: error
