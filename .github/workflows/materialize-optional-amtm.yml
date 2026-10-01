@@ -27,9 +27,8 @@ jobs:
           set -euo pipefail
           p=work/merlin/amtm
           test -f "$p"
-          echo '283fa24cec4cb7df84fa6d7f1e5cde82b164f28a675ebe5167127c8a891bc7ba  ' "$p" | tr -d '\n' > /tmp/check
-          printf '\n' >> /tmp/check
-          sha256sum -c /tmp/check
+          got="$(sha256sum "$p" | awk '{print $1}')"
+          test "$got" = '283fa24cec4cb7df84fa6d7f1e5cde82b164f28a675ebe5167127c8a891bc7ba'
           sh -n "$p"
           grep -Fq '/jffs/addons/amtm' "$p"
           grep -Fq 'jffs2_scripts' "$p"
