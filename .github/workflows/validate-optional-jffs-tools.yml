@@ -1,0 +1,54 @@
+name: Validate optional JFFS tools
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - optional/install-tools.sh
+      - optional/verify-tools.sh
+      - optional/uninstall-tools.sh
+      - ports/files/usr/bin/nano
+      - ports/files/usr/bin/scp
+      - ports/files/usr/lib/libncurses.so.6.0
+      - .github/workflows/validate-optional-jffs-tools.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static shell validation
+        run: |
+          sh -n optional/install-tools.sh
+          sh -n optional/verify-tools.sh
+          sh -n optional/uninstall-tools.sh
+      - name: Install into disposable JFFS analogue
+        run: |
+          root="$RUNNER_TEMP/jffs/addons/merlin-tools"
+          optional/install-tools.sh "$root"
+          optional/verify-tools.sh "$root"
+          test -x "$root/bin/nano.real"
+          test -x "$root/bin/nano"
+          test -x "$root/bin/scp"
+          test "$(readlink "$root/bin/rnano")" = nano
+          test "$(readlink "$root/lib/libncurses.so.6")" = libncurses.so.6.0
+          grep -Fq 'Nothing here auto-starts.' "$root/README"
+      - name: Verify Nano wrapper library contract
+        run: |
+          root="$RUNNER_TEMP/jffs/addons/merlin-tools"
+          grep -Fq 'LD_LIBRARY_PATH' "$root/bin/nano"
+          grep -Fq 'nano.real' "$root/bin/nano"
+          file "$root/bin/nano.real" "$root/bin/scp"
+      - name: Verify uninstall boundary
+        run: |
+          root="$RUNNER_TEMP/jffs/addons/merlin-tools"
+          optional/uninstall-tools.sh "$root"
+          test ! -e "$root"
+          if optional/uninstall-tools.sh /tmpx/unsafe; then
+            echo "unsafe uninstall path was accepted" >&2
+            exit 1
+          fi
