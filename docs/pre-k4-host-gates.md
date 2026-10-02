@@ -29,7 +29,9 @@ A PASS ends at the host staging boundary. The resulting selected-family director
 
 ## CI evidence
 
-Run `37006423674` — **SUCCESS (current bundle)**.\n\nHistorical logic-validation run `36997859437` is also SUCCESS against the preceding preservation bundle.
+Run `37006423674` — **SUCCESS against the preceding preservation kit**.
+
+Historical logic-validation run `36997859437` is also SUCCESS against an earlier preservation bundle.
 
 CI proves the wrapper can chain the exact current preserved bundle through:
 
@@ -45,4 +47,4 @@ The wrapper is intentionally kept outside the preserved hardware bundle. It depe
 
 ## Current preservation compatibility
 
-Current orchestration CI run `37006423674` validates the then-current preservation kit end-to-end and closes the orchestration logic/current-bundle compatibility gate. For any later preservation refresh, use that extracted kit's `BUNDLE-README.txt` and `BUNDLE-MANIFEST.txt` for identity, re-pin/run the external bundle verifier, and re-run this orchestration workflow before physical use. The bundle-local identity files avoid making copied snapshot docs depend on the artifact that contains them.
+The orchestration workflow is re-pinned to normalized preservation run `37011499307` / artifact `11228371174`. Its external bundle verifier is CI-green in run `37017852039`. A fresh orchestration CI result is required before physical use of this exact normalized kit. Bundle-local `BUNDLE-README.txt` and `BUNDLE-MANIFEST.txt` remain the extracted-kit identity authority.
