@@ -46,9 +46,10 @@ After the router is confirmed stable:
 1. run `scripts/k4-router-preflight.sh`;
 2. run `scripts/runtime-feature-preflight.sh`;
 3. copy both archives off-router;
-4. run the host verifier **without** candidate-canary mode;
-5. inspect baseline dmesg, loaded modules, symbols and stock module metadata;
-6. only then begin controlled K4, one family at a time:
+4. run the host evidence verifier **without** candidate-canary mode;
+5. run the host-side K4 symbol-name preflight against this K4a archive, the exact preserved modules and dependency-closure report; require `K4_SYMBOL_PREFLIGHT_PASS`;
+6. inspect baseline dmesg, loaded modules, symbol-preflight report and stock module metadata;
+7. only then begin controlled K4, one family at a time:
    - ipset / xt_set;
    - Cake;
    - CIFS;
@@ -82,6 +83,8 @@ Before optional module activation:
    ```
 
 Candidate mode requires the five immutable overlay hashes and the custom-WebUI aliases.
+
+8. before any candidate-side optional-module repeat, run `scripts/verify-k4-symbol-preflight.py` again against the **fresh candidate K4a archive** and the same exact preserved module/closure inputs; require a fresh `K4_SYMBOL_PREFLIGHT_PASS`.
 
 A PASS establishes the intended guarded overlay/runtime fingerprint and the 52334 read-only evidence baseline. It is still not a flashability verdict.
 
