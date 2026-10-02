@@ -4,7 +4,7 @@ K4 host-side symbol verifier fixture CI is now SUCCESS: run `36977189909`. Stati
 
 K4 symbol-preflight CI run `36977100322` is a superseded static-guard failure only: the mutation grep matched the verifier's required evidence marker string `NO_REBOOT`. No synthetic module fixture or symbol availability case ran, so there is no K4 symbol conclusion from this run. Its log was fetched exactly once and must never be fetched again. The guard will exclude safety-marker declarations while continuing to reject actual mutation command tokens.
 
-Preservation run `36976555090` is the current dependency-complete hardware bundle refresh. Artifact `11213716874`, ZIP digest `sha256:627902aab2ceba7b3f301febb44ed820291eb8f6ca1ff1316f2256c0feddf4ca`, expires 2026-12-31. Its manifest records docs snapshot commit `f5ff75ba81a6b635e1415059dce184972c6332ec`; later self-reference-only doc commits do not invalidate the preserved binaries/reports. Firmware identity remains the internal .w SHA-256.
+Preservation run `36977559328` is the current dependency-complete hardware bundle refresh. Artifact `11214106455`, ZIP digest `sha256:399ad74f1456f63109301e16201fec32371753fc7500896515b9031b3b92fa66`, expires 2026-12-31. Its manifest records docs snapshot commit `40f5a4ece1b05b5b39f45e0504cde60226165a4c`; later self-reference-only doc commits do not invalidate the preserved binaries/reports. Firmware identity remains the internal .w SHA-256.
 
 K4 exact module dependency closure is now SUCCESS: run `36976006891`, artifact `k4-module-dependency-closure` id `11212893202`, ZIP digest `sha256:55df58d1682d82e8de79030f0c1e425beced4d17632013ba405271e1b65553b7`, expires 2026-12-31. The gate analyzes the exact preserved 18 K2 + 9 K3 modules by matching undefined ELF symbols to `__ksymtab_*` exports. It finds no cross-family optional-module dependency and no declared external module dependency. NFS order is `sunrpc -> lockd -> nfs -> nfsd -> nfsv2 -> nfsv3`, unload reverse; CIFS is standalone. This does not prove 52334 kernel-symbol availability; K4a + physical load remain mandatory. Log for `36976006891` was fetched exactly once.
 
@@ -12,7 +12,7 @@ K4 dependency closure run `36975779541` is SUCCESS as a modinfo/inventory diagno
 
 K4 exact-module dependency closure run `36975679917` is a superseded tooling failure only. It successfully downloaded preservation run `36972221014`, found 18 K2 + 9 K3 modules and verified the pinned K3 hashes. The Python analyzer then saw zero files because it used non-recursive `glob("*.ko")` below nested artifact directories. Fix is `rglob("*.ko")`. No dependency/ABI conclusion was reached from the failed run. Its log was fetched exactly once and must never be fetched again.
 
-Latest hardware-preservation checkpoint: run `36976555090` is SUCCESS. It verifies and carries the official ASUS 386_52334 stock image, exact UNVALIDATED candidate, K2/K3 modules, the ipset/WireGuard/Cake temporary K4 userspace companions, and dependency-closure report run `36976006891`. Artifact `11213716874`, ZIP digest `sha256:627902aab2ceba7b3f301febb44ed820291eb8f6ca1ff1316f2256c0feddf4ca`, expires 2026-12-31. Firmware identity remains the internal .w SHA-256.
+Latest hardware-preservation checkpoint: run `36977559328` is SUCCESS. It verifies and carries the official ASUS 386_52334 stock image, exact UNVALIDATED candidate, K2/K3 modules, the ipset/WireGuard/Cake temporary K4 userspace companions, dependency-closure report run `36976006891`, and the K4 symbol-preflight verifier/docs validated by run `36977341893`. Artifact `11214106455`, ZIP digest `sha256:399ad74f1456f63109301e16201fec32371753fc7500896515b9031b3b92fa66`, expires 2026-12-31. Firmware identity remains the internal .w SHA-256.
 
 K4 Cake userspace companion is now SUCCESS: run `36972043724` builds c553's CAKE-aware `tc` from iproute2 5.11.0 with the pinned ARM32 HND toolchain. CI proves ARM32/EABI5, `cake_qdisc_util` is linked, `tc -V` reports 5.11.0, the local `cake help` parser exposes CAKE options without qdisc mutation, and the Unix-preserving tarball re-verifies after extraction. Artifact `k4-cake-userspace-51997` id `11212107182`, ZIP digest `sha256:4bc49da98adc4a32a0945a96a335aaf7b285471ba514dd330ac1fb5af898687b`, expires 2026-12-31. Failed run `36971869155` was only a subdirectory-build include-path mistake; its log was fetched once and must never be fetched again.
 
@@ -91,11 +91,11 @@ Original candidate artifact: `11193520953`.
 
 ## Preserved hardware-validation inputs
 
-Run `36976555090` is SUCCESS.
+Run `36977559328` is SUCCESS.
 
 Artifact: `hardware-validation-bundle-eac8a777`  
-Artifact id: `11213716874`  
-ZIP digest: `sha256:627902aab2ceba7b3f301febb44ed820291eb8f6ca1ff1316f2256c0feddf4ca`  
+Artifact id: `11214106455`  
+ZIP digest: `sha256:399ad74f1456f63109301e16201fec32371753fc7500896515b9031b3b92fa66`  
 Expiry: 2026-12-31.
 
 The workflow verifies the official ASUS 386_52334 stock image, exact candidate hash/size, K2/K3 module identities, the Unix-preserving ipset, WireGuard and Cake K4 companions, and the exact dependency-closure report, and carries the current collectors, hardware-evidence verifier, M49 response verifier, physical sequence and recovery/handoff documents.
@@ -124,7 +124,7 @@ Hash-bound CI: `36924632712` — SUCCESS.
 
 Both collectors remain read-only and are bound to the current candidate hash.
 
-Candidate evidence skeleton revalidation: run `36968749755` — SUCCESS after adding the host-side evidence-verifier prerequisite. No mutation capability was introduced.
+Candidate evidence skeleton revalidation: run `36977544208` — SUCCESS with both the host-side hardware-evidence verifier and K4 symbol-preflight prerequisites. No mutation capability was introduced.
 
 ## Hardware evidence intake gate
 
