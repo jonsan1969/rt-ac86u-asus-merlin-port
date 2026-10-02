@@ -173,8 +173,21 @@ jobs:
             echo '=== libmnl NEEDED ==='
             awk -F'[][]' '/NEEDED/{print $2}' reports/libmnl.dynamic.txt
           } | tee reports/needed-closure.txt
-          qemu-arm -L "$SYSROOT" -E LD_LIBRARY_PATH="$PWD/bundle/lib" bundle/bin/ipset.real --version 2>&1 | tee reports/ipset-version.txt
-          grep -Eiq 'ipset v7\.6|v7\.6' reports/ipset-version.txt
+          set +e
+          qemu-arm -L "$SYSROOT" -E LD_LIBRARY_PATH="$PWD/bundle/lib" bundle/bin/ipset.real --version > reports/ipset-version.txt 2>&1
+          qemu_rc=$?
+          set -e
+          cat reports/ipset-version.txt
+          grep -Fq 'ipset v7.6, protocol version: 7' reports/ipset-version.txt
+          case "$qemu_rc" in
+            0) ;;
+            1) grep -Fq 'Cannot open session to kernel.' reports/ipset-version.txt ;;
+            *) echo "unexpected qemu ipset exit status: $qemu_rc" >&2; exit 1 ;;
+          esac
+          if grep -Eiq 'not found|No such file|error while loading shared libraries|Invalid ELF|Exec format' reports/ipset-version.txt; then
+            echo 'QEMU loader/ABI failure detected' >&2
+            exit 1
+          fi
 
       - name: Record exact bundle hashes
         run: |
