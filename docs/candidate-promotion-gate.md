@@ -24,7 +24,7 @@ Passing CI alone is never sufficient for flashability.
 
 ## Evidence preparation
 
-Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. Its checklist now names the complete host trust chain: preserved-bundle verification, hardware-evidence verification, K4 symbol-name preflight, pre-K4 host orchestration and exact one-family staging before any mutating K4 test. The script remains non-mutating and rejects candidates not explicitly marked UNVALIDATED; its updated CI is the active validation gate.
+Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. Its checklist now names the complete host trust chain: preserved-bundle verification, hardware-evidence verification, K4 symbol-name preflight, pre-K4 host orchestration and exact one-family staging before any mutating K4 test. The script remains non-mutating and rejects candidates not explicitly marked UNVALIDATED; updated CI run `36998249913` passes syntax, mutation, positive and fail-closed tests.
 
 ## Current quarantined candidate
 
