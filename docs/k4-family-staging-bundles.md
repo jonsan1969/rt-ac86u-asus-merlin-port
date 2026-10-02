@@ -98,11 +98,11 @@ The five family tarballs remain temporary K4 staging material only. They do not 
 
 ## Preserved with the complete hardware bundle
 
-Preservation run `36992428232` — **SUCCESS** — downloads artifact `11213839004`, verifies `package-sha256.txt`, re-extracts all five family tarballs, rechecks each internal manifest, and then embeds them in the 90-day `hardware-validation-bundle-eac8a777`.
+Preservation run `36995684511` — **SUCCESS** — downloads artifact `11213839004`, verifies `package-sha256.txt`, re-extracts all five family tarballs, rechecks each internal manifest, and then embeds them in the 90-day `hardware-validation-bundle-eac8a777`.
 
-Preserved artifact id: `11220066757`.  
-Preserved artifact ZIP digest: `sha256:f496c5ea2125b0b7c6ecb6777370f6b71e4075f0ac0f67ef985ad867515b47f8`.  
-Expiry: `2026-12-31T09:54:03Z`.
+Preserved artifact id: `11221372631`.  
+Preserved artifact ZIP digest: `sha256:7bf47721147dbd49c52ec0af2e065499b3b35efada44057771588b163b2a37a1`.  
+Expiry: `2026-12-31T10:28:43Z`.
 
 This preservation step changes transport/readiness only. It does not add runtime evidence or authorize loading any module.
 
@@ -128,7 +128,7 @@ Require `K4_FAMILY_STAGING_PASS family=<family>` before copying the resulting si
 
 Run `36994228096` — **SUCCESS**.
 
-The validation workflow uses the exact family packages preserved by run `36992428232` and proves:
+The validation workflow uses the exact family packages preserved by run `36995684511` and proves:
 
 - all five families pass the pinned outer archive hashes and selected-family manifest/file inventory;
 - each selected family extracts to a clean host staging directory;

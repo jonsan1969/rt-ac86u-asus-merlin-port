@@ -24,7 +24,7 @@ Test one family at a time; do not mix failures.
 4. NFS/SUNRPC/LOCKD;
 5. WireGuard.
 
-Dependencies must be loaded before dependants. For physical staging, use only the isolated family tarballs produced by run `36978077020` and preserved inside hardware bundle run `36992428232`; verify `package-sha256.txt` before selecting a family and the selected family's `MANIFEST.txt` after extraction. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
+Dependencies must be loaded before dependants. For physical staging, use only the isolated family tarballs produced by run `36978077020` and preserved inside hardware bundle run `36995684511`; verify `package-sha256.txt` before selecting a family and the selected family's `MANIFEST.txt` after extraction. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
 
 ### Exact artifact-internal dependency order
 
