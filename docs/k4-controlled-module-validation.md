@@ -10,7 +10,7 @@ This protocol is intentionally **not** an auto-run script. K4 changes live kerne
 - K4a archive and general runtime archive were collected first and both embed the candidate hash above;
 - configuration/JFFS backup and recovery access are prepared;
 - no candidate module is installed into a boot/autoload path;
-- K2/K3 artifacts are copied only to a temporary staging directory;
+- the full preserved 27-module K2/K3 set is retained on the host for symbol-preflight only; the router receives only one verified `k4-family-<family>.tar.gz` at a time, extracted below `/tmp`;
 - stock module tree, `/proc/modules`, `/proc/kallsyms` and pre-test `dmesg` are preserved.
 - host-side `scripts/verify-k4-symbol-preflight.py` has been run against this K4a archive, the exact staged K2/K3 modules and preserved closure report, and returned `K4_SYMBOL_PREFLIGHT_PASS` before the first load attempt.
 
@@ -24,7 +24,7 @@ Test one family at a time; do not mix failures.
 4. NFS/SUNRPC/LOCKD;
 5. WireGuard.
 
-Dependencies must be loaded before dependants. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
+Dependencies must be loaded before dependants. For physical staging, use only the isolated family tarballs produced by run `36978077020` and preserved inside hardware bundle run `36992428232`; verify `package-sha256.txt` before selecting a family and the selected family's `MANIFEST.txt` after extraction. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
 
 ### Exact artifact-internal dependency order
 
@@ -45,15 +45,16 @@ The ELF gate found no dependency from one optional family into another and no de
 
 For each family:
 
-1. capture `/proc/modules` and a fresh dmesg boundary;
-2. require the saved K4 symbol-preflight PASS report for this exact K4a archive/module set, then re-check any family-specific dependency assumptions;
-3. load only the minimum family needed for the test;
-4. immediately capture command status and new dmesg lines;
-5. if there is an unknown symbol, version/format error, Oops/WARN, HND/network instability, or unexpected dependency: **STOP**, unload what was added if safe, and mark the family FAIL;
-6. if load succeeds, perform only the feature-specific smoke test;
-7. unload in reverse dependency order where supported;
-8. verify networking, routing and HND acceleration behavior remain normal;
-9. capture post-test `/proc/modules` and dmesg.
+1. on the host, select exactly one `k4-family-<family>.tar.gz`, verify it against `package-sha256.txt`, extract it to a clean staging directory, and verify every SHA-256 line in its `MANIFEST.txt`; copy only that verified family directory to a fresh `/tmp/k4-<family>` path on the router;
+2. capture `/proc/modules` and a fresh dmesg boundary;
+3. require the saved K4 symbol-preflight PASS report for this exact K4a archive/full 27-module set, then re-check any family-specific dependency assumptions;
+4. load only the minimum family needed for the test;
+5. immediately capture command status and new dmesg lines;
+6. if there is an unknown symbol, version/format error, Oops/WARN, HND/network instability, or unexpected dependency: **STOP**, unload what was added if safe, and mark the family FAIL;
+7. if load succeeds, perform only the feature-specific smoke test;
+8. unload in reverse dependency order where supported;
+9. verify networking, routing and HND acceleration behavior remain normal;
+10. capture post-test `/proc/modules` and dmesg.
 
 A PASS applies only to the exact candidate hash, exact K2/K3 module hashes, and exact ASUS 386_52334 runtime evidence.
 
@@ -139,6 +140,6 @@ python3 scripts/verify-k4-symbol-preflight.py \
 
 Require `K4_SYMBOL_PREFLIGHT_PASS`.
 
-CI run `36977341893` validates the verifier logic and its default project profile against the exact preserved 27-module artifact set. A real PASS can only be produced from the future router's ASUS-52334 K4a archive.
+CI run `36977341893` validates the verifier logic and its default project profile against the exact preserved 27-module artifact set. The full 27-module set is an offline host-side analysis input here; it is not a router staging instruction. A real PASS can only be produced from the future router's ASUS-52334 K4a archive.
 
 A missing strong symbol is STOP before any load. A PASS is still not load authorization by itself: `/proc/kallsyms` name presence cannot prove `EXPORT_SYMBOL` visibility, MODVERSIONS/CRC compatibility, relocation success or runtime stability. The controlled physical load remains the authoritative next gate.
