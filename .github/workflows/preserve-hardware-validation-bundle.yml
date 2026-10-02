@@ -120,10 +120,15 @@ jobs:
           cp scripts/prepare-candidate-evidence.sh bundle/scripts/
           cp scripts/k4-router-preflight.sh bundle/scripts/
           cp scripts/runtime-feature-preflight.sh bundle/scripts/
+          cp scripts/verify-hardware-evidence.py bundle/scripts/
+          cp scripts/verify-m49-ej-response.py bundle/scripts/
           cp docs/candidate-promotion-gate.md bundle/docs/
           cp docs/k4-controlled-module-validation.md bundle/docs/
           cp docs/k4-router-preflight.md bundle/docs/
           cp docs/monthly-traffic-optional-delivery.md bundle/docs/
+          cp docs/m49-ej-response-evidence.md bundle/docs/
+          cp docs/hardware-evidence-verifier.md bundle/docs/
+          cp docs/physical-validation-sequence.md bundle/docs/
           cp docs/preflash-backup-recovery.md bundle/docs/
           cp docs/thread-handoff.md bundle/docs/
           cp STATUS.md bundle/docs/
