@@ -217,6 +217,30 @@ jobs:
               echo "--- $x"; strings -a "$KC/usr/sbin/httpd" 2>/dev/null | grep -F "$x" || true
             done
           } > "$OUT"
+      - name: ELF dependency and code-section audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          OUT=reports/elf-security-dependencies.txt
+          : > "$OUT"
+          for rel in /usr/sbin/httpd /sbin/rc /usr/sbin/wget /usr/sbin/lighttpd /usr/sbin/miniupnpd /usr/sbin/openvpn /usr/sbin/dropbear /usr/sbin/dnsmasq /bin/busybox; do
+            echo "===== $rel =====" >> "$OUT"
+            for spec in "KC:$KC" "MERLIN:$ME" "ASUS52334:$AS"; do
+              tag="${spec%%:*}"; root="${spec#*:}"; p="$root$rel"
+              echo "--- $tag" >> "$OUT"
+              if [ -f "$p" ]; then
+                sha256sum "$p" >> "$OUT"
+                readelf -d "$p" 2>/dev/null | grep -E 'NEEDED|SONAME|RPATH|RUNPATH' >> "$OUT" || true
+                readelf -n "$p" 2>/dev/null | grep -E 'Build ID|GNU' >> "$OUT" || true
+                objcopy --dump-section .text=/tmp/text.bin "$p" 2>/dev/null && { printf '.text '; sha256sum /tmp/text.bin; } >> "$OUT" || true
+              else
+                echo MISSING >> "$OUT"
+              fi
+            done
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
