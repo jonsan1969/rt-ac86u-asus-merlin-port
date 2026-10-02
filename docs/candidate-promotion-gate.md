@@ -52,7 +52,7 @@ The bundle manifest records `preservation_run=37011499307`, docs/source snapshot
 
 ## Evidence intake gate
 
-Before using files from the preserved hardware-validation artifact, run `scripts/verify-hardware-validation-bundle.py --bundle-root <extracted-bundle>` and require `HARDWARE_VALIDATION_BUNDLE_PASS`. The verifier is now pinned to normalized preservation run `37011499307` / exact 105-file manifest `fc682505...9f9e33`, including bundle-local README identity checks; fresh current-pin CI is required. Historical runs `37003596484` and `36996895881` apply only to superseded bundles. This proves bundle integrity/provenance only.
+Before using files from the preserved hardware-validation artifact, run `scripts/verify-hardware-validation-bundle.py --bundle-root <extracted-bundle>` and require `HARDWARE_VALIDATION_BUNDLE_PASS`. Normalized-pin CI run `37017852039` validates preservation run `37011499307` / exact 105-file manifest `fc682505...9f9e33`, including bundle-local README identity and fail-closed tamper/injection cases. Historical runs `37003596484` and `36996895881` apply only to superseded bundles. This proves bundle integrity/provenance only.
 
 Before any mutating K4 family test, run the host-side verifier described in `docs/hardware-evidence-verifier.md`.
 
@@ -60,7 +60,7 @@ Then run the read-only symbol-name gate in `docs/k4-symbol-preflight.md` against
 
 Before copying a family to the router, run `scripts/verify-k4-family-staging.py` against the preserved `k4-family-staging` directory and require `K4_FAMILY_STAGING_PASS family=<family>`. CI run `36994228096` validates all five exact families and fail-closed corruption/output cases. This staging PASS is transport/inventory evidence only and does not replace K4 symbol or load/runtime gates.
 
-For operator convenience, `scripts/prepare-k4-host-gates.py` may run the preserved-bundle verifier, hardware-evidence verifier, symbol-name preflight and selected-family staging gate in sequence. Require `PRE_K4_HOST_GATES_PASS family=<family>`. Current-bundle CI run `37006423674` validates both stock-baseline and candidate-canary paths against preservation run `36998454435`; the underlying current bundle pin is independently green in run `37003596484`. This does not collapse the underlying evidence classes or authorize module loading.
+For operator convenience, `scripts/prepare-k4-host-gates.py` may run the preserved-bundle verifier, hardware-evidence verifier, symbol-name preflight and selected-family staging gate in sequence. Require `PRE_K4_HOST_GATES_PASS family=<family>`. Run `37006423674` validates both stock-baseline and candidate-canary orchestration logic against the preceding preservation kit; the workflow is now re-pinned to normalized preservation run `37011499307` and must pass before physical use of that exact kit. The underlying normalized bundle pin is independently green in run `37017852039`. This does not collapse the underlying evidence classes or authorize module loading.
 
 Latest evidence-verifier CI run `36968903989` validates both stock/baseline and candidate-canary modes. The gate intentionally rejects:
 
