@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, re, sys
 from pathlib import Path, PurePosixPath
 from typing import Dict
 
-EXPECTED_MANIFEST_SHA256="1f1198fdc23bc656bdbf01b3beaafb9154c742ef22c9274ac5acf296042a3a8f"
+EXPECTED_MANIFEST_SHA256="2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec"
 EXPECTED_METADATA={
 "official_stock_sha256":"1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f",
 "official_stock_size":"78250004","candidate_run":"36924014278",
@@ -14,8 +14,9 @@ EXPECTED_METADATA={
 "k4_cake_userspace_run":"36972043724","k4_module_dependency_run":"36976006891",
 "k4_family_staging_run":"36978077020","k4_symbol_preflight_ci_run":"36977341893",
 "k4_family_staging_verifier_ci_run":"36994228096",
-"docs_snapshot_commit":"854a0afc54db3684b957ab0e17dd749fee9bc987",
-"source_commit":"854a0afc54db3684b957ab0e17dd749fee9bc987",
+"pre_k4_host_orchestrator_ci_run":"36997859437","candidate_evidence_ci_run":"36998249913",
+"docs_snapshot_commit":"b1d943223702578719670ca84825cbc9f1da2a37",
+"source_commit":"b1d943223702578719670ca84825cbc9f1da2a37",
 "classification":"UNVALIDATED_HARDWARE_VALIDATION_INPUT"}
 CANDIDATE_REL="candidate/RT-AC86U_386_52334_merlin-port-UNVALIDATED.w"
 STOCK_REL="official-stock/RT-AC86U_386_52334_OFFICIAL.w"
@@ -82,8 +83,8 @@ def discover_actual_files(root:Path):
 
 def require_semantics(root:Path, rows:Dict[str,str]):
  required={CANDIDATE_REL,STOCK_REL,"scripts/verify-hardware-evidence.py","scripts/verify-k4-symbol-preflight.py",
- "scripts/verify-k4-family-staging.py","reports/k4-module-dependency-closure.json","k4-family-staging/package-sha256.txt",
- "docs/candidate-promotion-gate.md","docs/physical-validation-sequence.md","docs/thread-handoff.md","docs/STATUS.md"}
+ "scripts/verify-k4-family-staging.py","scripts/prepare-candidate-evidence.sh","reports/k4-module-dependency-closure.json","k4-family-staging/package-sha256.txt",
+ "docs/candidate-promotion-gate.md","docs/pre-k4-host-gates.md","docs/physical-validation-sequence.md","docs/thread-handoff.md","docs/STATUS.md"}
  missing=sorted(required-set(rows))
  if missing: raise GateError(f"required bundle files absent from manifest: {missing}")
  candidate=root/CANDIDATE_REL; stock=root/STOCK_REL
@@ -124,6 +125,8 @@ def main()->int:
   "manifest_sha256":EXPECTED_MANIFEST_SHA256,"candidate_sha256":meta["candidate_sha256"],
   "official_stock_sha256":meta["official_stock_sha256"],"docs_snapshot_commit":meta["docs_snapshot_commit"],
   "file_count":len(rows),"k4_family_staging_verifier_ci_run":int(meta["k4_family_staging_verifier_ci_run"]),
+  "pre_k4_host_orchestrator_ci_run":int(meta["pre_k4_host_orchestrator_ci_run"]),
+  "candidate_evidence_ci_run":int(meta["candidate_evidence_ci_run"]),
   "limitations":["PASS verifies exact preserved bundle inventory/provenance and file hashes only.",
   "PASS does not prove flashability, router runtime identity, module loadability, K4 behavior, or M49 EJ dispatch.",
   "The candidate remains UNVALIDATED until the physical promotion gates pass."]}

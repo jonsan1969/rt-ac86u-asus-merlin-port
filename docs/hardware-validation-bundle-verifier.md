@@ -8,12 +8,12 @@ It pins the current `BUNDLE-MANIFEST.txt` SHA-256, exact manifest metadata, full
 
 Current preserved input:
 
-- run `36995684511`;
+- run `36998454435`;
 - artifact `hardware-validation-bundle-eac8a777`;
-- artifact id `11221372631`;
-- ZIP digest `sha256:7bf47721147dbd49c52ec0af2e065499b3b35efada44057771588b163b2a37a1`;
-- expiry `2026-12-31T10:28:43Z`;
-- internal manifest SHA-256 `1f1198fdc23bc656bdbf01b3beaafb9154c742ef22c9274ac5acf296042a3a8f`.
+- artifact id `11222508393`;
+- ZIP digest `sha256:25309515170b32d2c85829977e24f27c44ec4934b89c641fc00d90dbe4dfed50`;
+- expiry `2026-12-31T10:58:45Z`;
+- internal manifest SHA-256 `2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec`.
 
 A PASS is transport/inventory evidence only. It does not prove flashability, router runtime identity, kernel-module loadability, K4 behavior or M49 EJ dispatch.
 
@@ -22,7 +22,7 @@ A PASS is transport/inventory evidence only. It does not prove flashability, rou
 
 Run `36996895881` — **SUCCESS**.
 
-The exact preservation artifact from run `36995684511` passes the verifier with `103` manifest-bound files. CI also proves fail-closed rejection of:
+Run `36996895881` validated the previous preservation artifact (`36995684511`) with `103` manifest-bound files. The verifier pin is now refreshed for current preservation run `36998454435`, whose manifest contains `104` files and records pre-K4 orchestrator CI `36997859437` plus candidate-evidence CI `36998249913`; a new verifier CI run is required before this current pin is called CI-validated. CI also proves fail-closed rejection of:
 
 - a changed manifest-bound payload file;
 - changed manifest metadata/content;
@@ -30,3 +30,6 @@ The exact preservation artifact from run `36995684511` passes the verifier with 
 - a symlink injection.
 
 The verifier is deliberately not embedded in the same preserved bundle whose manifest hash it pins. Its expected manifest SHA-256 is the external trust anchor; embedding that verifier in the manifest would make the verifier content depend on the manifest hash while the manifest hash simultaneously depends on the verifier content.
+
+
+The current-pin validation workflow is triggered by the verifier refresh commit. Until that run is green, the new `36998454435` artifact is preserved and internally hash-bound but the external pinned verifier is **CI pending** for this exact manifest.
