@@ -1,3 +1,5 @@
+K4 ipset userspace run `36970238487` is FAILURE only in the final ABI/QEMU verification. The exact ipset 7.6 build and bundle assembly succeeded: `ipset.real`, `libipset.so.13.1.0` and `libmnl.so.0.2.0` are ARM32/EABI5. The failing CI assumption was an unproven direct `DT_NEEDED` edge; QEMU was not reached. Next action must record the actual ELF NEEDED graph and gate on QEMU `ipset --version`, not force an assumed libtool linkage. The run log was fetched exactly once and must never be fetched again.
+
 K4 ipset userspace run `36970052442` is FAILURE at `ipset-7.6/autogen.sh` only: Ubuntu 24.04 `libtoolize` could not find `/usr/share/aclocal/ltdl.m4`. Exact c553 source fetch, pinned ARM32 GCC 5.3 toolchain smoke and matching libmnl cross-build had already passed. Minimal fix is host package `libltdl-dev`. The run log was fetched exactly once and must never be fetched again.
 
 # New-thread handoff
