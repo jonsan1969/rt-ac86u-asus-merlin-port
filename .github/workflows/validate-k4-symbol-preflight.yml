@@ -1,0 +1,201 @@
+name: Validate K4 symbol preflight
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/verify-k4-symbol-preflight.py
+      - docs/k4-symbol-preflight.md
+      - .github/workflows/validate-k4-symbol-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static validation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-k4-symbol-preflight.py
+          python3 scripts/verify-k4-symbol-preflight.py --help >/dev/null
+          if grep -Ein '(^|[^A-Za-z])(insmod|modprobe|rmmod|mtd-write|reboot)([^A-Za-z]|$)|nvram[[:space:]]+(set|unset|commit)' scripts/verify-k4-symbol-preflight.py; then
+            echo "mutation command found in host-side verifier" >&2
+            exit 1
+          fi
+
+      - name: Build synthetic module and K4a fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixtures/modules fixtures/k4/rtac86u-k4-preflight
+
+          cat > fixtures/provider.c <<'EOF'
+          int optional_api(void) { return 7; }
+          void *__ksymtab_optional_api = (void *)&optional_api;
+          EOF
+          cat > fixtures/consumer.c <<'EOF'
+          extern int optional_api(void);
+          extern int kernel_api(void);
+          int consume(void) { return optional_api() + kernel_api(); }
+          EOF
+          gcc -c -fno-stack-protector -fno-pic fixtures/provider.c -o fixtures/modules/provider.ko
+          gcc -c -fno-stack-protector -fno-pic fixtures/consumer.c -o fixtures/modules/consumer.ko
+
+          sha=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          cat > fixtures/k4/rtac86u-k4-preflight/summary.txt <<EOF
+          K4A_RTAC86U_52334_READ_ONLY_PREFLIGHT
+          expected_candidate_sha256=$sha
+          timestamp=test
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          odmpid=
+          uname_r=4.1.27
+          uname_m=aarch64
+          uname_a=Linux rt-ac86u 4.1.27 test aarch64
+          proc_version=Linux version 4.1.27
+          rootfs=test
+          uptime=1
+          EOF
+          cat > fixtures/k4/rtac86u-k4-preflight/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+          echo 'ffffffff81000000 T kernel_api' > fixtures/k4/rtac86u-k4-preflight/proc-kallsyms.txt
+          tar -C fixtures/k4 -czf fixtures/k4-pass.tar.gz rtac86u-k4-preflight
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess
+
+          def symbols(p):
+              cp=subprocess.run(["readelf","-Ws",str(p)],check=True,text=True,stdout=subprocess.PIPE)
+              undef=set(); exports=set()
+              for line in cp.stdout.splitlines():
+                  parts=line.split()
+                  if len(parts) < 8 or not parts[0].rstrip(":").isdigit():
+                      continue
+                  ndx=parts[6]
+                  name=parts[7].split("@",1)[0]
+                  if ndx=="UND" and name:
+                      undef.add(name)
+                  if name.startswith("__ksymtab_"):
+                      exports.add(name[len("__ksymtab_"):])
+              return sorted(undef),sorted(exports)
+
+          mods={}
+          for p in sorted(Path("fixtures/modules").glob("*.ko")):
+              undef,exports=symbols(p)
+              mods[p.stem]={
+                  "file":p.name,
+                  "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
+                  "vermagic":"fixture",
+                  "undefined_symbols":undef,
+                  "exported_symbols":exports,
+                  "symbol_internal_depends":[],
+              }
+          mods["consumer"]["symbol_internal_depends"]=["provider"]
+          data={
+              "schema":2,
+              "source_preservation_run":0,
+              "modules":mods,
+              "families":{
+                  "fixture":{
+                      "load_order":["provider","consumer"],
+                      "unload_order":["consumer","provider"],
+                  }
+              },
+          }
+          Path("fixtures/closure.json").write_text(json.dumps(data,indent=2,sort_keys=True)+"\n")
+          PY
+
+      - name: PASS valid symbol-name closure
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-pass.tar.gz             --modules-root fixtures/modules             --closure fixtures/closure.json             --report fixtures/pass-report.json | tee fixtures/pass.txt
+          grep -Fq K4_SYMBOL_PREFLIGHT_FIXTURE_PASS fixtures/pass.txt
+          grep -Fq '"status": "PASS"' fixtures/pass-report.json
+          grep -Fq '"kernel_api"' fixtures/pass-report.json
+
+      - name: FAIL missing required strong kernel symbol
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixtures/missing-wrap/rtac86u-k4-preflight
+          cp fixtures/k4/rtac86u-k4-preflight/* fixtures/missing-wrap/rtac86u-k4-preflight/
+          echo 'ffffffff81000000 T unrelated_symbol' > fixtures/missing-wrap/rtac86u-k4-preflight/proc-kallsyms.txt
+          tar -C fixtures/missing-wrap -czf fixtures/k4-missing-symbol.tar.gz rtac86u-k4-preflight
+          if python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-missing-symbol.tar.gz             --modules-root fixtures/modules             --closure fixtures/closure.json; then
+            echo "missing strong kernel symbol was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL changed module hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a fixtures/modules fixtures/modules-changed
+          printf x >> fixtures/modules-changed/consumer.ko
+          if python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-pass.tar.gz             --modules-root fixtures/modules-changed             --closure fixtures/closure.json; then
+            echo "changed module was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL stale internal dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          p="fixtures/closure.json"
+          d=json.load(open(p))
+          d["modules"]["consumer"]["symbol_internal_depends"]=[]
+          open("fixtures/closure-stale.json","w").write(json.dumps(d,indent=2,sort_keys=True)+"\n")
+          PY
+          if python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-pass.tar.gz             --modules-root fixtures/modules             --closure fixtures/closure-stale.json; then
+            echo "stale dependency closure was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL Merlin-like runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixtures/merlin-wrap/rtac86u-k4-preflight
+          cp fixtures/k4/rtac86u-k4-preflight/* fixtures/merlin-wrap/rtac86u-k4-preflight/
+          sed -i 's/extendno=52334-gd500e53/extendno=386.14_2/' fixtures/merlin-wrap/rtac86u-k4-preflight/summary.txt
+          tar -C fixtures/merlin-wrap -czf fixtures/k4-merlin.tar.gz rtac86u-k4-preflight
+          if python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-merlin.tar.gz             --modules-root fixtures/modules             --closure fixtures/closure.json; then
+            echo "Merlin runtime was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL unsafe K4a archive traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import io, tarfile
+          with tarfile.open("fixtures/k4-unsafe.tar.gz","w:gz") as tf:
+              d=tarfile.TarInfo("rtac86u-k4-preflight")
+              d.type=tarfile.DIRTYPE
+              tf.addfile(d)
+              data=b"x"
+              f=tarfile.TarInfo("rtac86u-k4-preflight/../escape")
+              f.size=len(data)
+              tf.addfile(f,io.BytesIO(data))
+          PY
+          if python3 scripts/verify-k4-symbol-preflight.py             --profile fixture             --k4 fixtures/k4-unsafe.tar.gz             --modules-root fixtures/modules             --closure fixtures/closure.json; then
+            echo "unsafe archive was accepted" >&2
+            exit 1
+          fi
