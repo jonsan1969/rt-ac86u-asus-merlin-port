@@ -33,17 +33,17 @@ Run `36924014278` produced the first end-to-end software-gated candidate. Exact 
 
 ## Preserved hardware-validation bundle
 
-Run `36971723461` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
+Run `36972221014` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
 
 - artifact: `hardware-validation-bundle-eac8a777`;
-- artifact id: `11211522657`;
-- artifact ZIP digest: `sha256:94894acc89490812e118469c92e00823ae1a598440e625ffd69526752b66a3ee`;
-- expires: `2026-12-31T05:33:12Z`;
+- artifact id: `11211903638`;
+- artifact ZIP digest: `sha256:02b59148fd8b37c48fc847afa73b2501667aaebc956f8eb9259764ca352b8670`;
+- expires: `2026-12-31T06:09:36Z`;
 - candidate inside: exact `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`, size `78,250,004` bytes;
 - K2 source run: `36556899650`;
 - K3 source run: `36561957525`.
 
-The workflow first downloads and verifies the official ASUS 386_52334 stock image (`1b4fe984...7483f`, 78,250,004 bytes), then verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle. The bundle also carries the current K4/runtime collectors, host-side evidence verifier, M49 EJ response verifier, physical-validation sequence, recovery material instructions and current handoff/status documents.
+The workflow first downloads and verifies the official ASUS 386_52334 stock image (`1b4fe984...7483f`, 78,250,004 bytes), then verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle. The bundle also carries the Unix-preserving ipset, WireGuard and Cake K4 userspace companions, the current K4/runtime collectors, host-side evidence verifier, M49 EJ response verifier, physical-validation sequence, recovery material instructions and current handoff/status documents.
 
 The artifact ZIP digest is only the GitHub archive digest. It must never be substituted for the firmware `.w` hash when binding hardware evidence.
 

@@ -1,3 +1,5 @@
+Latest hardware-preservation checkpoint: run `36972221014` is SUCCESS on head `5c79c38395ed32d497d590c9b730a94e4bd0bb6d`. It verifies and carries the official ASUS 386_52334 stock image, exact UNVALIDATED candidate, K2/K3 modules, and the ipset/WireGuard/Cake temporary K4 userspace companions. Artifact `11211903638`, ZIP digest `sha256:02b59148fd8b37c48fc847afa73b2501667aaebc956f8eb9259764ca352b8670`, expires 2026-12-31. Firmware identity remains the internal .w SHA-256.
+
 K4 Cake userspace companion is now SUCCESS: run `36972043724` builds c553's CAKE-aware `tc` from iproute2 5.11.0 with the pinned ARM32 HND toolchain. CI proves ARM32/EABI5, `cake_qdisc_util` is linked, `tc -V` reports 5.11.0, the local `cake help` parser exposes CAKE options without qdisc mutation, and the Unix-preserving tarball re-verifies after extraction. Artifact `k4-cake-userspace-51997` id `11212107182`, ZIP digest `sha256:4bc49da98adc4a32a0945a96a335aaf7b285471ba514dd330ac1fb5af898687b`, expires 2026-12-31. Failed run `36971869155` was only a subdirectory-build include-path mistake; its log was fetched once and must never be fetched again.
 
 K4 WireGuard userspace companion is now SUCCESS: run `36971511361` builds exact c553 `wireguard-tools` / `wg` 1.0.20200827 with the pinned ARM32 HND GCC 5.3/glibc 2.22 toolchain. QEMU `wg --version` passes and the Unix-preserving tarball re-extraction verifies executable/manifest integrity. Artifact `k4-wireguard-userspace-51997` id `11211229289`, ZIP digest `sha256:2a5d5ab85615a7cd069f58812986322f9b875b08b8a6410b268498c6773038f4`, expires 2026-12-31. It remains temporary /tmp smoke-test userspace only.
@@ -75,14 +77,14 @@ Original candidate artifact: `11193520953`.
 
 ## Preserved hardware-validation inputs
 
-Run `36971723461` is SUCCESS.
+Run `36972221014` is SUCCESS.
 
 Artifact: `hardware-validation-bundle-eac8a777`  
-Artifact id: `11211522657`  
-ZIP digest: `sha256:94894acc89490812e118469c92e00823ae1a598440e625ffd69526752b66a3ee`  
+Artifact id: `11211903638`  
+ZIP digest: `sha256:02b59148fd8b37c48fc847afa73b2501667aaebc956f8eb9259764ca352b8670`  
 Expiry: 2026-12-31.
 
-The workflow verifies the official ASUS 386_52334 stock image, exact candidate hash/size, K2/K3 module identities, the Unix-preserving ipset K4 companion and the WireGuard K4 companion, and carries the current collectors, hardware-evidence verifier, M49 response verifier, physical sequence and recovery/handoff documents.
+The workflow verifies the official ASUS 386_52334 stock image, exact candidate hash/size, K2/K3 module identities, the Unix-preserving ipset, WireGuard and Cake K4 companions, and carries the current collectors, hardware-evidence verifier, M49 response verifier, physical sequence and recovery/handoff documents.
 
 **Never use the artifact ZIP digest as the firmware identity.** Hardware evidence is bound to the exact `.w` SHA-256 above.
 
