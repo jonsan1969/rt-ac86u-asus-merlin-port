@@ -1,0 +1,166 @@
+name: Build K4 Cake tc userspace bundle
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/k4-cake-userspace-51997.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make file qemu-user bison flex
+
+      - name: Fetch exact 51997 CAKE-aware iproute2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC_SHA=c553d8e4b0bf3289683368b0d57172649b030039
+          mkdir -p work/source
+          git -C work/source init
+          git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/source sparse-checkout init --cone
+          git -C work/source sparse-checkout set release/src/router/iproute2-4.3
+          git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
+          git -C work/source checkout --detach FETCH_HEAD
+          test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
+          base=release/src/router/iproute2-4.3/iproute2-5.11.0
+          test "$(git -C work/source rev-parse HEAD:$base/Makefile)" = 9691c5c10375abcae5ceb2ea7bf49ba4e0f44e07
+          test "$(git -C work/source rev-parse HEAD:$base/tc/Makefile)" = 5a517af20b7ca864207c39b06345761071b678a2
+          test "$(git -C work/source rev-parse HEAD:$base/tc/q_cake.c)" = 4ff6056a1ab0ea28a9106b9a2f8077bef31dc085
+          test "$(git -C work/source rev-parse HEAD:$base/include/version.h)" = 1a1f4f833fccce6330fc554bfcd58c8e05b74a3c
+          grep -Fq 'TCMODULES += q_cake.o' "work/source/$base/tc/Makefile"
+          grep -Fq 'static const char version[] = "5.11.0";' "work/source/$base/include/version.h"
+
+      - name: Fetch pinned ARM32 HND userspace toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains
+          git -C work/toolchains init
+          git -C work/toolchains remote add origin https://github.com/SWRT-dev/bcmhnd-toolchains.git
+          git -C work/toolchains sparse-checkout init --cone
+          git -C work/toolchains sparse-checkout set crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          git -C work/toolchains fetch --depth=1 --filter=blob:none origin 7710a1e09d994598ac6c2db8ab16dc54ca5aed3d
+          git -C work/toolchains checkout --detach FETCH_HEAD
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR)" = 7db024edfe5b45d9b320828845d9fd8dc539d0e8
+          TC="$PWD/work/toolchains/$DIR/usr"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          "$TC/bin/arm-buildroot-linux-gnueabi-gcc" --version | head -1
+
+      - name: Configure and build CAKE-aware tc
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          export PATH="$TC/bin:$PATH"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          SRC="$PWD/work/source/release/src/router/iproute2-4.3/iproute2-5.11.0"
+          cd "$SRC"
+          rm -f config.mk
+          PKG_CONFIG=/bin/false CC="${PFX}gcc" AR="${PFX}ar" YACC=bison ./configure
+          grep -Fq 'TC_CONFIG_NO_XT:=y' config.mk
+          make -C lib -j2 CC="${PFX}gcc" AR="${PFX}ar" HOSTCC=gcc SHARED_LIBS=n
+          make -C tc -j2 CC="${PFX}gcc" AR="${PFX}ar" HOSTCC=gcc YACC=bison LEX=flex SHARED_LIBS=n tc
+          test -x tc/tc
+          test -f tc/q_cake.o
+          "${PFX}nm" tc/tc | grep -Fq 'cake_qdisc_util'
+
+      - name: Assemble and verify temporary K4 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          SYSROOT="$TC/arm-buildroot-linux-gnueabi/sysroot"
+          mkdir -p bundle/bin reports
+          install -m 0755 work/source/release/src/router/iproute2-4.3/iproute2-5.11.0/tc/tc bundle/bin/tc
+          file bundle/bin/tc | tee reports/file.txt
+          file bundle/bin/tc | grep -Eq 'ELF 32-bit.*ARM|ELF 32-bit.*EABI5'
+          "${PFX}readelf" -l bundle/bin/tc > reports/tc.program.txt
+          "${PFX}readelf" -d bundle/bin/tc > reports/tc.dynamic.txt
+          "${PFX}nm" bundle/bin/tc > reports/tc.symbols.txt
+          grep -Fq '/lib/ld-linux.so.3' reports/tc.program.txt
+          grep -Fq 'cake_qdisc_util' reports/tc.symbols.txt
+          {
+            echo '=== tc NEEDED ==='
+            awk -F'[][]' '/NEEDED/{print $2}' reports/tc.dynamic.txt
+          } | tee reports/needed-closure.txt
+          qemu-arm -L "$SYSROOT" bundle/bin/tc -V 2>&1 | tee reports/tc-version.txt
+          grep -Fq 'iproute2-5.11.0' reports/tc-version.txt
+          set +e
+          qemu-arm -L "$SYSROOT" bundle/bin/tc qdisc add dev lo root cake help > reports/cake-help.txt 2>&1
+          help_rc=$?
+          set -e
+          cat reports/cake-help.txt
+          test "$help_rc" -ne 0
+          grep -Fq 'Usage: ... cake' reports/cake-help.txt
+          grep -Fq 'bandwidth RATE' reports/cake-help.txt
+          grep -Fq 'triple-isolate' reports/cake-help.txt
+          grep -Fq 'ack-filter' reports/cake-help.txt
+          if grep -Eiq 'not found|No such file|error while loading shared libraries|Invalid ELF|Exec format|Operation not permitted' reports/cake-help.txt; then
+            echo 'unexpected CAKE help/loader failure' >&2
+            exit 1
+          fi
+          cat > bundle/README <<'EOF'
+          K4 temporary CAKE-aware tc companion for the exact 51997-built sch_cake module.
+          Stage outside boot/autoload paths (for example below /tmp) only.
+          The CI smoke invokes only the local "cake help" parser; it does not alter a qdisc.
+          This bundle does not load modules and is not firmware payload.
+          EOF
+
+      - name: Record exact bundle hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039'
+            echo 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d'
+            echo 'arm_toolchain_tree=7db024edfe5b45d9b320828845d9fd8dc539d0e8'
+            echo 'kernel_family_run=36561957525'
+            echo 'iproute2_version=5.11.0'
+            echo 'classification=K4_TEMPORARY_CAKE_TC_ONLY'
+            echo
+            find bundle -type f -print0 | sort -z | xargs -0 sha256sum
+          } | tee reports/K4-CAKE-USERSPACE-MANIFEST.txt
+
+      - name: Pack and verify Unix-preserving K4 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf k4-cake-userspace-51997.tar.gz bundle reports
+          mkdir -p work/archive-check
+          tar -xzf k4-cake-userspace-51997.tar.gz -C work/archive-check
+          test -x work/archive-check/bundle/bin/tc
+          grep -Fq 'cake_qdisc_util' work/archive-check/reports/tc.symbols.txt
+          (
+            cd work/archive-check
+            grep -E '^[0-9a-f]{64}  ' reports/K4-CAKE-USERSPACE-MANIFEST.txt | sha256sum -c -
+          )
+          sha256sum k4-cake-userspace-51997.tar.gz | tee reports/archive-sha256.txt
+
+      - name: Publish K4 Cake userspace bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4-cake-userspace-51997
+          path: |
+            k4-cake-userspace-51997.tar.gz
+            reports/archive-sha256.txt
+          if-no-files-found: error
+          retention-days: 90
