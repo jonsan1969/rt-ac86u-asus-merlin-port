@@ -1,0 +1,112 @@
+name: Validate optional M49 user-slot package
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - optional/monthly-traffic/**
+      - ports/files/chart.min.js
+      - .github/workflows/validate-optional-monthly-traffic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static shell validation
+        run: |
+          sh -n optional/monthly-traffic/install.sh
+          sh -n optional/monthly-traffic/activate.sh
+          sh -n optional/monthly-traffic/verify.sh
+          sh -n optional/monthly-traffic/uninstall.sh
+
+      - name: Assert user-slot adapter contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("optional/monthly-traffic/user-slot.asp").read_text(encoding="utf-8-sig")
+          assert p.count('<% bandwidth("monthly"); %>') == 1
+          assert p.count("__USER_SLOT__") == 2
+          required = [
+              'href="/index_style.css"',
+              'href="/form_style.css"',
+              'href="/tmmenu.css"',
+              'href="/images/favicon.png"',
+              'src="/user/merlin-monthly-chart.min.js"',
+              'action="/apply.cgi"',
+          ]
+          for token in required:
+              assert token in p, token
+          forbidden = [
+              'href="index_style.css"',
+              'href="form_style.css"',
+              'href="tmmenu.css"',
+              'href="images/favicon.png"',
+              'src="/js/chart.min.js"',
+              'action="apply.cgi"',
+          ]
+          for token in forbidden:
+              assert token not in p, token
+          PY
+
+      - name: Assert mutation boundary
+        run: |
+          if grep -Ein '(nvram[[:space:]]+(set|commit)|(^|[[:space:]])reboot([[:space:]]|$)|insmod|modprobe|rmmod|mtd-write|service[[:space:]]+(start|stop|restart)|/www/)' optional/monthly-traffic/*.sh; then
+            echo "forbidden mutation/rootfs token found in M49 package scripts" >&2
+            exit 1
+          fi
+          grep -Fq 'Runtime EJ dispatch is still UNVALIDATED' optional/monthly-traffic/install.sh
+
+      - name: Install and verify in disposable JFFS and wwwext analogues
+        run: |
+          base="/tmp/rtac86u-m49-$GITHUB_RUN_ID"
+          pkg="$base/jffs/addons/merlin-monthly"
+          web="$base/var/wwwext"
+          sh optional/monthly-traffic/install.sh 20 "$pkg" "$web"
+          sh "$pkg/verify.sh" "$web"
+          test -f "$web/user20.asp"
+          test -f "$web/merlin-monthly-chart.min.js"
+          cmp ports/files/chart.min.js "$web/merlin-monthly-chart.min.js"
+          grep -Fq 'value="user20.asp"' "$web/user20.asp"
+          grep -Fq '<% bandwidth("monthly"); %>' "$web/user20.asp"
+
+      - name: Fail closed on occupied foreign slot and asset
+        run: |
+          base="/tmp/rtac86u-m49-collision-$GITHUB_RUN_ID"
+          pkg="$base/pkg"
+          web="$base/web"
+          mkdir -p "$web"
+          echo foreign > "$web/user19.asp"
+          if sh optional/monthly-traffic/install.sh 19 "$pkg" "$web"; then
+            echo "foreign user slot was overwritten" >&2
+            exit 1
+          fi
+          rm -rf "$base"
+          base="/tmp/rtac86u-m49-chart-$GITHUB_RUN_ID"
+          pkg="$base/pkg"
+          web="$base/web"
+          mkdir -p "$web"
+          echo foreign > "$web/merlin-monthly-chart.min.js"
+          if sh optional/monthly-traffic/install.sh 18 "$pkg" "$web"; then
+            echo "foreign chart asset was overwritten" >&2
+            exit 1
+          fi
+
+      - name: Verify uninstall boundary and report hashes
+        run: |
+          base="/tmp/rtac86u-m49-uninstall-$GITHUB_RUN_ID"
+          pkg="$base/pkg"
+          web="$base/web"
+          sh optional/monthly-traffic/install.sh 17 "$pkg" "$web"
+          sh "$pkg/uninstall.sh" "$web"
+          test ! -e "$pkg"
+          test ! -e "$web/user17.asp"
+          test ! -e "$web/merlin-monthly-chart.min.js"
+          sha256sum optional/monthly-traffic/user-slot.asp ports/files/chart.min.js
+          echo "M49_OPTIONAL_USER_SLOT_STATIC_GATE=PASS"
+          echo "M49_EJ_RUNTIME_GATE=DEFERRED"
