@@ -27,11 +27,13 @@ These tools can therefore be delivered independently of the 570-PEB firmware roo
 
 ## WebUI payloads are NOT generic file installs
 
-Monthly Traffic/Chart.js and local OUI cannot be restored by copying into stock `/www`: the firmware rootfs is immutable and local OUI also requires exact patches to stock pages.
+Local OUI cannot be restored by copying into stock `/www`: the firmware rootfs is immutable and local OUI also requires exact patches to stock pages.
 
-The active image already provides `/www/user1.asp` ... `/www/user20.asp` aliases into the runtime `/var/wwwext` namespace. That is the correct future addon surface, but these optional features must be adapted to that namespace before delivery.
+Monthly Traffic now has a prepared optional user-slot package under `optional/monthly-traffic/`. Run `36966933767` validates its static/sandbox delivery contract: it renders one explicit `userN.asp` slot, serves its private Chart.js from `/var/wwwext` through `/user/merlin-monthly-chart.min.js`, refuses foreign slot/asset collisions, installs no startup hook and never writes immutable `/www`.
 
-Do not re-add the removed Monthly Traffic Tools-menu entry until a working runtime page is actually installed.
+The active image already provides `/www/user1.asp` ... `/www/user20.asp` aliases into the runtime `/var/wwwext` namespace. The remaining M49 gate is physical ASUS-52334 HTTPD evidence that `<% bandwidth("monthly"); %>` is EJ-expanded through that path. Until that proof exists, the package is prepared but M49 is not advertised as runtime-available.
+
+Do not re-add the removed Monthly Traffic Tools-menu entry until a working runtime page is actually proven and installed.
 
 ## Local NTPD remains dormant
 

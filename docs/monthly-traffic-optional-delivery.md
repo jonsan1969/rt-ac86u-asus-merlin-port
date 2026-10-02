@@ -40,10 +40,33 @@ Create a dedicated user-slot adapter that:
 
 The EJ-expansion item is a real-router/runtime gate unless an equivalent HTTPD source/host harness is proven. Static image inspection only proves the `bandwidth` handler exists in stock httpd; it does not prove dynamic user-slot dispatch.
 
+## Optional package preparation — SUCCESS / STATIC ONLY
+
+The source-independent delivery package now lives under:
+
+`optional/monthly-traffic/`
+
+It provides:
+
+- a dedicated user-slot template with absolute stock asset URLs;
+- Chart.js served through `/user/merlin-monthly-chart.min.js` from the runtime `/var/wwwext` namespace;
+- explicit slot rendering for `user1.asp` through `user20.asp`;
+- persistent package storage under `/jffs/addons/merlin-monthly`;
+- manual runtime materialization into `/var/wwwext`;
+- collision guards for an occupied user slot or foreign Chart.js asset;
+- fail-closed uninstall that removes only byte-identical package-owned runtime files;
+- no NVRAM writes, core/rootfs replacement, service mutation, menu patch, startup hook or automatic activation.
+
+Validation run `36966933767` is **SUCCESS**. It proves shell syntax, the exact `bandwidth("monthly")` token is retained, user-slot rendering, sandbox install/verify/uninstall, mutation boundaries and foreign-file collision refusal.
+
+This is deliberately not HTTPD runtime proof. After reboot the package must be manually re-activated until the generic JFFS lifecycle framework exists.
+
 ## Status
 
 M49 implementation: **SUCCESS**.
 
 Built-in delivery: **OPTIONALIZED FOR CAPACITY**.
 
-JFFS/WebUI delivery: **IN PROGRESS — runtime EJ dispatch proof required**.
+JFFS/WebUI package preparation: **SUCCESS / STATIC-SANDBOX VALIDATED** — run `36966933767`.
+
+Runtime availability: **DEFERRED** until ASUS 386_52334 proves that stock `httpd` performs EJ expansion of `<% bandwidth("monthly"); %>` through the active custom user-slot path.
