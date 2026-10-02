@@ -264,6 +264,21 @@ jobs:
             done
           done
 
+      - name: Summarize security-sensitive transition points
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path("reports/protected-core-lineage.tsv")
+          rows=p.read_text().splitlines()
+          wanted=("rc","httpd","dnsmasq","busybox","openvpn","dropbear","libssl","libcrypto","libshared","libovpn")
+          out=[rows[0]]
+          for line in rows[1:]:
+              if any(x in line.lower() for x in wanted):
+                  out.append(line)
+          pathlib.Path("reports/security-core-transition.tsv").write_text("\n".join(out)+"\n")
+          PY
+          cat reports/security-core-transition.tsv
       - name: Publish lineage artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -273,6 +288,7 @@ jobs:
             reports/asus-runtime-lineage.txt
             reports/protected-core-lineage.tsv
             reports/core-elf-metadata.txt
+            reports/security-core-transition.tsv
             reports/manifest-*.tsv
             reports/symlinks-*.tsv
           if-no-files-found: warn
