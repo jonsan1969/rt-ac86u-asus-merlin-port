@@ -1,0 +1,167 @@
+name: Build isolated K4 family staging bundles
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/k4-family-staging-bundles.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download dependency-complete hardware bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: work/hardware
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36977559328
+
+      - name: Validate source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules="$(find work/hardware -type d -path '*/modules' -print -quit)"
+          closure="$(find work/hardware -type f -name 'k4-module-dependency-closure.json' -print -quit)"
+          test -n "$modules"
+          test -n "$closure"
+          test "$(find "$modules" -type f -name '*.ko' | wc -l)" -eq 27
+          python3 - "$closure" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1]))
+          assert r["schema"] == 2
+          assert r["families"]["cifs"]["load_order"] == ["cifs"]
+          assert r["families"]["cake"]["load_order"] == ["sch_cake"]
+          assert r["families"]["wireguard"]["load_order"] == ["wireguard"]
+          assert r["families"]["nfs_sunrpc_lockd"]["load_order"] == ["sunrpc","lockd","nfs","nfsd","nfsv2","nfsv3"]
+          assert r["modules"]["ip_set_hash_ip"]["symbol_internal_depends"] == ["ip_set"]
+          assert r["modules"]["xt_set"]["symbol_internal_depends"] == ["ip_set"]
+          PY
+          printf '%s\n' "$modules" > work/modules-path.txt
+          printf '%s\n' "$closure" > work/closure-path.txt
+
+      - name: Assemble exact family directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules="$(cat work/modules-path.txt)"
+          mkdir -p stage packages
+
+          find_one() {
+            local name="$1"
+            mapfile -t hit < <(find "$modules" -type f -name "$name.ko" -print)
+            test "${#hit[@]}" -eq 1
+            printf '%s\n' "${hit[0]}"
+          }
+
+          make_family() {
+            local fam="$1" load="$2" unload="$3" userspace_kind="${4:-}"
+            shift 4 || true
+            mkdir -p "stage/$fam/modules" "stage/$fam/userspace"
+            for mod in "$@"; do
+              install -m 0644 "$(find_one "$mod")" "stage/$fam/modules/$mod.ko"
+            done
+            if [ -n "$userspace_kind" ]; then
+              src="$(find work/hardware -type f -path "*/userspace/$userspace_kind/*.tar.gz" -print -quit)"
+              test -n "$src"
+              install -m 0644 "$src" "stage/$fam/userspace/$(basename "$src")"
+            fi
+            {
+              echo "classification=K4_TEMPORARY_FAMILY_STAGING_ONLY"
+              echo "candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3"
+              echo "source_hardware_bundle_run=36977559328"
+              echo "dependency_closure_run=36976006891"
+              echo "family=$fam"
+              echo "load_order=$load"
+              echo "unload_order=$unload"
+              echo
+              echo "===== FILE SHA256 ====="
+              (
+                cd "stage/$fam"
+                find modules userspace -type f -print0 | sort -z | xargs -0 sha256sum
+              )
+            } > "stage/$fam/MANIFEST.txt"
+          }
+
+          make_family ipset             'ip_set,ip_set_hash_ip,xt_set'             'xt_set,ip_set_hash_ip,ip_set'             ipset             ip_set ip_set_hash_ip xt_set
+
+          make_family cake             'sch_cake'             'sch_cake'             cake             sch_cake
+
+          make_family cifs             'cifs'             'cifs'             ''             cifs
+
+          make_family nfs             'sunrpc,lockd,nfs,nfsd,nfsv2,nfsv3'             'nfsv3,nfsv2,nfsd,nfs,lockd,sunrpc'             ''             sunrpc lockd nfs nfsd nfsv2 nfsv3
+
+          make_family wireguard             'wireguard'             'wireguard'             wireguard             wireguard
+
+      - name: Verify family isolation and manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          expect_modules() {
+            fam="$1"; count="$2"; shift 2
+            test "$(find "stage/$fam/modules" -type f -name '*.ko' | wc -l)" -eq "$count"
+            for name in "$@"; do
+              test -f "stage/$fam/modules/$name.ko"
+            done
+            (
+              cd "stage/$fam"
+              grep -E '^[0-9a-f]{64}  ' MANIFEST.txt | sha256sum -c -
+            )
+          }
+          expect_modules ipset 3 ip_set ip_set_hash_ip xt_set
+          expect_modules cake 1 sch_cake
+          expect_modules cifs 1 cifs
+          expect_modules nfs 6 sunrpc lockd nfs nfsd nfsv2 nfsv3
+          expect_modules wireguard 1 wireguard
+
+          test "$(find stage/cifs/userspace -type f | wc -l)" -eq 0
+          test "$(find stage/nfs/userspace -type f | wc -l)" -eq 0
+          test "$(find stage/ipset/userspace -type f -name '*.tar.gz' | wc -l)" -eq 1
+          test "$(find stage/cake/userspace -type f -name '*.tar.gz' | wc -l)" -eq 1
+          test "$(find stage/wireguard/userspace -type f -name '*.tar.gz' | wc -l)" -eq 1
+
+          for fam in ipset cake cifs nfs wireguard; do
+            tar -C stage -czf "packages/k4-family-$fam.tar.gz" "$fam"
+          done
+          sha256sum packages/k4-family-*.tar.gz | sort -k2 > packages/package-sha256.txt
+
+      - name: Re-extract and verify transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          for archive in packages/k4-family-*.tar.gz; do
+            fam="$(basename "$archive" .tar.gz)"
+            fam="${fam#k4-family-}"
+            mkdir -p "verify/$fam"
+            tar -xzf "$archive" -C "verify/$fam"
+            test -f "verify/$fam/$fam/MANIFEST.txt"
+            (
+              cd "verify/$fam/$fam"
+              grep -E '^[0-9a-f]{64}  ' MANIFEST.txt | sha256sum -c -
+            )
+          done
+          (cd packages && sha256sum -c package-sha256.txt)
+
+      - name: Publish isolated family bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4-family-staging-bundles
+          path: |
+            packages/k4-family-ipset.tar.gz
+            packages/k4-family-cake.tar.gz
+            packages/k4-family-cifs.tar.gz
+            packages/k4-family-nfs.tar.gz
+            packages/k4-family-wireguard.tar.gz
+            packages/package-sha256.txt
+          if-no-files-found: error
+          retention-days: 90
