@@ -291,6 +291,7 @@ jobs:
           cp docs/hardware-evidence-verifier.md bundle/docs/
           cp docs/k4-symbol-preflight.md bundle/docs/
           cp docs/k4-family-staging-bundles.md bundle/docs/
+          cp docs/pre-k4-host-gates.md bundle/docs/
           cp docs/physical-validation-sequence.md bundle/docs/
           cp docs/preflash-backup-recovery.md bundle/docs/
           cp docs/thread-handoff.md bundle/docs/
@@ -312,6 +313,8 @@ jobs:
             echo 'k4_family_staging_run=36978077020'
             echo 'k4_symbol_preflight_ci_run=36977341893'
             echo 'k4_family_staging_verifier_ci_run=36994228096'
+            echo 'pre_k4_host_orchestrator_ci_run=36997859437'
+            echo 'candidate_evidence_ci_run=36998249913'
             echo 'docs_snapshot_commit='${GITHUB_SHA}
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
