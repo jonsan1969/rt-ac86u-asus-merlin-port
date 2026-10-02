@@ -60,7 +60,7 @@ Then run the read-only symbol-name gate in `docs/k4-symbol-preflight.md` against
 
 Before copying a family to the router, run `scripts/verify-k4-family-staging.py` against the preserved `k4-family-staging` directory and require `K4_FAMILY_STAGING_PASS family=<family>`. CI run `36994228096` validates all five exact families and fail-closed corruption/output cases. This staging PASS is transport/inventory evidence only and does not replace K4 symbol or load/runtime gates.
 
-For operator convenience, `scripts/prepare-k4-host-gates.py` may run the preserved-bundle verifier, hardware-evidence verifier, symbol-name preflight and selected-family staging gate in sequence. Require `PRE_K4_HOST_GATES_PASS family=<family>`. Run `36997859437` validates both stock-baseline and candidate-canary orchestration logic; the validation workflow is now re-pinned to current preservation run `36998454435` and must pass again before physical use. This does not collapse the underlying evidence classes or authorize module loading.
+For operator convenience, `scripts/prepare-k4-host-gates.py` may run the preserved-bundle verifier, hardware-evidence verifier, symbol-name preflight and selected-family staging gate in sequence. Require `PRE_K4_HOST_GATES_PASS family=<family>`. Current-bundle CI run `37006423674` validates both stock-baseline and candidate-canary paths against preservation run `36998454435`; the underlying current bundle pin is independently green in run `37003596484`. This does not collapse the underlying evidence classes or authorize module loading.
 
 Latest evidence-verifier CI run `36968903989` validates both stock/baseline and candidate-canary modes. The gate intentionally rejects:
 

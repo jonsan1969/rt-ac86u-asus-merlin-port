@@ -29,7 +29,7 @@ A PASS ends at the host staging boundary. The resulting selected-family director
 
 ## CI evidence
 
-Run `36997859437` — **SUCCESS**.
+Run `37006423674` — **SUCCESS (current bundle)**.\n\nHistorical logic-validation run `36997859437` is also SUCCESS against the preceding preservation bundle.
 
 CI proves the wrapper can chain the exact current preserved bundle through:
 
@@ -45,4 +45,4 @@ The wrapper is intentionally kept outside the preserved hardware bundle. It depe
 
 ## Current preservation compatibility
 
-The first orchestration CI run, `36997859437`, validated the logic against the preceding preservation bundle. The validation workflow is now pinned to current preservation run `36998454435` / artifact `11222508393`, whose external integrity verifier is CI-green in run `37003596484`. A fresh orchestration CI result is required before physical use of this exact current kit.
+Current orchestration CI run `37006423674` validates preservation run `36998454435` / artifact `11222508393`, whose external integrity verifier is CI-green in run `37003596484`. This closes host-side compatibility for the exact current kit. No preservation refresh is needed merely to record this external CI result: doing so would create a documentation/self-reference churn loop without changing candidate/module inputs.
