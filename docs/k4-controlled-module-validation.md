@@ -12,6 +12,7 @@ This protocol is intentionally **not** an auto-run script. K4 changes live kerne
 - no candidate module is installed into a boot/autoload path;
 - K2/K3 artifacts are copied only to a temporary staging directory;
 - stock module tree, `/proc/modules`, `/proc/kallsyms` and pre-test `dmesg` are preserved.
+- host-side `scripts/verify-k4-symbol-preflight.py` has been run against this K4a archive, the exact staged K2/K3 modules and preserved closure report, and returned `K4_SYMBOL_PREFLIGHT_PASS` before the first load attempt.
 
 ## Family order
 
@@ -45,7 +46,7 @@ The ELF gate found no dependency from one optional family into another and no de
 For each family:
 
 1. capture `/proc/modules` and a fresh dmesg boundary;
-2. verify all expected symbols/dependencies from K4a evidence;
+2. require the saved K4 symbol-preflight PASS report for this exact K4a archive/module set, then re-check any family-specific dependency assumptions;
 3. load only the minimum family needed for the test;
 4. immediately capture command status and new dmesg lines;
 5. if there is an unknown symbol, version/format error, Oops/WARN, HND/network instability, or unexpected dependency: **STOP**, unload what was added if safe, and mark the family FAIL;
@@ -122,3 +123,22 @@ Build lineage:
 The c553 tree explicitly links `q_cake.o` into `tc`. The K4 companion is built through that tree's top-level Makefile with `SHARED_LIBS=n` and xtables disabled so the temporary smoke tool does not depend on ASUS iptables/libxtables. CI requires ARM32/EABI5, `/lib/ld-linux.so.3`, the linked `cake_qdisc_util` symbol, QEMU `tc -V` = iproute2-5.11.0, and a local `tc qdisc add dev lo root cake help` parse that exposes the expected CAKE option surface. The help parse exits before a qdisc request is sent.
 
 During physical K4, stage this `tc` only below `/tmp` after `sch_cake.ko` passes the controlled load gate. A functional test must use a disposable/non-production qdisc context and must still obey the STOP conditions for HND/network instability. The userspace binary itself is not firmware payload or compatibility proof.
+
+
+## Host-side symbol-name preflight gate
+
+Before step 3 of the first mutating family test, run:
+
+```sh
+python3 scripts/verify-k4-symbol-preflight.py \
+  --k4 <k4a-archive> \
+  --modules-root <hardware-bundle>/modules \
+  --closure <hardware-bundle>/reports/k4-module-dependency-closure.json \
+  --report k4-symbol-preflight.json
+```
+
+Require `K4_SYMBOL_PREFLIGHT_PASS`.
+
+CI run `36977341893` validates the verifier logic and its default project profile against the exact preserved 27-module artifact set. A real PASS can only be produced from the future router's ASUS-52334 K4a archive.
+
+A missing strong symbol is STOP before any load. A PASS is still not load authorization by itself: `/proc/kallsyms` name presence cannot prove `EXPORT_SYMBOL` visibility, MODVERSIONS/CRC compatibility, relocation success or runtime stability. The controlled physical load remains the authoritative next gate.
