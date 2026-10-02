@@ -202,12 +202,31 @@ jobs:
             find bundle -type f -print0 | sort -z | xargs -0 sha256sum
           } | tee reports/K4-IPSET-USERSPACE-MANIFEST.txt
 
+      - name: Pack and verify Unix-preserving K4 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf k4-ipset-userspace-51997.tar.gz bundle reports
+          mkdir -p work/archive-check
+          tar -xzf k4-ipset-userspace-51997.tar.gz -C work/archive-check
+          test -x work/archive-check/bundle/bin/ipset
+          test -x work/archive-check/bundle/bin/ipset.real
+          test -L work/archive-check/bundle/lib/libipset.so.13
+          test "$(readlink work/archive-check/bundle/lib/libipset.so.13)" = libipset.so.13.1.0
+          mnl_link="$(find work/archive-check/bundle/lib -maxdepth 1 -type l -name 'libmnl.so.*' | head -1)"
+          test -n "$mnl_link"
+          (
+            cd work/archive-check
+            grep -E '^[0-9a-f]{64}  ' reports/K4-IPSET-USERSPACE-MANIFEST.txt | sha256sum -c -
+          )
+          sha256sum k4-ipset-userspace-51997.tar.gz | tee reports/archive-sha256.txt
+
       - name: Publish K4 ipset userspace bundle
         uses: actions/upload-artifact@v4
         with:
           name: k4-ipset-userspace-51997
           path: |
-            bundle/
-            reports/
+            k4-ipset-userspace-51997.tar.gz
+            reports/archive-sha256.txt
           if-no-files-found: error
           retention-days: 90
