@@ -55,3 +55,23 @@ The first controlled family tests are performed only after a clean official ASUS
 A stock ASUS K4 PASS materially de-risks the candidate because the software repack gate proves the candidate retains the stock kernel/HND/protected runtime and contains no K2/K3 module leakage. It still does not activate the feature in the candidate.
 
 Before final candidate-side activation, collect fresh candidate K4a/runtime evidence, require candidate canaries, and repeat the minimum controlled family load/function check needed for that family. A discrepancy between stock and candidate phases is STOP/FAIL.
+
+
+## Temporary K4 userspace companions
+
+Kernel-module validation may require a matching userspace smoke tool that stock ASUS does not provide. Such tools are staged only below `/tmp`, are never added to the firmware image or an autoload path, and never authorize module loading by themselves.
+
+### ipset / xt_set
+
+Run `36970920179` produces artifact `k4-ipset-userspace-51997` (artifact id `11211646518`, ZIP digest `sha256:9f286d86e20e9d97a2782b29a65b9e36313f3ff5d8103860048f406131240890`).
+
+Build lineage:
+
+- source: `c553d8e4b0bf3289683368b0d57172649b030039`;
+- userspace: ipset 7.6 + libmnl 1.0.4;
+- toolchain: pinned ARM32 HND GCC 5.3 / glibc 2.22;
+- kernel family: K2 run `36556899650`.
+
+The bundle contains an `ipset` wrapper, real ARM32/EABI5 `ipset.real`, `libipset.so.13` and `libmnl.so.0`. CI records the ELF NEEDED closure and reaches `ipset v7.6, protocol version: 7` under QEMU. The host QEMU environment has no real ipset kernel netlink session, so the build gate accepts rc=1 only when the exact `Cannot open session to kernel.` marker is present and no loader/ABI failure appears.
+
+During physical K4, stage this companion together with the exact K2 modules only after the read-only preflight and host evidence verification have passed. The userspace artifact is a smoke-test dependency, not firmware payload and not runtime compatibility evidence.

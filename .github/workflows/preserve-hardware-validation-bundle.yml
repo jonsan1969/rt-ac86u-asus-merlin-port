@@ -70,6 +70,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 36561957525
 
+      - name: Download exact K4 ipset userspace companion
+        uses: actions/download-artifact@v4
+        with:
+          name: k4-ipset-userspace-51997
+          path: work/k4-ipset-userspace
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36970920179
+
       - name: Verify candidate and module identities
         shell: bash
         run: |
@@ -108,15 +117,33 @@ jobs:
           check_hash work/k3 sch_cake.ko 159256eb407a76d0ac38b53c3eea36ef74d054b1afe60329a61aad0e5024f24c
           check_hash work/k3 wireguard.ko 418f6e212f4d8f3f83142352f462fd870b591602f45b8af0564ecd72c7e5161c
 
+          test -x work/k4-ipset-userspace/bundle/bin/ipset
+          test -x work/k4-ipset-userspace/bundle/bin/ipset.real
+          test -f work/k4-ipset-userspace/bundle/lib/libipset.so.13.1.0
+          test -L work/k4-ipset-userspace/bundle/lib/libipset.so.13
+          test -f work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'kernel_family_run=36556899650' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'classification=K4_TEMPORARY_IPSET_USERSPACE_ONLY' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'libipset.so.13' work/k4-ipset-userspace/reports/needed-closure.txt
+          grep -Fq 'libmnl.so.0' work/k4-ipset-userspace/reports/needed-closure.txt
+          grep -Fq 'ipset v7.6, protocol version: 7' work/k4-ipset-userspace/reports/ipset-version.txt
+          (
+            cd work/k4-ipset-userspace
+            grep -E '^[0-9a-f]{64}  ' reports/K4-IPSET-USERSPACE-MANIFEST.txt | sha256sum -c -
+          )
+
       - name: Assemble hash-bound hardware validation bundle
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p bundle/official-stock bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/scripts bundle/docs bundle/optional
+          mkdir -p bundle/official-stock bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/userspace/ipset bundle/scripts bundle/docs bundle/optional
           cp work/official-stock/RT-AC86U_386_52334_OFFICIAL.w bundle/official-stock/
           cp work/candidate/* bundle/candidate/
           cp -a work/k2/. bundle/modules/k2/
           cp -a work/k3/. bundle/modules/k3/
+          cp -a work/k4-ipset-userspace/. bundle/userspace/ipset/
           cp scripts/prepare-candidate-evidence.sh bundle/scripts/
           cp scripts/k4-router-preflight.sh bundle/scripts/
           cp scripts/runtime-feature-preflight.sh bundle/scripts/
@@ -142,6 +169,7 @@ jobs:
             echo 'candidate_size=78250004'
             echo 'k2_run=36556899650'
             echo 'k3_run=36561957525'
+            echo 'k4_ipset_userspace_run=36970920179'
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
             echo
