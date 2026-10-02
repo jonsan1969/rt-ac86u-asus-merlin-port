@@ -13,7 +13,7 @@ All of the following must be recorded against the exact candidate SHA-256:
 5. candidate module families that are intended for use pass `docs/k4-controlled-module-validation.md` before activation; K4 is deliberately operator-controlled because it mutates live kernel state;
 6. general runtime feature preflight collected from the same 52334 runtime;
 7. runtime-sensitive WebUI/JFFS features pass their own contracts before they are advertised as available; M49 specifically requires HTTPD EJ-dispatch proof;
-8. configuration/JFFS backup and recovery path are prepared before first candidate flash;
+8. configuration/JFFS backup and recovery path are prepared before first candidate flash, following `docs/preflash-backup-recovery.md`; the procedure is documented now, but physical backup completion must be recorded before any firmware change;
 9. project status explicitly promotes the exact candidate hash from UNVALIDATED to hardware-tested.
 
 ## Fail closed
