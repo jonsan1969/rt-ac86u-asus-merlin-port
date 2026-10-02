@@ -241,6 +241,40 @@ jobs:
               fi
             done
           done
+      - name: Minimal Merlin hardening feasibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          AS="$(sed -n 's/^asus52334=//p' reports/rootfs-paths.txt)"
+          OUT=reports/minimal-merlin-hardening-feasibility.txt
+          {
+            echo '=== candidate binaries: dynamic dependencies and interpreters ==='
+            for rel in /usr/sbin/dnsmasq /usr/sbin/dropbear /usr/sbin/openvpn /usr/sbin/httpd /usr/sbin/miniupnpd /usr/sbin/lighttpd /usr/sbin/wget /bin/busybox; do
+              echo "===== $rel ====="
+              for spec in "MERLIN:$ME" "KC:$KC" "ASUS52334:$AS"; do
+                tag="${spec%%:*}"; root="${spec#*:}"; p="$root$rel"; echo "--- $tag"
+                if [ -f "$p" ]; then
+                  file "$p" || true
+                  readelf -l "$p" 2>/dev/null | grep -F 'Requesting program interpreter' || true
+                  readelf -d "$p" 2>/dev/null | grep NEEDED || true
+                  strings -a "$p" | grep -Eim 12 'OpenSSL [0-9]|OpenVPN [0-9]|Dropbear|dnsmasq-[0-9]|miniupnpd|BusyBox v|lighttpd/[0-9]|wget [0-9]' || true
+                else echo MISSING; fi
+              done
+            done
+            echo '=== Merlin shared-library dependency fanout for crypto/curl ==='
+            for lib in libssl.so.1.1 libcrypto.so.1.1 libcurl.so.4; do
+              echo "--- consumers of $lib"
+              find "$ME" -type f -perm /111 2>/dev/null | while read -r p; do
+                readelf -d "$p" 2>/dev/null | grep -q "$lib" && echo "${p#$ME}" || true
+              done | sort
+            done
+            echo '=== KC files changed versus Merlin among selected candidates ==='
+            for rel in /usr/sbin/dnsmasq /usr/sbin/dropbear /usr/sbin/openvpn /usr/sbin/httpd /usr/sbin/miniupnpd /usr/sbin/lighttpd /usr/sbin/wget /bin/busybox /usr/lib/libssl.so.1.1 /usr/lib/libcrypto.so.1.1 /usr/lib/libcurl.so.4.8.0; do
+              [ -e "$ME$rel" ] && [ -e "$KC$rel" ] && { printf '%s\t' "$rel"; cmp -s "$ME$rel" "$KC$rel" && echo SAME || echo DIFFERENT; } || true
+            done
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
