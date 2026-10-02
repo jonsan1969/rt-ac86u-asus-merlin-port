@@ -47,9 +47,9 @@ After the router is confirmed stable:
 2. run `scripts/runtime-feature-preflight.sh`;
 3. copy both archives off-router;
 4. run the host evidence verifier **without** candidate-canary mode;
-5. run the host-side K4 symbol-name preflight against this K4a archive, the exact preserved modules and dependency-closure report; require `K4_SYMBOL_PREFLIGHT_PASS`;
-6. inspect baseline dmesg, loaded modules, symbol-preflight report and stock module metadata;
-7. run `scripts/verify-k4-family-staging.py` against `bundle/k4-family-staging` from the preserved hardware bundle, select exactly one family, require `K4_FAMILY_STAGING_PASS family=<family>`, and copy only the resulting verified family directory to `/tmp` on the router;
+5. for the family being tested, run `scripts/prepare-k4-host-gates.py` with the extracted preserved bundle plus these fresh K4a/runtime archives; require `PRE_K4_HOST_GATES_PASS family=<family>`. This wrapper re-runs bundle integrity, baseline hardware evidence, full-set symbol-name preflight and one-family staging in order;
+6. inspect baseline dmesg, loaded modules and the generated host reports;
+7. copy only the wrapper's `selected-family/<family>` directory to a fresh `/tmp/k4-<family>` path on the router;
 8. only then begin controlled K4, one family at a time:
    - ipset / xt_set;
    - Cake;
@@ -85,7 +85,7 @@ Before optional module activation:
 
 Candidate mode requires the five immutable overlay hashes and the custom-WebUI aliases.
 
-8. before any candidate-side optional-module repeat, run `scripts/verify-k4-symbol-preflight.py` again against the **fresh candidate K4a archive** and the same exact preserved module/closure inputs; require a fresh `K4_SYMBOL_PREFLIGHT_PASS`.
+8. before any candidate-side optional-module repeat, run `scripts/prepare-k4-host-gates.py --candidate-mode` with the **fresh candidate K4a/runtime archives** and the intended family; require a fresh `PRE_K4_HOST_GATES_PASS family=<family>`. This includes the candidate hardware-evidence canary gate, fresh symbol preflight and one-family staging.
 
 A PASS establishes the intended guarded overlay/runtime fingerprint and the 52334 read-only evidence baseline. It is still not a flashability verdict.
 

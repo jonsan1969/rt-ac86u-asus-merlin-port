@@ -1,0 +1,179 @@
+name: Validate pre-K4 host gate orchestrator
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/prepare-k4-host-gates.py
+      - .github/workflows/validate-pre-k4-host-gates.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static validation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/prepare-k4-host-gates.py
+          python3 scripts/prepare-k4-host-gates.py --help >/dev/null
+          if grep -nE '\\b(insmod|modprobe|rmmod|nvram[[:space:]]+(set|commit)|reboot|mtd-write|service[[:space:]]+restart)\\b' scripts/prepare-k4-host-gates.py; then
+            echo "mutating router command token found in host-only orchestrator" >&2
+            exit 1
+          fi
+
+      - name: Download exact preserved hardware bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: work/hardware
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36995684511
+
+      - name: Build synthetic ASUS-52334 read-only evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(dirname "$(find work/hardware -type f -name BUNDLE-MANIFEST.txt -print -quit)")"
+          test -n "$root"
+          printf '%s\n' "$root" > work/root.txt
+          modules="$root/modules"
+
+          mkdir -p fixtures/k4/rtac86u-k4-preflight fixtures/runtime/rtac86u-merlin-runtime-probe
+          sha=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          cat > fixtures/k4/rtac86u-k4-preflight/summary.txt <<EOF
+          K4A_RTAC86U_52334_READ_ONLY_PREFLIGHT
+          expected_candidate_sha256=$sha
+          timestamp=synthetic-orchestrator-ci
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          odmpid=
+          uname_r=4.1.27
+          uname_m=aarch64
+          uname_a=Linux rt-ac86u 4.1.27 synthetic aarch64
+          proc_version=Linux version 4.1.27
+          rootfs=synthetic
+          uptime=1
+          EOF
+          cat > fixtures/k4/rtac86u-k4-preflight/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+          : > fixtures/k4/rtac86u-k4-preflight/proc-modules.txt
+          echo 'boot clean' > fixtures/k4/rtac86u-k4-preflight/dmesg-before.txt
+          : > fixtures/k4/rtac86u-k4-preflight/module-tree.txt
+          : > fixtures/k4/rtac86u-k4-preflight/stock-module-vermagic.txt
+
+          python3 - "$modules" > fixtures/k4/rtac86u-k4-preflight/proc-kallsyms.txt <<'PY'
+          import pathlib, subprocess, sys
+          root=pathlib.Path(sys.argv[1])
+          names=set()
+          for p in root.rglob("*.ko"):
+              cp=subprocess.run(["readelf","-Ws",str(p)],check=True,text=True,stdout=subprocess.PIPE)
+              for line in cp.stdout.splitlines():
+                  parts=line.split()
+                  if len(parts) >= 8 and parts[0].rstrip(":").isdigit() and parts[6] == "UND" and parts[4] != "WEAK":
+                      name=parts[7].split("@",1)[0]
+                      if name:
+                          names.add(name)
+          names.add("start_kernel")
+          for i,name in enumerate(sorted(names),1):
+              print(f"{i:016x} T {name}")
+          PY
+
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/summary.txt <<EOF
+          RTAC86U_MERLIN_RUNTIME_READ_ONLY_PROBE
+          expected_candidate_sha256=$sha
+          timestamp=synthetic-orchestrator-ci
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          uname=Linux rt-ac86u 4.1.27 synthetic aarch64
+          EOF
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_HTTP_REQUESTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/webui.txt <<'EOF'
+          === WEBUI LINKS ===
+          /www/user -> /var/wwwext
+          /www/user1.asp -> user/user1.asp
+          /www/user20.asp -> user/user20.asp
+          EOF
+          echo 'jffs evidence' > fixtures/runtime/rtac86u-merlin-runtime-probe/jffs.txt
+          echo 'services evidence' > fixtures/runtime/rtac86u-merlin-runtime-probe/services.txt
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/candidate-canaries.txt <<'EOF'
+          === CANDIDATE IMMUTABLE CANARIES ===
+          f4f19dd4e0437869d476e37d9b74b0bf75690886941bd00c0079eb1425dd0bba  /usr/sbin/helper.sh
+          16b6d409b90fe2319adbf62f42b54f0027dddf94913402eba5cd36d955e99d56  /www/Tools_OtherSettings.asp
+          a4d4391781bd9a1cb8c0d93cb6f0abca1b1d7f96809231ecdd233394a931fe9a  /www/Advanced_Wireless_Survey.asp
+          7f5a45e2791b3ef6cde1a34a253711b7510ad7c6136d20fc91404b48f744647b  /www/js/qrcode.min.js
+          a6e28e7be5b00799f4492ab99baba31e9a9255ffd3e62bbb276270f5645c04f3  /www/ajax/logFilter.json
+          EOF
+
+          tar -C fixtures/k4 -czf fixtures/k4-pass.tar.gz rtac86u-k4-preflight
+          tar -C fixtures/runtime -czf fixtures/runtime-pass.tar.gz rtac86u-merlin-runtime-probe
+
+      - name: PASS baseline orchestration
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/root.txt)"
+          python3 scripts/prepare-k4-host-gates.py \
+            --bundle-root "$root" \
+            --k4 fixtures/k4-pass.tar.gz \
+            --runtime fixtures/runtime-pass.tar.gz \
+            --family ipset \
+            --output work/baseline | tee work/baseline.txt
+          grep -Fq 'PRE_K4_HOST_GATES_PASS family=ipset' work/baseline.txt
+          test -f work/baseline/selected-family/ipset/MANIFEST.txt
+          grep -Fq '"candidate_mode": false' work/baseline/pre-k4-host-gates.json
+
+      - name: PASS candidate orchestration
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/root.txt)"
+          python3 scripts/prepare-k4-host-gates.py \
+            --bundle-root "$root" \
+            --k4 fixtures/k4-pass.tar.gz \
+            --runtime fixtures/runtime-pass.tar.gz \
+            --family wireguard \
+            --candidate-mode \
+            --output work/candidate | tee work/candidate.txt
+          grep -Fq 'PRE_K4_HOST_GATES_PASS family=wireguard' work/candidate.txt
+          test -f work/candidate/selected-family/wireguard/MANIFEST.txt
+          grep -Fq '"candidate_mode": true' work/candidate/pre-k4-host-gates.json
+
+      - name: FAIL non-empty workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/root.txt)"
+          mkdir -p work/nonempty
+          touch work/nonempty/existing
+          if python3 scripts/prepare-k4-host-gates.py \
+            --bundle-root "$root" --k4 fixtures/k4-pass.tar.gz --runtime fixtures/runtime-pass.tar.gz \
+            --family cifs --output work/nonempty; then
+            echo "non-empty orchestrator workspace was accepted" >&2
+            exit 1
+          fi
