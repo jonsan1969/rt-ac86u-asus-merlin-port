@@ -305,6 +305,27 @@ jobs:
               echo "--- $p"; [ -f "$p" ] && sed -n '1,260p' "$p" || true
             done
           } > "$OUT"
+      - name: OpenVPN hardening capability audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          ME="$(sed -n 's/^merlin=//p' reports/rootfs-paths.txt)"
+          OUT=reports/openvpn-hardening-capabilities.txt
+          {
+            for spec in "KC:$KC" "MERLIN:$ME"; do
+              tag="${spec%%:*}"; root="${spec#*:}"; p="$root/usr/sbin/openvpn"
+              echo "===== $tag openvpn ====="
+              sha256sum "$p" || true
+              readelf -d "$p" 2>/dev/null | grep NEEDED || true
+              echo '--- version/library strings'
+              strings -a "$p" | grep -Ei 'OpenVPN [0-9]+\.[0-9]+|OpenSSL [0-9]+\.[0-9]+|LZO [0-9]+|LZ4|mbed TLS' | sort -u | head -n 100 || true
+              echo '--- hardening option vocabulary'
+              strings -a "$p" | grep -E 'tls-version-min|tls-version-max|tls-cipher|tls-ciphersuites|data-ciphers|data-ciphers-fallback|ncp-ciphers|auth-nocache|remote-cert-tls|verify-x509-name|tls-crypt|tls-auth|auth SHA|AES-[0-9]+-GCM|CHACHA20|compress|comp-lzo|reneg-sec' | sort -u | head -n 300 || true
+            done
+            echo '===== WebUI/config generation references ====='
+            grep -RInaE 'tls-version|min.*tls|tls-crypt|tls-auth|ncp-ciphers|data-ciphers|AES-[0-9]+-GCM|SHA256|SHA512|auth-nocache|remote-cert-tls|verify-x509|comp-lzo|compress' "$KC"/www "$KC"/rom "$KC"/etc "$KC"/usr 2>/dev/null | grep -Ei 'openvpn|vpn_server|vpn_client|ovpn|vpn' | head -n 12000 || true
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
