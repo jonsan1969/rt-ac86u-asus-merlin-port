@@ -33,11 +33,11 @@ Run `36924014278` produced the first end-to-end software-gated candidate. Exact 
 
 ## Preserved hardware-validation bundle
 
-Run `36969448115` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
+Run `36971723461` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
 
 - artifact: `hardware-validation-bundle-eac8a777`;
-- artifact id: `11211056837`;
-- artifact ZIP digest: `sha256:f1dcb90e02070b055c636d1a2787c12f16c8ddd8c2dfabe956843a7d856bb399`;
+- artifact id: `11211522657`;
+- artifact ZIP digest: `sha256:94894acc89490812e118469c92e00823ae1a598440e625ffd69526752b66a3ee`;
 - expires: `2026-12-31T05:33:12Z`;
 - candidate inside: exact `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`, size `78,250,004` bytes;
 - K2 source run: `36556899650`;
