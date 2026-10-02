@@ -63,7 +63,7 @@ Kernel-module validation may require a matching userspace smoke tool that stock 
 
 ### ipset / xt_set
 
-Run `36970920179` produces artifact `k4-ipset-userspace-51997` (artifact id `11211646518`, ZIP digest `sha256:9f286d86e20e9d97a2782b29a65b9e36313f3ff5d8103860048f406131240890`).
+Run `36971390631` produces artifact `k4-ipset-userspace-51997` (artifact id `11212280337`, ZIP digest `sha256:d935dfde9f58b1e072d6780d83613abfef825121598924012f39aa4b88a2b7e5`). The artifact contains a Unix-preserving `k4-ipset-userspace-51997.tar.gz`; CI re-extracts it and verifies executable bits, library symlinks and manifest hashes before upload.
 
 Build lineage:
 

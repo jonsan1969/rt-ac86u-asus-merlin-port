@@ -77,7 +77,7 @@ jobs:
           path: work/k4-ipset-userspace
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: 36970920179
+          run-id: 36971390631
 
       - name: Verify candidate and module identities
         shell: bash
@@ -117,20 +117,29 @@ jobs:
           check_hash work/k3 sch_cake.ko 159256eb407a76d0ac38b53c3eea36ef74d054b1afe60329a61aad0e5024f24c
           check_hash work/k3 wireguard.ko 418f6e212f4d8f3f83142352f462fd870b591602f45b8af0564ecd72c7e5161c
 
-          test -x work/k4-ipset-userspace/bundle/bin/ipset
-          test -x work/k4-ipset-userspace/bundle/bin/ipset.real
-          test -f work/k4-ipset-userspace/bundle/lib/libipset.so.13.1.0
-          test -L work/k4-ipset-userspace/bundle/lib/libipset.so.13
-          test -f work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
-          grep -Fq 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
-          grep -Fq 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
-          grep -Fq 'kernel_family_run=36556899650' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
-          grep -Fq 'classification=K4_TEMPORARY_IPSET_USERSPACE_ONLY' work/k4-ipset-userspace/reports/K4-IPSET-USERSPACE-MANIFEST.txt
-          grep -Fq 'libipset.so.13' work/k4-ipset-userspace/reports/needed-closure.txt
-          grep -Fq 'libmnl.so.0' work/k4-ipset-userspace/reports/needed-closure.txt
-          grep -Fq 'ipset v7.6, protocol version: 7' work/k4-ipset-userspace/reports/ipset-version.txt
+          test -f work/k4-ipset-userspace/k4-ipset-userspace-51997.tar.gz
+          test -f work/k4-ipset-userspace/reports/archive-sha256.txt
           (
             cd work/k4-ipset-userspace
+            sha256sum -c reports/archive-sha256.txt
+          )
+          mkdir -p work/k4-ipset-unpacked
+          tar -xzf work/k4-ipset-userspace/k4-ipset-userspace-51997.tar.gz -C work/k4-ipset-unpacked
+          test -x work/k4-ipset-unpacked/bundle/bin/ipset
+          test -x work/k4-ipset-unpacked/bundle/bin/ipset.real
+          test -f work/k4-ipset-unpacked/bundle/lib/libipset.so.13.1.0
+          test -L work/k4-ipset-unpacked/bundle/lib/libipset.so.13
+          test "$(readlink work/k4-ipset-unpacked/bundle/lib/libipset.so.13)" = libipset.so.13.1.0
+          test -f work/k4-ipset-unpacked/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039' work/k4-ipset-unpacked/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d' work/k4-ipset-unpacked/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'kernel_family_run=36556899650' work/k4-ipset-unpacked/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'classification=K4_TEMPORARY_IPSET_USERSPACE_ONLY' work/k4-ipset-unpacked/reports/K4-IPSET-USERSPACE-MANIFEST.txt
+          grep -Fq 'libipset.so.13' work/k4-ipset-unpacked/reports/needed-closure.txt
+          grep -Fq 'libmnl.so.0' work/k4-ipset-unpacked/reports/needed-closure.txt
+          grep -Fq 'ipset v7.6, protocol version: 7' work/k4-ipset-unpacked/reports/ipset-version.txt
+          (
+            cd work/k4-ipset-unpacked
             grep -E '^[0-9a-f]{64}  ' reports/K4-IPSET-USERSPACE-MANIFEST.txt | sha256sum -c -
           )
 
@@ -143,7 +152,8 @@ jobs:
           cp work/candidate/* bundle/candidate/
           cp -a work/k2/. bundle/modules/k2/
           cp -a work/k3/. bundle/modules/k3/
-          cp -a work/k4-ipset-userspace/. bundle/userspace/ipset/
+          cp work/k4-ipset-userspace/k4-ipset-userspace-51997.tar.gz bundle/userspace/ipset/
+          cp work/k4-ipset-userspace/reports/archive-sha256.txt bundle/userspace/ipset/
           cp scripts/prepare-candidate-evidence.sh bundle/scripts/
           cp scripts/k4-router-preflight.sh bundle/scripts/
           cp scripts/runtime-feature-preflight.sh bundle/scripts/
@@ -169,7 +179,7 @@ jobs:
             echo 'candidate_size=78250004'
             echo 'k2_run=36556899650'
             echo 'k3_run=36561957525'
-            echo 'k4_ipset_userspace_run=36970920179'
+            echo 'k4_ipset_userspace_run=36971390631'
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
             echo
