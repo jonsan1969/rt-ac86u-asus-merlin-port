@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -200,3 +201,87 @@ jobs:
             echo "unsafe archive was accepted" >&2
             exit 1
           fi
+
+
+      - name: Download exact preserved project artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: work/hardware
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36976555090
+
+      - name: Build project-profile synthetic kallsyms harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules="$(find work/hardware -type d -path '*/modules' -print -quit)"
+          closure="$(find work/hardware -type f -name 'k4-module-dependency-closure.json' -print -quit)"
+          test -n "$modules"
+          test -n "$closure"
+          test "$(find "$modules" -type f -name '*.ko' | wc -l)" -eq 27
+
+          mkdir -p work/project-k4/rtac86u-k4-preflight
+          sha=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          cat > work/project-k4/rtac86u-k4-preflight/summary.txt <<EOF
+          K4A_RTAC86U_52334_READ_ONLY_PREFLIGHT
+          expected_candidate_sha256=$sha
+          timestamp=synthetic-project-profile-ci
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          odmpid=
+          uname_r=4.1.27
+          uname_m=aarch64
+          uname_a=Linux rt-ac86u 4.1.27 synthetic aarch64
+          proc_version=Linux version 4.1.27
+          rootfs=synthetic
+          uptime=1
+          EOF
+          cat > work/project-k4/rtac86u-k4-preflight/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+
+          python3 - "$modules" > work/project-k4/rtac86u-k4-preflight/proc-kallsyms.txt <<'PY'
+          import pathlib, subprocess, sys
+          root=pathlib.Path(sys.argv[1])
+          names=set()
+          for p in root.rglob("*.ko"):
+              cp=subprocess.run(["readelf","-Ws",str(p)],check=True,text=True,stdout=subprocess.PIPE)
+              for line in cp.stdout.splitlines():
+                  parts=line.split()
+                  if len(parts) < 8 or not parts[0].rstrip(":").isdigit():
+                      continue
+                  if parts[6] == "UND" and parts[4] != "WEAK":
+                      name=parts[7].split("@",1)[0]
+                      if name:
+                          names.add(name)
+          names.add("start_kernel")
+          for i,name in enumerate(sorted(names),1):
+              print(f"{i:016x} T {name}")
+          PY
+          tar -C work/project-k4 -czf work/project-k4-pass.tar.gz rtac86u-k4-preflight
+          printf '%s\n' "$modules" > work/project-modules-path.txt
+          printf '%s\n' "$closure" > work/project-closure-path.txt
+
+      - name: PASS exact project artifact profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules="$(cat work/project-modules-path.txt)"
+          closure="$(cat work/project-closure-path.txt)"
+          python3 scripts/verify-k4-symbol-preflight.py \
+            --k4 work/project-k4-pass.tar.gz \
+            --modules-root "$modules" \
+            --closure "$closure" \
+            --report work/project-profile-report.json | tee work/project-profile.txt
+          grep -Fq K4_SYMBOL_PREFLIGHT_PASS work/project-profile.txt
+          grep -Fq '"module_count": 27' work/project-profile-report.json
+          grep -Fq '"classification": "RTAC86U_52334_K4_SYMBOL_NAME_PREFLIGHT"' work/project-profile-report.json
