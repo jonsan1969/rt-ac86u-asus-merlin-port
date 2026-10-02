@@ -289,6 +289,22 @@ jobs:
               strings -a "$p" 2>/dev/null | grep -Ei 'dnsmasq[- /]?[0-9]+\.[0-9]+|Dropbear[^[:cntrl:]]*[0-9]{4}\.[0-9]+|OpenVPN [0-9]+\.[0-9]+\.[0-9]+|OpenSSL [0-9]+\.[0-9]+\.[0-9]+[a-z]?' | sort -u | head -n 100 || true
             done
           } > "$OUT"
+      - name: SoftCenter disablement feasibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          OUT=reports/softcenter-disablement.txt
+          {
+            echo '=== enable/disable/state variables ==='
+            grep -RInaE 'softcenter.*(enable|disable)|koolshare.*(enable|disable)|sc_[A-Za-z0-9_]*(enable|status)|ks_[A-Za-z0-9_]*(enable|status)|dbus (get|set).*enable|nvram (get|set).*soft|nvram (get|set).*kool' "$KC"/rom/etc/koolshare "$KC"/usr "$KC"/etc "$KC"/www 2>/dev/null | head -n 12000 || true
+            echo '=== startup entry points ==='
+            grep -RInaE 'kscore\.sh|koolshare|softcenter' "$KC"/etc/init.d "$KC"/etc "$KC"/rom/etc "$KC"/usr 2>/dev/null | grep -Ei 'start|init|boot|service|jffs|kscore|koolshare|softcenter' | head -n 12000 || true
+            echo '=== reset/uninstall behavior ==='
+            for p in "$KC/usr/bin/koolshare-reset" "$KC/rom/etc/koolshare/bin/kscore.sh"; do
+              echo "--- $p"; [ -f "$p" ] && sed -n '1,260p' "$p" || true
+            done
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
