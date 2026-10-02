@@ -157,16 +157,48 @@ The rebuilt image is not expected to be byte-identical to ASUS stock because UBI
 
 This establishes the **stock repack baseline**, not flashability.
 
-## Next gate
+## Active guarded-overlay repack — SUCCESS / UNVALIDATED CANDIDATE
 
-Pass the current guarded active overlay through the same extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.
+The active-overlay software gate is complete.
 
-The overlay repack gate must prove:
+Current reference run:
 
-- the post-repack semantic change set is exactly the manifest-authorized targets plus required parent directories;
-- all protected ASUS core/runtime files remain byte-identical to stock;
-- all existing guarded feature contracts still pass after re-extraction;
-- final UBI remains exactly 570 PEBs and final WFI validation passes;
-- no K2/K3 optional modules are activated or added.
+`36924014278`
 
-Do not publish or call the resulting image flashable until the overlay-repack gate and later real-router/runtime gates pass.
+Published firmware:
+
+`RT-AC86U_386_52334_merlin-port-UNVALIDATED.w`
+
+Exact firmware identity:
+
+- SHA-256: `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`;
+- size: `78,250,004` bytes.
+
+The run proves:
+
+- guarded manifest/overlay authorization;
+- verified ASUS 386_52334 base;
+- exact 570-PEB UBI;
+- valid WFI/trailer/CRC;
+- metadata-faithful re-extraction;
+- zero unauthorized semantic drift;
+- protected ASUS core files remain byte-identical;
+- zero K2/K3 optional kernel-module leakage.
+
+This closes the software repack gate. It does **not** establish flashability.
+
+The original GitHub artifact is `11193520953`. Run `36967176099` additionally preserves the exact candidate plus K2/K3 hardware-validation inputs in 90-day artifact `11210471933` through 2026-12-31. The artifact ZIP digests are not firmware identities; all hardware evidence remains bound to the `.w` SHA-256 above.
+
+## Remaining gate
+
+The next gate is no longer another repack experiment.
+
+Promotion now requires the physical/runtime prerequisites in `docs/candidate-promotion-gate.md`, including:
+
+- actual ASUS 386_52334 K4a read-only evidence;
+- general runtime preflight from the intended 52334 validation runtime;
+- controlled K4 family validation for any optional kernel modules to be activated;
+- feature-specific runtime proof such as M49 user-slot EJ expansion;
+- physically completed backup/rollback preparation.
+
+Until those gates pass, the candidate remains **UNVALIDATED** and must not be called flashable.

@@ -1,202 +1,247 @@
-Pre-flash recovery readiness is now documented in `docs/preflash-backup-recovery.md`. It explicitly keeps configuration/JFFS backups private and rollback-only, forbids importing Merlin state as ASUS/candidate evidence, and requires verified rollback media plus wired recovery readiness. The procedure is READY; actual backup creation remains physical/operator work before any firmware change.
-
-Hardware-validation inputs are now preserved beyond the short original artifact retention. Run `36967176099` is SUCCESS and published `hardware-validation-bundle-eac8a777` (artifact id `11210471933`, ZIP digest `sha256:05ee4f971846b84a83378e7673832550c8646bbedb8f77d846d49e942d4cc252`, expires 2026-12-31). The bundle re-verifies the exact candidate `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3` and the K2/K3 module families before republishing. Never confuse the bundle ZIP digest with the firmware hash.
-
-M49 optional delivery preparation is now software-complete but runtime-deferred: run `36966933767` is SUCCESS for the fail-closed `optional/monthly-traffic/` user-slot/JFFS package (slot rendering, /var/wwwext Chart.js, collision guards, sandbox install/uninstall, no rootfs/NVRAM/service/startup mutation). This does NOT replace the physical gate: ASUS 386_52334 stock `httpd` must still prove EJ expansion of `<% bandwidth("monthly"); %>` through the active custom user-slot path before M49 is advertised as runtime-available.
-
-Current checkpoint: first end-to-end software-gated candidate remains `36924014278`, exact `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`, size 78,250,004; still UNVALIDATED. Candidate evidence helper is green `36924149359`. Both passive router collectors are now bound to that exact hash and revalidated green: K4a `36924628372`, general runtime `36924632712`. `docs/k4-controlled-module-validation.md` now defines the deliberately operator-controlled, fail-closed mutating K4 phase (ipset -> Cake -> CIFS -> NFS -> WireGuard) with stop conditions; never run it on Merlin 386.14_2 as 52334 evidence. ASUS 52334 source remains an external blocker; M49 EJ dispatch and actual K4/runtime execution remain genuine physical ASUS-52334 gates.
-
-Run `36664684285` establishes the exact capacity boundary. Excluding `ouiDB.json`, `rtac86u-ntpd`, `scp`, `nano`/`ncurses`, and `chart.min.js` produces `72,122,368`-byte UBIFS and exact `74,711,040`-byte UBI / `570` PEB. All other tested small fifth removals remained `571` PEB. Its log has been fetched exactly once; never fetch it again. These five payload groups must leave the built-in rootfs overlay and become optional/JFFS-delivered; remove or redesign any built-in UI references that would otherwise become broken before running the real repack gate.
-
-Run `36663568334` minimal-fourth-group matrix: atop `ouiDB+ntpd+scp`, removing `wsdd2` stays `573` PEB, `chart` gives `572`, `nano/ncurses` gives `571`, and `qrcode` stays `573`. Its log has been fetched exactly once; never fetch it again. Best measured candidate is exactly 1 PEB over the immutable 570-PEB span. Measure only the smallest extra payloads atop the 571-PEB candidate next.
-
-Run `36663266938` targeted three-group matrix: `no_oui_ntpd_scp=573` PEB, `no_oui_ntpd_nano=574`, `no_oui_ntpd_wsdd2=575`, `no_oui_ntpd_chart=575`. Its log has been fetched exactly once; never fetch it again. Best candidate is only 3 PEB over the immutable span. Measure the smallest fourth group atop `ouiDB+ntpd+scp`; do not broaden removals blindly.
-
-Run `36662877291` capacity matrix proves no tested one- or two-group footprint reduction fits: full `585` PEB; `no_oui=580`, `no_ntpd=580`, `no_scp=581`, `no_nano=582`, `no_oui_ntpd=576`, `no_oui_scp=577`, `no_ntpd_scp=577`. Its log has been fetched exactly once; never fetch it again. At least a third payload reduction is required; measure targeted three-group candidates next.
-
-Run `36660637095` reconfirms the full active overlay under pinned zlib at `74,027,008`-byte UBIFS and `76,677,120`-byte UBI / `585` PEB: exactly 15 PEB over the immutable span. Its log has been fetched exactly once; never fetch it again. The next Action must be a capacity matrix, not another identical full-overlay retry.
-
-Run `36659212017` closes the LZO experiment: LZO is materially worse (`81,264,640`-byte UBIFS; `84,148,224`-byte UBI / `642` PEB) than zlib (`585` PEB). Its log has been fetched exactly once; never fetch it again. Keep zlib and the immutable 570-PEB span. Largest repo add-only payloads are `ouiDB.json` 1,285,908 B, `rtac86u-ntpd` 925,720 B, `scp` 663,424 B, `nano` 223,780 B and `libncurses.so.6.0` 222,880 B. Continue by reducing/optionalizing feature payload footprint; do not enlarge the partition or replace the ASUS kernel.
-
 # New-thread handoff
 
-Updated: 2026-09-29
+Updated: 2026-10-02
 
 ## Project
-**Take official ASUS RT-AC86U 3.0.0.4.386_52334 and restore pinned Merlin 386.14_2 functionality without replacing newer ASUS core/runtime components.**
+
+**Modern RT-AC86U firmware med Merlin-funktionalitet**
 
 Repository: `jonsan1969/rt-ac86u-asus-merlin-port`  
 Branch: `asus-52334-merlin-port`
 
-## Working-memory rule
-Git is the project working memory.
+Main track: ASUS `386_52334` + pinned Merlin `386.14_2`.
 
-After **every GitHub Action**:
+KoolCenter is a separate track in the same repo/branch. Never mix its commits, Actions, evidence or conclusions into this main track unless a specific transfer is explicitly approved.
+
+## Working rule
+
+Git/repo is the project working memory.
+
+Continue autonomously while work can be done. Stop only for genuinely required user input, physical router access or external information that cannot be worked around.
+
+After every GitHub Action:
+
 1. inspect the result;
-2. update Git docs to the current truth before continuing;
-3. when a blocker is solved, remove obsolete troubleshooting history and retain only the final cause/fix if it remains technically relevant;
-4. do not preserve a chronological list of failed runs merely for history;
-5. fetch an Action log only once and reuse the extracted finding.
+2. update governing docs to current truth;
+3. continue immediately if another source-independent/router-independent step exists.
 
-Repository state overrides chat recollection. Do not reopen settled probes.
+Fetch any given Action **log** at most once. Reuse the extracted finding; do not re-fetch the same log.
+
+Repository state overrides old chat context. Do not reopen settled probes.
 
 ## Non-negotiable architecture
-- Final runtime/hardware/security baseline: ASUS RT-AC86U `386_52334`.
-- Merlin donor/reference: `386.14_2`, source commit `6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b`.
-- ASUS-first: never replace newer ASUS `rc`, `httpd`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, kernel/HND or proprietary components with older Merlin binaries.
-- Shared-core features require source-delta ports onto ASUS-compatible lineage.
-- Image-first changes remain additive or exact/preimage-guarded.
-- No flashability claim before repack and real-router/runtime gates pass.
-- Never replace the ASUS 52334 kernel image.
 
-## Settled decisions
-Do not investigate these again:
-- M48 per-IP traffic/cstats: **NO PORT** on pinned 386.14_2 RT-AC86U/HND.
+- Final hardware/runtime/security authority: ASUS RT-AC86U `3.0.0.4.386_52334`.
+- Merlin donor/reference: `386.14_2`, source commit `6a5df61aab6f3fa2dffc518994d42e4f2a27fb2b`.
+- Never replace newer ASUS `rc`, `httpd`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, kernel/HND or proprietary components with older Merlin binaries.
+- Shared-core features require source-delta integration onto an ASUS-compatible lineage.
+- Never replace the ASUS 52334 kernel image.
+- No flashability claim before promotion and physical/runtime gates pass.
+
+## Current software-gated candidate
+
+Run: `36924014278`
+
+Firmware: `RT-AC86U_386_52334_merlin-port-UNVALIDATED.w`
+
+Exact `.w` SHA-256:
+
+`eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`
+
+Size: `78,250,004` bytes.
+
+Classification: **UNVALIDATED — NOT FLASH-APPROVED**.
+
+The software gate proves:
+
+- guarded manifest/overlay authorization;
+- verified ASUS 386_52334 base;
+- exact 570-PEB UBI;
+- valid WFI/trailer/CRC;
+- metadata-faithful re-extraction;
+- zero unauthorized semantic drift;
+- protected ASUS core files byte-identical;
+- zero K2/K3 optional-kernel-module leakage.
+
+Original candidate artifact: `11193520953`.
+
+## Preserved hardware-validation inputs
+
+Run `36967176099` is SUCCESS.
+
+Artifact: `hardware-validation-bundle-eac8a777`  
+Artifact id: `11210471933`  
+ZIP digest: `sha256:05ee4f971846b84a83378e7673832550c8646bbedb8f77d846d49e942d4cc252`  
+Expiry: 2026-12-31.
+
+The workflow re-verifies the exact candidate hash/size and the K2/K3 module identities before republishing.
+
+**Never use the artifact ZIP digest as the firmware identity.** Hardware evidence is bound to the exact `.w` SHA-256 above.
+
+## Candidate evidence / physical collectors
+
+Candidate evidence helper:
+
+`scripts/prepare-candidate-evidence.sh`
+
+CI: `36924149359` — SUCCESS.
+
+K4a read-only collector:
+
+`scripts/k4-router-preflight.sh`
+
+Hash-bound CI: `36924628372` — SUCCESS.
+
+General runtime collector:
+
+`scripts/runtime-feature-preflight.sh`
+
+Hash-bound CI: `36924632712` — SUCCESS.
+
+Both collectors remain read-only and are bound to the current candidate hash.
+
+## Kernel/module track
+
+K1 config/toolchain lineage: **SUCCESS**, run `36531249746`.
+
+K2 ipset/xt_set family: **SUCCESS**, run `36556899650`.
+
+K3 optional families: **SUCCESS**, run `36561957525`.
+
+Built families:
+
+- ipset / xt_set;
+- Cake;
+- CIFS;
+- NFS/SUNRPC/LOCKD;
+- WireGuard.
+
+These are build proofs only.
+
+K4 physical ASUS-52334 validation remains mandatory. Test one family at a time in this order:
+
+1. ipset / xt_set;
+2. Cake;
+3. CIFS;
+4. NFS/SUNRPC/LOCKD;
+5. WireGuard.
+
+Unknown symbols, format/vermagic errors, WARN/Oops or HND/network instability are STOP/FAIL conditions.
+
+Never run K4 on Merlin 386.14_2 and count it as ASUS 52334 evidence.
+
+## M07 custom WebUI
+
+M07 is SUCCESS.
+
+Metadata-faithful `ubi-reader -k -x` extraction proves:
+
+`/www/user -> /var/wwwext`
+
+The old Binwalk-only `/dev/null` result was an extraction artifact.
+
+Do not patch `/www/user`.
+
+## M49 Monthly Traffic
+
+Backend/implementation remains SUCCESS but built-in page/Chart.js were optionalized for the immutable 570-PEB budget.
+
+Optional user-slot/JFFS package preparation is now **SUCCESS / STATIC-SANDBOX VALIDATED**:
+
+run `36966933767`.
+
+Package:
+
+`optional/monthly-traffic/`
+
+It provides explicit `userN.asp` rendering, private Chart.js in `/var/wwwext`, collision guards, no rootfs/NVRAM/service/startup mutation, and fail-closed uninstall.
+
+The remaining gate is physical/runtime proof that ASUS 386_52334 stock `httpd` EJ-expands:
+
+`<% bandwidth("monthly"); %>`
+
+through the active custom user-slot path.
+
+Do not replace that runtime proof with more static CI.
+
+## Optional/JFFS payloads
+
+Nano + SCP optional delivery: run `36863705618` — SUCCESS.
+
+Dormant AMTM materialization: run `36864039573` — SUCCESS.
+
+Local NTPD and wsdd2 foundations remain dormant until generic JFFS lifecycle hooks exist.
+
+Capacity-heavy payloads must remain optional/JFFS-delivered unless a new design is separately proven.
+
+## Pre-flash recovery readiness
+
+`docs/preflash-backup-recovery.md` is READY.
+
+It keeps Merlin configuration/JFFS backups private and rollback-only, forbids importing Merlin state as ASUS/candidate evidence, and requires verified rollback media plus wired recovery readiness.
+
+Actual backup creation remains a physical operator step before any future firmware change.
+
+## ASUS 52334 source
+
+Matching ASUS `386_52334` GPL/source is still not available.
+
+This is an **EXTERNAL BLOCKER**.
+
+Do not repeat source hunting each work cycle without new evidence.
+
+Source-backed core features requiring `rc/httpd/dnsmasq/shared` must not be solved by transplanting older Merlin binaries.
+
+## Source-blocked feature work
+
+The exact behavioral/source contracts are already documented. Remaining implementation is blocked on a suitable later ASUS source/build base for, among others:
+
+- M01-M04 JFFS lifecycle/custom config;
+- M10/M60 JFFS backup/restore backend;
+- M11 custom DDNS;
+- M18/M19 Samba deltas;
+- M25/M40 VPN Director/routing;
+- M36 IPv6 DNS Director Custom 1-3;
+- M38 OpenVPN DNS Exclusive;
+- M43 System Info HTTPD backend;
+- M46/M64 QoS stats;
+- M52 wireless-client auto-refresh backend;
+- M57 Advanced VPN Status;
+- M66 Prevent Auto DoH;
+- M68 outbound LAN logging.
+
+Do not reopen their donor/source archaeology unless new source evidence appears.
+
+## Settled — do not investigate again
+
+- M48 per-IP traffic/cstats: **NO PORT**.
 - M35 WiFi Insight: **CANCELLED**.
 - M67 speedtest VPN selector: **CANCELLED**.
-- M24 OpenVPN umbrella: preserve ASUS; only separately proven deltas proceed.
 - M37 IPv6 OpenVPN server: **NO PORT**.
 - M39 OpenVPN custom-option storage: **NO PORT**.
 - M51 Wireless ACL client names: **NO PORT / ASUS equivalent**.
 - M56 editable-entry umbrella: **NO PORT / ASUS equivalent**.
-- M12 cru and M14 generic CLI umbrella: **NO generic port**.
+- M12 cru: **NO generic port**.
+- M14 generic CLI umbrella: **NO generic port**.
+- LZO/rootfs-capacity investigation: closed.
+- 570-PEB capacity problem: solved.
+- stock repack: solved.
+- K1/K2/K3 build loops: solved.
 
-Detailed feature state lives in `STATUS.md` and feature-specific contracts.
+## What remains now
 
-## Active kernel/module track
-Optional features: M22 NFS, M23 CIFS, M27 ipset, M32 Cake, M33 WireGuard.
+All currently identifiable source-independent and router-independent main-track work has been completed:
 
-Exact source/SDK pin:
-`RMerl/asuswrt-merlin.ng@c553d8e4b0bf3289683368b0d57172649b030039`
+- full software-gated candidate exists;
+- exact candidate/K2/K3 hardware inputs are preserved;
+- K4/runtime collectors are hash-bound and CI-green;
+- M49 optional delivery package is prepared and CI-green;
+- rollback/backup procedure is documented;
+- stale repack/build instructions have been removed from governing docs.
 
-RT-AC86U profile:
-`release/src-rt-5.02hnd/targets/94908HND/94908HND.RT-AC86U`
+The remaining main-track gates require one of two external inputs:
 
-Pinned toolchain:
-`SWRT-dev/bcmhnd-toolchains@7710a1e09d994598ac6c2db8ab16dc54ca5aed3d`
+1. **physical RT-AC86U access running the intended ASUS 386_52334 validation runtime**, for K4, general runtime and M49 EJ evidence; or
+2. **new matching/later ASUS source evidence**, for the source-backed core feature contracts.
 
-Toolchain directory:
-`crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25`
-
-### K1 — SUCCESS
-Run: `36531249746`  
-Commit: `fc60abc315d0bf1e7b6f50beaad879533a67db7a`  
-Generated config SHA-256:
-`9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2`
-
-K1 reproduced the exact RT-AC86U 51997 source/config/toolchain lineage and passed all NFS/CIFS/ipset/Cake/WireGuard assertions.
-
-Relevant final materialization detail: the three `src-rt-5.02hnd` Makefile entries are Git symlinks to `../src-rt`; they must remain real symlinks rather than flattened pointer files.
-
-Old failed K1 runs and their superseded troubleshooting are intentionally omitted.
-
-### K2 — SUCCESS
-Run: `36556899650`  
-Commit: `2f423c2daa61924001675c04358bac156210c635`  
-Artifact: `kernel-k2-ipset-51997`, archive digest `sha256:66b79e481390880a8c1e9c3e57aeca1d498fca8940638be53e9ce1e714afb9f2`.
-
-K2 rebuilt the coherent ipset family from the exact K1 lineage: 17 `ip_set*.ko` modules plus `xt_set.ko`. Every module is ELF64/AArch64 and reports vermagic `4.1.27 SMP preempt mod_unload aarch64`. Generated config SHA-256 remains `9b9c2f93e915ae2b81893839b66080a7d6a4efe5470ab8bed9e6084fea77aed2`.
-
-Representative SHA-256:
-- `ip_set.ko`: `19c47ab22f38c50e3ddfea153e54c10e4c4ecb244fe1fa77e225c0bca94162b6`
-- `ip_set_hash_ip.ko`: `e1179e36ebad16843537338fae3134f75c672161a1702f518a64cebeab1cb93d`
-- `ip_set_list_set.ko`: `060bce188e4f4ac42064e4c9774f637dcee84b0cea5bb0d3e858a0ae28464cf5`
-- `xt_set.ko`: `6ed89a951afdabf5b93158d7ef8edc0c7804b51df0c98f3f8c64500a47fb0b3a`
-
-No activation or overlay change was made. All intermediate K2 troubleshooting is intentionally omitted now that K2 is solved.
-
-### K3 — SUCCESS
-Run: `36561957525`  
-Commit: `fb0dc42e34a17ddbe50c43672d0e8bf59cdafdb2`  
-Artifact: `kernel-k3-optional-modules-51997`, archive digest `sha256:231f190223dc220008b6aab211cee9a017f9619e40327d3bd19d9ffa424021f3`.
-
-K3 rebuilt the remaining optional families from the exact K1 lineage:
-- NFS: `sunrpc.ko`, `lockd.ko`, `nfs.ko`, `nfsv2.ko`, `nfsv3.ko`, `nfsd.ko`;
-- CIFS: `cifs.ko`;
-- Cake: `sch_cake.ko`;
-- WireGuard: `wireguard.ko`.
-
-All are ELF64/AArch64 with vermagic `4.1.27 SMP preempt mod_unload aarch64`. No activation or overlay change was made.
-
-### K4a — READY / CI-VALIDATED
-Workflow run: `36562651589` — SUCCESS.
-
-The repo now contains `scripts/k4-router-preflight.sh`, a read-only physical-router collector. CI verifies POSIX syntax and rejects module loading, NVRAM mutation, JFFS writes, service mutation, reboot and flash/mtd operations.
-
-K4a writes only below `/tmp` and collects firmware/kernel/module/symbol evidence before any candidate module is allowed to load.
-
-### K4 hardware gate — DEFERRED UNTIL 52334 RUNTIME IS AVAILABLE
-The user's physical RT-AC86U currently runs the final Asuswrt-Merlin 386.14_2, **not** ASUS 386_52334.
-
-Therefore the current router cannot provide the required ASUS 52334 runtime evidence for K4. Do not ask the user to flash stock 52334 merely to advance development.
-
-The K4a read-only collector remains ready and CI-validated, but final K4a/K4b compatibility testing is deferred until ASUS 52334 is actually running on hardware (for example during a controlled candidate/validation phase).
-
-Do **not** load K2/K3 modules on the current Merlin runtime and do not treat a Merlin-side load test as proof of ASUS 52334 compatibility.
-
-## Active firmware/repack track
-
-### ASUS late-runtime lineage — SUCCESS
-Run: `36570687943`.
-
-The official `51967 -> 52294 -> 52334` comparison is complete. ASUS 52334 remains authoritative for protected/core runtime. See `docs/asus-runtime-lineage-51967-52294-52334.md`.
-
-### 52334 repack geometry + final WFI contract — SUCCESS
-- Geometry probe run: `36571407058`.
-- Final WFI-token proof run: `36572950163`.
-- Contract: `docs/firmware-repack-52334.md`.
-
-Pinned stock geometry:
-- immutable prefix: `0x360000` / 3,538,944 bytes;
-- UBI: 570 PEBs × 131,072 bytes;
-- UBIFS LEB: 126,976 bytes;
-- volume: dynamic/autoresize `rootfs_ubifs`;
-- final Broadcom WFI token: 20 bytes, BCM4908/NAND128.
-
-### Stock ASUS 52334 semantic repack round-trip — SUCCESS
-Run: `36593572826`  
-Commit under test: `4b6ce8f675d7cdfa54b7ba71257bc645369a1a63`  
-Artifact: `firmware-stock-repack-roundtrip-52334`  
-Artifact digest: `sha256:8fddaed20326f10435d383a59006d33075c90ee3938939e642d1e5638b6107fe`.
-
-Result:
-- 3,992 original semantic rootfs entries;
-- 3,992 rebuilt entries;
-- 0 semantic mismatches;
-- rebuilt UBIFS = 568 LEBs / 72,122,368 bytes;
-- rebuilt UBI = exactly 570 PEBs / 74,711,040 bytes;
-- no external UBI padding;
-- final WFI validates.
-
-This proves the **stock repack baseline only**, not flashability.
-
-### Immediate continuation — ACTIVE OVERLAY REPACK GATE
-Do **not** revisit the solved stock repack work.
-
-Active-overlay authorization root cause is now fully resolved in workflow code. Run `36609601459` proved all 49 guarded overlay entries apply, then exposed the leading-slash path-domain mismatch. Run `36619600961` subsequently hung in step 7 because the corrected absolute parent walk reached `Path('/')`, whose parent is itself; the loop had no root termination. Commit `62dd48f45000ff8eb7b03ef360b3ffa8311cbeaf` terminates at filesystem root (`q == q.parent`). Neither case reached firmware repack semantics. Do not fetch logs for `36607825944` or `36609601459` again; `36619600961` required no log fetch for the hang diagnosis.
-
-Run `36630738831` establishes the current capacity blocker: the 49-entry overlay and manifest authorization pass, but the pinned zlib rebuild produces UBIFS `74,027,008` bytes and UBI `76,677,120` bytes / `585` PEB, which cannot fit the immutable 570-PEB firmware span. Its log has been fetched exactly once; never fetch it again. The proven stock workflow permits a shorter UBI to be padded to 570 PEB, so the next software gate is to try UBIFS-native LZO compression and accept it only if the image fits <=568 data PEB and the final padded UBI remains exactly 570 PEB with identical re-extracted semantics and protected-file hashes.
-
-Next task is exactly:
-
-**Pass the current guarded active overlay through the proven 52334 extract → guarded apply → UBIFS/UBI repack → WFI → re-extract pipeline.**
-
-The gate must prove:
-1. post-repack semantic changes are exactly manifest-authorized overlay targets plus unavoidable parent directories;
-2. protected ASUS `rc`, `httpd`, `dnsmasq`, BusyBox, OpenVPN, Dropbear, OpenSSL, kernel/HND and proprietary components remain stock-authoritative and byte-identical unless a separately approved source-delta gate exists;
-3. existing guarded feature contracts still pass on the re-extracted image;
-4. final UBI remains exactly 570 PEBs and final WFI validation passes;
-5. K2/K3 optional modules are **not** added or activated;
-6. no image is called flashable until this gate and the deferred real-router/runtime gates pass.
-
-The user's physical RT-AC86U still runs Merlin 386.14_2. Do not ask for a stock 52334 reflash merely to advance development.
-
-M27/ipset uses the successful K2 family; M22/M23/M32/M33 use the successful K3 family, but all remain build-only until deferred K4 validation.
-
-## Read only as needed
-Primary current state:
-1. `docs/thread-handoff.md`
-2. `STATUS.md`
-3. `docs/kernel-build-lineage-51997.md`
-
-Use other feature/source-contract docs only when their feature becomes active.
+Until one of those exists, keep the candidate **UNVALIDATED** and do not make flashability claims.
