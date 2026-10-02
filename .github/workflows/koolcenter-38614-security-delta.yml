@@ -326,6 +326,23 @@ jobs:
             echo '===== WebUI/config generation references ====='
             grep -RInaE 'tls-version|min.*tls|tls-crypt|tls-auth|ncp-ciphers|data-ciphers|AES-[0-9]+-GCM|SHA256|SHA512|auth-nocache|remote-cert-tls|verify-x509|comp-lzo|compress' "$KC"/www "$KC"/rom "$KC"/etc "$KC"/usr 2>/dev/null | grep -Ei 'openvpn|vpn_server|vpn_client|ovpn|vpn' | head -n 12000 || true
           } > "$OUT"
+      - name: OpenVPN generated-config policy probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          OUT=reports/openvpn-config-policy.txt
+          {
+            echo '=== rc/openvpn generator strings ==='
+            for p in "$KC/sbin/rc" "$KC/usr/sbin/openvpn"; do
+              echo "--- $p"
+              strings -a "$p" 2>/dev/null | grep -Ei 'vpn_server.*(cipher|digest|tls|hmac|crypt)|ncp-ciphers|data-ciphers|tls-version-min|tls-auth|tls-crypt|AES-[0-9]+-GCM|SHA(1|256|512)|comp-lzo|compress|auth-nocache|remote-cert-tls|verify-x509' | sort -u | head -n 1000 || true
+            done
+            echo '=== web GUI OpenVPN controls ==='
+            grep -RInaE 'vpn_server.*(cipher|digest|hmac|tls|crypt|comp)|AES-[0-9]+-GCM|SHA256|SHA512|tls-auth|tls-crypt|Custom Configuration|custom.*config' "$KC/www" 2>/dev/null | head -n 8000 || true
+            echo '=== config templates/scripts ==='
+            grep -RInaE 'ncp-ciphers|data-ciphers|tls-version-min|tls-auth|tls-crypt|cipher |auth |comp-lzo|compress|remote-cert-tls|verify-x509' "$KC/rom" "$KC/etc" "$KC/usr" 2>/dev/null | grep -Ei 'openvpn|ovpn|vpn_server|vpn_client' | head -n 8000 || true
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
