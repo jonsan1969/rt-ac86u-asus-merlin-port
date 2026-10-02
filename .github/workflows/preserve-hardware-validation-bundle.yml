@@ -1,0 +1,124 @@
+name: Preserve hardware validation bundle
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/preserve-hardware-validation-bundle.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact UNVALIDATED candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: RT-AC86U-52334-merlin-port-UNVALIDATED
+          path: work/candidate
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36924014278
+
+      - name: Download exact K2 ipset family
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-k2-ipset-51997
+          path: work/k2
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36556899650
+
+      - name: Download exact K3 optional families
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-k3-optional-modules-51997
+          path: work/k3
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36561957525
+
+      - name: Verify candidate and module identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t fw < <(find work/candidate -type f -name '*UNVALIDATED*.w' -print)
+          test "${#fw[@]}" -eq 1
+          test "$(stat -c %s "${fw[0]}")" -eq 78250004
+          test "$(sha256sum "${fw[0]}" | awk '{print $1}')" = eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+
+          find_one() {
+            local root="$1" name="$2"
+            mapfile -t hit < <(find "$root" -type f -name "$name" -print)
+            test "${#hit[@]}" -eq 1
+            printf '%s\n' "${hit[0]}"
+          }
+          check_hash() {
+            local root="$1" name="$2" want="$3" p
+            p="$(find_one "$root" "$name")"
+            test "$(sha256sum "$p" | awk '{print $1}')" = "$want"
+          }
+
+          test "$(find work/k2 -type f -name '*.ko' | wc -l)" -eq 18
+          check_hash work/k2 ip_set.ko 19c47ab22f38c50e3ddfea153e54c10e4c4ecb244fe1fa77e225c0bca94162b6
+          check_hash work/k2 ip_set_hash_ip.ko e1179e36ebad16843537338fae3134f75c672161a1702f518a64cebeab1cb93d
+          check_hash work/k2 ip_set_list_set.ko 060bce188e4f4ac42064e4c9774f637dcee84b0cea5bb0d3e858a0ae28464cf5
+          check_hash work/k2 xt_set.ko 6ed89a951afdabf5b93158d7ef8edc0c7804b51df0c98f3f8c64500a47fb0b3a
+
+          for name in sunrpc.ko lockd.ko nfs.ko nfsv2.ko nfsv3.ko nfsd.ko cifs.ko sch_cake.ko wireguard.ko; do
+            find_one work/k3 "$name" >/dev/null
+          done
+          test "$(find work/k3 -type f -name '*.ko' | wc -l)" -eq 9
+          check_hash work/k3 sunrpc.ko b547166600f2e2c0b6ff7356010b7eeec509139b928cc01236e8cba2820b1241
+          check_hash work/k3 nfs.ko 82f8a84767334ab49a032f5b96f59960cd4e207336b9b8995c9442947631bf5d
+          check_hash work/k3 nfsd.ko 953d838733e9ab740980ecd5f0a5c76ddbcfafef8c0af1621171551406a8a293
+          check_hash work/k3 cifs.ko eb545f7ce5429477f081ef0c4d1c5d1b8eca519d9025afdc2a225417417567b8
+          check_hash work/k3 sch_cake.ko 159256eb407a76d0ac38b53c3eea36ef74d054b1afe60329a61aad0e5024f24c
+          check_hash work/k3 wireguard.ko 418f6e212f4d8f3f83142352f462fd870b591602f45b8af0564ecd72c7e5161c
+
+      - name: Assemble hash-bound hardware validation bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/scripts bundle/docs bundle/optional
+          cp work/candidate/* bundle/candidate/
+          cp -a work/k2/. bundle/modules/k2/
+          cp -a work/k3/. bundle/modules/k3/
+          cp scripts/prepare-candidate-evidence.sh bundle/scripts/
+          cp scripts/k4-router-preflight.sh bundle/scripts/
+          cp scripts/runtime-feature-preflight.sh bundle/scripts/
+          cp docs/candidate-promotion-gate.md bundle/docs/
+          cp docs/k4-controlled-module-validation.md bundle/docs/
+          cp docs/k4-router-preflight.md bundle/docs/
+          cp docs/monthly-traffic-optional-delivery.md bundle/docs/
+          cp -a optional/monthly-traffic bundle/optional/
+
+          {
+            echo 'candidate_run=36924014278'
+            echo 'candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3'
+            echo 'candidate_size=78250004'
+            echo 'k2_run=36556899650'
+            echo 'k3_run=36561957525'
+            echo 'source_commit='${GITHUB_SHA}
+            echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
+            echo
+            echo '===== FILE SHA256 ====='
+            find bundle -type f ! -name BUNDLE-MANIFEST.txt -print0 | sort -z | xargs -0 sha256sum
+          } > bundle/BUNDLE-MANIFEST.txt
+
+          grep -Fq 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT' bundle/BUNDLE-MANIFEST.txt
+          grep -Fq 'candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3' bundle/BUNDLE-MANIFEST.txt
+
+      - name: Publish preserved hardware validation bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: bundle
+          if-no-files-found: error
+          retention-days: 90
