@@ -1,5 +1,3 @@
-M49 response-verifier run `36969220600` is FAILURE because the supposed PASS fixture itself contained malformed rstats syntax: its second tuple ended with `)` instead of `]`. The verifier correctly failed closed. Fix only that fixture; do not weaken the verifier. The run log was fetched exactly once and must not be fetched again.
-
 # New-thread handoff
 
 Updated: 2026-10-02
@@ -172,13 +170,15 @@ Package:
 
 It provides explicit `userN.asp` rendering, private Chart.js in `/var/wwwext`, collision guards, no rootfs/NVRAM/service/startup mutation, and fail-closed uninstall.
 
+Host-side response verification is READY: `scripts/verify-m49-ej-response.py`, CI run `36969317440` — SUCCESS. It distinguishes real multiline rstats handler output from the page's single-line fallbacks and rejects login/wrong-page/raw-token responses.
+
 The remaining gate is physical/runtime proof that ASUS 386_52334 stock `httpd` EJ-expands:
 
 `<% bandwidth("monthly"); %>`
 
 through the active custom user-slot path.
 
-Do not replace that runtime proof with more static CI.
+Capture the authenticated candidate `userN.asp` response body and require `M49_EJ_RESPONSE_PASS`. Do not replace that runtime proof with more static CI.
 
 ## Optional/JFFS payloads
 

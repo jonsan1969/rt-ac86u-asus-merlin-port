@@ -12,7 +12,7 @@ All of the following must be recorded against the exact candidate SHA-256:
 4. K4a read-only preflight collected from an actual RT-AC86U on official ASUS 386_52334 before module testing, and again on the candidate runtime before final candidate-side activation; evidence pairs must be accepted by `scripts/verify-hardware-evidence.py` in the appropriate mode;
 5. candidate module families that are intended for use pass `docs/k4-controlled-module-validation.md` before activation; K4 is deliberately operator-controlled because it mutates live kernel state;
 6. general runtime feature preflight collected on candidate runtime and accepted with `--require-candidate-canaries`; a stock-only runtime archive is baseline evidence but does not satisfy candidate feature validation;
-7. runtime-sensitive WebUI/JFFS features pass their own contracts before they are advertised as available; M49 specifically requires HTTPD EJ-dispatch proof;
+7. runtime-sensitive WebUI/JFFS features pass their own contracts before they are advertised as available; M49 specifically requires a saved authenticated candidate user-slot response that passes `scripts/verify-m49-ej-response.py` (`36969317440` validates the verifier itself);
 8. configuration/JFFS backup and recovery path are prepared before first candidate flash, following `docs/preflash-backup-recovery.md`; the procedure is documented now, but physical backup completion must be recorded before any firmware change;
 9. project status explicitly promotes the exact candidate hash from UNVALIDATED to hardware-tested.
 
@@ -24,7 +24,7 @@ Passing CI alone is never sufficient for flashability.
 
 ## Evidence preparation
 
-Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. CI run `36924149359` validates that this helper is non-mutating and rejects candidates that are not explicitly marked UNVALIDATED.
+Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. Latest CI run `36968749755` validates the host-verifier prerequisite, non-mutating behavior and rejection of candidates not explicitly marked UNVALIDATED.
 
 ## Current quarantined candidate
 
@@ -52,7 +52,7 @@ The artifact ZIP digest is only the GitHub archive digest. It must never be subs
 
 Before any mutating K4 family test, run the host-side verifier described in `docs/hardware-evidence-verifier.md`.
 
-CI run `36968652355` validates the verifier itself. The gate intentionally rejects:
+Latest evidence-verifier CI run `36968903989` validates both stock/baseline and candidate-canary modes. The gate intentionally rejects:
 
 - a different embedded candidate SHA-256;
 - Merlin 386.14_2 presented as ASUS 386_52334 evidence;

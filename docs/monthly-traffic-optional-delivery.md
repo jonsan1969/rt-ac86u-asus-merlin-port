@@ -70,3 +70,32 @@ Built-in delivery: **OPTIONALIZED FOR CAPACITY**.
 JFFS/WebUI package preparation: **SUCCESS / STATIC-SANDBOX VALIDATED** — run `36966933767`.
 
 Runtime availability: **DEFERRED** until ASUS 386_52334 proves that stock `httpd` performs EJ expansion of `<% bandwidth("monthly"); %>` through the active custom user-slot path.
+
+
+## Runtime response verifier — READY / CI-VALIDATED
+
+Host-side verifier:
+
+`scripts/verify-m49-ej-response.py`
+
+CI run `36969317440` is **SUCCESS**.
+
+The verifier uses the pinned rstats output contract, where the real handler emits a multiline assignment:
+
+```text
+monthly_history = [
+[0xTIME,0xRX,0xTX],...];
+```
+
+An empty-but-executed handler still emits:
+
+```text
+monthly_history = [
+];
+```
+
+This is deliberately distinct from the page's single-line JavaScript fallback `monthly_history = [];`.
+
+The verifier requires the candidate page marker, raw EJ-token absence and exactly one syntactically valid multiline handler assignment. CI proves rejection of a raw EJ token, fallback-only response, login/wrong page and malformed history data.
+
+Therefore the only remaining M49 work is the physical authenticated HTTP response capture on candidate runtime. That response must produce `M49_EJ_RESPONSE_PASS`.

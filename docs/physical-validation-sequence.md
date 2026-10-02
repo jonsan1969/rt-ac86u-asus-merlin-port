@@ -111,6 +111,15 @@ M49 requires a real authenticated HTTP request through the installed custom user
 
 Static file hashes or presence of the `bandwidth` handler are not substitutes.
 
+Save the authenticated response body off-router and verify it with:
+
+```sh
+python3 scripts/verify-m49-ej-response.py userN-response.html \
+  --report m49-ej-report.json
+```
+
+Require `M49_EJ_RESPONSE_PASS`. CI run `36969317440` proves the response verifier's positive and fail-closed cases.
+
 ## Phase E — promotion review
 
 Promotion remains fail-closed until all applicable evidence is assembled against the current candidate:
