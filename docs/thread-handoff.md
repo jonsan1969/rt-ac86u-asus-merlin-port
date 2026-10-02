@@ -1,3 +1,5 @@
+K4 ipset userspace run `36970052442` is FAILURE at `ipset-7.6/autogen.sh` only: Ubuntu 24.04 `libtoolize` could not find `/usr/share/aclocal/ltdl.m4`. Exact c553 source fetch, pinned ARM32 GCC 5.3 toolchain smoke and matching libmnl cross-build had already passed. Minimal fix is host package `libltdl-dev`. The run log was fetched exactly once and must never be fetched again.
+
 # New-thread handoff
 
 Updated: 2026-10-02
