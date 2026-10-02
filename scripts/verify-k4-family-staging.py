@@ -109,7 +109,7 @@ def parse_outer_manifest(root: Path) -> Dict[str, str]:
     if manifest.stat().st_size > 32 * 1024:
         raise GateError("package-sha256.txt unexpectedly large")
     rows: Dict[str, str] = {}
-    pat = re.compile(r"^([0-9a-f]{64})  (k4-family-([a-z0-9_-]+)\\.tar\\.gz)$")
+    pat = re.compile(r"^([0-9a-f]{64})  (k4-family-([a-z0-9_-]+)\.tar\.gz)$")
     for raw in manifest.read_text(encoding="utf-8").splitlines():
         if not raw:
             continue
