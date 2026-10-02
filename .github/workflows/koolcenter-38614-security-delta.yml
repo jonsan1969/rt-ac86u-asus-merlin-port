@@ -201,6 +201,22 @@ jobs:
             echo '=== potentially dangerous shell construction in Koolshare scripts ==='
             grep -RInaE '(^|[;&|[:space:]])(eval|sh -c|bash -c|system|exec)[[:space:]]|\$\([^)]*dbus|dbus get|nvram get|start-stop-daemon|chmod .*[+]x|tar -|wget |curl ' "$KC"/rom/etc/koolshare 2>/dev/null | head -n 10000 || true
           } > "$OUT"
+      - name: SoftCenter authentication-boundary probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          OUT=reports/softcenter-auth-boundary.txt
+          {
+            echo '=== SoftCenter pages/forms/actions ==='
+            grep -RInaE '<form|action=|ajax|\.cgi|_api|applydb|dbus|login|auth|token|cookie|session' "$KC/www" 2>/dev/null | grep -Ei 'softcenter|softsetting|kool|dbus|cgi|api|apply' | head -n 10000 || true
+            echo '=== httpd public/no-auth/auth-exception vocabulary ==='
+            strings -a "$KC/usr/sbin/httpd" 2>/dev/null | grep -Ei 'no.?auth|auth|login|logout|cookie|session|token|referer|public|except|whitelist|cgi|applydb|dbus|softcenter|softsetting|kool' | head -n 8000 || true
+            echo '=== exact SoftCenter endpoint names in httpd ==='
+            for x in Module_Softcenter.asp Module_Softsetting.asp applydb.cgi dbconf.cgi _api; do
+              echo "--- $x"; strings -a "$KC/usr/sbin/httpd" 2>/dev/null | grep -F "$x" || true
+            done
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
