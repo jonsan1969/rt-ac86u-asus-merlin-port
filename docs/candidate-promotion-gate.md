@@ -33,16 +33,16 @@ Run `36924014278` produced the first end-to-end software-gated candidate. Exact 
 
 ## Preserved hardware-validation bundle
 
-Run `36967176099` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
+Run `36967617052` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
 
 - artifact: `hardware-validation-bundle-eac8a777`;
-- artifact id: `11210471933`;
-- artifact ZIP digest: `sha256:05ee4f971846b84a83378e7673832550c8646bbedb8f77d846d49e942d4cc252`;
-- expires: `2026-12-31T05:02:35Z`;
+- artifact id: `11209744574`;
+- artifact ZIP digest: `sha256:48ea093a26a854955aa61726cdaec26b4feaac7b78fdbfe4ce991991c600db7a`;
+- expires: `2026-12-31T05:08:36Z`;
 - candidate inside: exact `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`, size `78,250,004` bytes;
 - K2 source run: `36556899650`;
 - K3 source run: `36561957525`.
 
-The workflow verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle.
+The workflow first downloads and verifies the official ASUS 386_52334 stock image (`1b4fe984...7483f`, 78,250,004 bytes), then verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle. The bundle also carries the current collectors and recovery/handoff documents.
 
 The artifact ZIP digest is only the GitHub archive digest. It must never be substituted for the firmware `.w` hash when binding hardware evidence.

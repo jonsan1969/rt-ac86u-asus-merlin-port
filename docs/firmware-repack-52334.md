@@ -187,7 +187,7 @@ The run proves:
 
 This closes the software repack gate. It does **not** establish flashability.
 
-The original GitHub artifact is `11193520953`. Run `36967176099` additionally preserves the exact candidate plus K2/K3 hardware-validation inputs in 90-day artifact `11210471933` through 2026-12-31. The artifact ZIP digests are not firmware identities; all hardware evidence remains bound to the `.w` SHA-256 above.
+The original GitHub artifact is `11193520953`. Run `36967617052` additionally preserves the verified official ASUS 52334 stock image, the exact candidate, K2/K3 hardware-validation inputs and the current collectors/runbooks in 90-day artifact `11209744574` through 2026-12-31. The artifact ZIP digests are not firmware identities; all hardware evidence remains bound to the `.w` SHA-256 above.
 
 ## Remaining gate
 
