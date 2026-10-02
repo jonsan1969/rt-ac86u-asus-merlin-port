@@ -17,6 +17,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download and verify official ASUS 386_52334 stock image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/official-stock
+          zip=work/asus-52334.zip
+          urls=(
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT-AC86U_300438652334.zip?model=RT-AC86U'
+            'https://dlcdnets.asus.com/pub/ASUS/wireless/RT-AC86U/FW_RT_AC86U_300438652334.zip?model=RT-AC86U'
+          )
+          ok=0
+          for url in "${urls[@]}"; do
+            if curl -fL --retry 4 --retry-delay 2 "$url" -o "$zip"; then
+              ok=1
+              break
+            fi
+          done
+          test "$ok" -eq 1
+          test "$(sha256sum "$zip" | awk '{print $1}')" = e8fd0f3a26db4fe9cf6acb64272d2b78247eb9ccf3890fbdb8daace0bac10d61
+          unzip -q "$zip" -d work/official-stock/unpacked
+          mapfile -t stock < <(find work/official-stock/unpacked -type f -name '*.w' -print)
+          test "${#stock[@]}" -eq 1
+          test "$(sha256sum "${stock[0]}" | awk '{print $1}')" = 1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f
+          test "$(stat -c %s "${stock[0]}")" -eq 78250004
+          cp "${stock[0]}" work/official-stock/RT-AC86U_386_52334_OFFICIAL.w
+
       - name: Download exact UNVALIDATED candidate
         uses: actions/download-artifact@v4
         with:
@@ -86,7 +112,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/scripts bundle/docs bundle/optional
+          mkdir -p bundle/official-stock bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/scripts bundle/docs bundle/optional
+          cp work/official-stock/RT-AC86U_386_52334_OFFICIAL.w bundle/official-stock/
           cp work/candidate/* bundle/candidate/
           cp -a work/k2/. bundle/modules/k2/
           cp -a work/k3/. bundle/modules/k3/
@@ -97,9 +124,14 @@ jobs:
           cp docs/k4-controlled-module-validation.md bundle/docs/
           cp docs/k4-router-preflight.md bundle/docs/
           cp docs/monthly-traffic-optional-delivery.md bundle/docs/
+          cp docs/preflash-backup-recovery.md bundle/docs/
+          cp docs/thread-handoff.md bundle/docs/
+          cp STATUS.md bundle/docs/
           cp -a optional/monthly-traffic bundle/optional/
 
           {
+            echo 'official_stock_sha256=1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f'
+            echo 'official_stock_size=78250004'
             echo 'candidate_run=36924014278'
             echo 'candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3'
             echo 'candidate_size=78250004'
