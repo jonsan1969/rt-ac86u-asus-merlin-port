@@ -52,6 +52,8 @@ The bundle manifest records docs/source snapshot commit `854a0afc54db3684b957ab0
 
 ## Evidence intake gate
 
+Before using files from the preserved hardware-validation artifact, run `scripts/verify-hardware-validation-bundle.py --bundle-root <extracted-bundle>` and require `HARDWARE_VALIDATION_BUNDLE_PASS`. CI run `36996895881` validates the exact current 103-file preservation bundle and fail-closed tamper/injection cases. This proves bundle integrity/provenance only.
+
 Before any mutating K4 family test, run the host-side verifier described in `docs/hardware-evidence-verifier.md`.
 
 Then run the read-only symbol-name gate in `docs/k4-symbol-preflight.md` against the same K4a archive plus the exact preserved K2/K3 modules and dependency-closure report. Require `K4_SYMBOL_PREFLIGHT_PASS` before any module load. CI run `36977341893` validates both fail-closed fixtures and the default project profile against the exact preserved 27-module set.

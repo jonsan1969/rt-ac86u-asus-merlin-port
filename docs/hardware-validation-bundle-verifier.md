@@ -16,3 +16,17 @@ Current preserved input:
 - internal manifest SHA-256 `1f1198fdc23bc656bdbf01b3beaafb9154c742ef22c9274ac5acf296042a3a8f`.
 
 A PASS is transport/inventory evidence only. It does not prove flashability, router runtime identity, kernel-module loadability, K4 behavior or M49 EJ dispatch.
+
+
+## CI evidence
+
+Run `36996895881` — **SUCCESS**.
+
+The exact preservation artifact from run `36995684511` passes the verifier with `103` manifest-bound files. CI also proves fail-closed rejection of:
+
+- a changed manifest-bound payload file;
+- changed manifest metadata/content;
+- an unexpected extra file;
+- a symlink injection.
+
+The verifier is deliberately not embedded in the same preserved bundle whose manifest hash it pins. Its expected manifest SHA-256 is the external trust anchor; embedding that verifier in the manifest would make the verifier content depend on the manifest hash while the manifest hash simultaneously depends on the verifier content.
