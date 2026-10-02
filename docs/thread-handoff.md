@@ -1,6 +1,8 @@
+Pre-K4 orchestration is now being revalidated against normalized preservation run `37011499307` / the exact 105-file kit. The workflow input is advanced from `36998454435`; prior orchestration run `37006423674` remains logic/current-old-kit evidence until the new normalized-bundle Action passes.
+
 Normalized preservation run `37011499307` is SUCCESS. Current artifact `11228371174`, ZIP digest `sha256:3b2959753b5464cc4e05f0cbd13cfdac6aaeba0ddcb0e1cade6bc08cf473c50a`, expires `2026-12-31T13:12:49Z`. Its `BUNDLE-MANIFEST.txt` SHA-256 is `fc6825056f8270db4f8d876c208b0447a419744f526d0bece0f3f24f9b9f9e33`, with 105 manifest-bound files, `preservation_run=37011499307`, pre-K4 orchestrator CI `37006423674`, candidate-evidence CI `36998249913`, and snapshot commit `0b42a3b59e96b5c8601a41316a717eae8eabe71b`. `BUNDLE-README.txt` carries the same extracted-kit identity fields. Candidate/module bytes are unchanged.
 
-The external preserved-bundle verifier is now re-pinned to this normalized 105-file manifest and README identity. Historical verifier run `37003596484` remains proof for the superseded 104-file bundle; fresh normalized-pin CI is pending.
+The external preserved-bundle verifier is normalized-pin CI-complete: run `37017852039` is SUCCESS against preservation run `37011499307`, exact manifest SHA-256 `fc6825056f8270db4f8d876c208b0447a419744f526d0bece0f3f24f9b9f9e33`, all 105 manifest-bound files and bundle-local README identity. Changed payload, changed manifest, extra-file and symlink-injection cases fail closed.
 
 Pre-K4 orchestration is current-bundle CI-complete: run `37006423674` is SUCCESS against preservation run `36998454435` and the exact 104-file kit. Both stock-baseline and candidate-canary paths pass through current bundle verification, fresh read-only hardware evidence, K4 symbol-name preflight and one-family staging; non-empty workspace fails closed. Historical run `36997859437` remains logic evidence for the preceding bundle.
 
