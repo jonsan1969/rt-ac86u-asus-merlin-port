@@ -123,7 +123,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p bundle/bin bundle/lib reports
-          install -m 0755 work/source/release/src/router/ipset-7.6/src/ipset bundle/bin/ipset.real
+          test -x work/source/release/src/router/ipset-7.6/src/.libs/ipset
+          install -m 0755 work/source/release/src/router/ipset-7.6/src/.libs/ipset bundle/bin/ipset.real
           install -m 0644 work/source/release/src/router/ipset-7.6/lib/.libs/libipset.so.13.1.0 bundle/lib/
           ln -s libipset.so.13.1.0 bundle/lib/libipset.so.13
           mnl="$(find work/stage/usr/lib -maxdepth 1 -type f -name 'libmnl.so.*.*.*' | head -1)"
