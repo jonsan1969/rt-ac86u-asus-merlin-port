@@ -44,6 +44,28 @@ nvget(){ if have nvram; then nvram get "$1" 2>/dev/null || true; fi; }
  if [ -f /usr/sbin/helper.sh ] && have sha256sum; then sha256sum /usr/sbin/helper.sh; fi
 } > "$OUT/jffs.txt"
 
+
+{
+ echo "=== CANDIDATE IMMUTABLE CANARIES ==="
+ for p in \
+   /usr/sbin/helper.sh \
+   /www/Tools_OtherSettings.asp \
+   /www/Advanced_Wireless_Survey.asp \
+   /www/js/qrcode.min.js \
+   /www/ajax/logFilter.json
+ do
+   if [ -f "$p" ]; then
+     if have sha256sum; then
+       sha256sum "$p"
+     else
+       echo "NO_SHA256SUM $p"
+     fi
+   else
+     echo "MISSING $p"
+   fi
+ done
+} > "$OUT/candidate-canaries.txt"
+
 {
  echo "=== HTTPD ==="
  ps 2>/dev/null | grep '[h]ttpd' || true

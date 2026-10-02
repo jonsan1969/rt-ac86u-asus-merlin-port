@@ -14,6 +14,14 @@ from typing import Dict, Iterable
 
 DEFAULT_SHA = "eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3"
 
+CANDIDATE_CANARIES = {
+    "/usr/sbin/helper.sh": "f4f19dd4e0437869d476e37d9b74b0bf75690886941bd00c0079eb1425dd0bba",
+    "/www/Tools_OtherSettings.asp": "16b6d409b90fe2319adbf62f42b54f0027dddf94913402eba5cd36d955e99d56",
+    "/www/Advanced_Wireless_Survey.asp": "a4d4391781bd9a1cb8c0d93cb6f0abca1b1d7f96809231ecdd233394a931fe9a",
+    "/www/js/qrcode.min.js": "7f5a45e2791b3ef6cde1a34a253711b7510ad7c6136d20fc91404b48f744647b",
+    "/www/ajax/logFilter.json": "a6e28e7be5b00799f4492ab99baba31e9a9255ffd3e62bbb276270f5645c04f3",
+}
+
 
 class EvidenceError(RuntimeError):
     pass
@@ -189,7 +197,40 @@ def validate_k4(view: ArchiveView, expected_sha: str) -> Dict[str, str]:
     return summary
 
 
-def validate_runtime(view: ArchiveView, expected_sha: str) -> Dict[str, str]:
+def validate_candidate_canaries(view: ArchiveView) -> None:
+    view.require_regular("candidate-canaries.txt", nonempty=True)
+    text = view.read_text("candidate-canaries.txt", limit=256 * 1024)
+    observed: Dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("==="):
+            continue
+        if line.startswith("MISSING ") or line.startswith("NO_SHA256SUM "):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) == 2 and len(parts[0]) == 64:
+            observed[parts[1].strip()] = parts[0].lower()
+
+    for path, want in CANDIDATE_CANARIES.items():
+        got = observed.get(path)
+        if got != want:
+            raise EvidenceError(
+                f"{view.kind}: candidate canary mismatch for {path}: {got!r} != {want!r}"
+            )
+
+    webui = view.read_text("webui.txt", limit=512 * 1024)
+    for required in (
+        "/www/user -> /var/wwwext",
+        "/www/user1.asp -> user/user1.asp",
+        "/www/user20.asp -> user/user20.asp",
+    ):
+        if required not in webui:
+            raise EvidenceError(f"{view.kind}: missing candidate WebUI canary {required!r}")
+
+
+def validate_runtime(
+    view: ArchiveView, expected_sha: str, require_candidate_canaries: bool = False
+) -> Dict[str, str]:
     for rel in ("summary.txt", "safety.txt", "webui.txt", "jffs.txt", "services.txt"):
         view.require_regular(rel, nonempty=True)
 
@@ -215,6 +256,8 @@ def validate_runtime(view: ArchiveView, expected_sha: str) -> Dict[str, str]:
             "NO_FLASH_WRITES",
         ),
     )
+    if require_candidate_canaries:
+        validate_candidate_canaries(view)
     return summary
 
 
@@ -239,6 +282,11 @@ def main() -> int:
     ap.add_argument("--runtime", required=True, help="general runtime preflight tar/tar.gz")
     ap.add_argument("--expected-sha", default=DEFAULT_SHA)
     ap.add_argument("--report", help="optional JSON report output path")
+    ap.add_argument(
+        "--require-candidate-canaries",
+        action="store_true",
+        help="require immutable candidate overlay hashes and user-slot symlinks",
+    )
     ns = ap.parse_args()
 
     if len(ns.expected_sha) != 64 or any(c not in "0123456789abcdef" for c in ns.expected_sha):
@@ -252,12 +300,19 @@ def main() -> int:
             ns.runtime, "runtime", "rtac86u-merlin-runtime-probe"
         )
         k4 = validate_k4(k4_view, ns.expected_sha)
-        runtime = validate_runtime(runtime_view, ns.expected_sha)
+        runtime = validate_runtime(
+            runtime_view, ns.expected_sha, ns.require_candidate_canaries
+        )
         cross_check(k4, runtime)
 
+        classification = (
+            "READ_ONLY_52334_CANDIDATE_RUNTIME_EVIDENCE"
+            if ns.require_candidate_canaries
+            else "READ_ONLY_52334_BASELINE_EVIDENCE"
+        )
         report = {
             "status": "PASS",
-            "classification": "READ_ONLY_52334_BASELINE_EVIDENCE",
+            "classification": classification,
             "candidate_sha256": ns.expected_sha,
             "productid": k4["productid"],
             "firmver": k4["firmver"],
@@ -265,11 +320,12 @@ def main() -> int:
             "extendno": k4["extendno"],
             "kernel_release": k4["uname_r"],
             "architecture": k4["uname_m"],
+            "candidate_canaries_required": ns.require_candidate_canaries,
             "limitations": [
                 "This verifies collector identity, archive integrity constraints, safety markers, and ASUS 386_52334 runtime identity.",
                 "It does not prove optional module compatibility.",
                 "It does not prove M49 EJ dispatch.",
-                "The embedded candidate SHA binds the evidence workflow; runtime files cannot independently reconstruct the full .w SHA-256.",
+                "Candidate-canary mode fingerprints immutable overlay files and WebUI aliases but still cannot reconstruct the full .w SHA-256 from runtime files.",
             ],
         }
         payload = json.dumps(report, indent=2, sort_keys=True)
@@ -277,7 +333,11 @@ def main() -> int:
             with open(ns.report, "w", encoding="utf-8") as fh:
                 fh.write(payload + "\n")
         print(payload)
-        print("HARDWARE_EVIDENCE_BASELINE_PASS")
+        print(
+            "HARDWARE_EVIDENCE_CANDIDATE_PASS"
+            if ns.require_candidate_canaries
+            else "HARDWARE_EVIDENCE_BASELINE_PASS"
+        )
         return 0
     except EvidenceError as exc:
         print(f"HARDWARE_EVIDENCE_BASELINE_FAIL: {exc}", file=sys.stderr)

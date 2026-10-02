@@ -36,4 +36,6 @@ jobs:
         run: |
           sh scripts/runtime-feature-preflight.sh
           test -f /tmp/rtac86u-merlin-runtime-probe/safety.txt
+          test -f /tmp/rtac86u-merlin-runtime-probe/candidate-canaries.txt
           grep -Fq 'RTAC86U_MERLIN_RUNTIME_READ_ONLY_PROBE' /tmp/rtac86u-merlin-runtime-probe/summary.txt
+          grep -Fq '=== CANDIDATE IMMUTABLE CANARIES ===' /tmp/rtac86u-merlin-runtime-probe/candidate-canaries.txt
