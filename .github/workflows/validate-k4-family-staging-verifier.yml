@@ -1,0 +1,111 @@
+name: Validate K4 family staging verifier
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/verify-k4-family-staging.py
+      - .github/workflows/validate-k4-family-staging-verifier.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-k4-family-staging.py
+          python3 scripts/verify-k4-family-staging.py --help >/dev/null
+
+      - name: Download exact preserved hardware bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: work/hardware
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36992428232
+
+      - name: Locate preserved family packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(find work/hardware -type d -name k4-family-staging -print -quit)"
+          test -n "$root"
+          test -f "$root/package-sha256.txt"
+          test "$(find "$root" -maxdepth 1 -type f -name 'k4-family-*.tar.gz' | wc -l)" -eq 5
+          printf '%s\n' "$root" > work/family-root.txt
+
+      - name: PASS all five exact families
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/family-root.txt)"
+          for fam in ipset cake cifs nfs wireguard; do
+            out="work/staged-$fam"
+            python3 scripts/verify-k4-family-staging.py \
+              --packages-root "$root" \
+              --family "$fam" \
+              --output "$out" \
+              --report "work/report-$fam.json" | tee "work/pass-$fam.txt"
+            grep -Fq "K4_FAMILY_STAGING_PASS family=$fam" "work/pass-$fam.txt"
+            grep -Fq '"classification": "RTAC86U_52334_K4_FAMILY_STAGING"' "work/report-$fam.json"
+            test -f "$out/$fam/MANIFEST.txt"
+          done
+
+      - name: FAIL changed selected archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/family-root.txt)"
+          cp -a "$root" work/bad-archive
+          printf X >> work/bad-archive/k4-family-cake.tar.gz
+          if python3 scripts/verify-k4-family-staging.py --packages-root work/bad-archive --family cake; then
+            echo "changed family archive was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL changed outer checksum pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/family-root.txt)"
+          cp -a "$root" work/bad-checksum
+          sed -i 's/^bb913852/aaaaaaaa/' work/bad-checksum/package-sha256.txt
+          if python3 scripts/verify-k4-family-staging.py --packages-root work/bad-checksum --family cake; then
+            echo "changed outer checksum was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL extra package-root file
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/family-root.txt)"
+          cp -a "$root" work/extra-file
+          touch work/extra-file/unexpected.txt
+          if python3 scripts/verify-k4-family-staging.py --packages-root work/extra-file --family cifs; then
+            echo "unexpected package-root file was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL non-empty output directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat work/family-root.txt)"
+          mkdir -p work/nonempty
+          touch work/nonempty/existing
+          if python3 scripts/verify-k4-family-staging.py \
+            --packages-root "$root" --family wireguard --output work/nonempty; then
+            echo "non-empty staging destination was accepted" >&2
+            exit 1
+          fi

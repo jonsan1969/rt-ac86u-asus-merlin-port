@@ -105,3 +105,20 @@ Preserved artifact ZIP digest: `sha256:f496c5ea2125b0b7c6ecb6777370f6b71e4075f0a
 Expiry: `2026-12-31T09:54:03Z`.
 
 This preservation step changes transport/readiness only. It does not add runtime evidence or authorize loading any module.
+
+
+## Host-side family staging verifier
+
+`scripts/verify-k4-family-staging.py` is the fail-closed host-side selector/preparer for physical K4. It pins the five exact outer family archive SHA-256 values from run `36978077020`, requires the exact outer package inventory, validates the selected tar path/type set, requires exact manifest provenance/load order/file hashes, and may extract only the selected family to a clean host directory.
+
+Example:
+
+```sh
+python3 scripts/verify-k4-family-staging.py \
+  --packages-root <hardware-bundle>/k4-family-staging \
+  --family ipset \
+  --output /tmp/k4-ipset-host-stage \
+  --report k4-ipset-staging.json
+```
+
+Require `K4_FAMILY_STAGING_PASS family=<family>` before copying the resulting single family directory to router `/tmp`. This verifier does not run K4 symbol-preflight and does not load a module.
