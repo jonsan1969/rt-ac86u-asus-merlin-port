@@ -270,6 +270,7 @@ jobs:
             echo 'k4_wireguard_userspace_run=36971511361'
             echo 'k4_cake_userspace_run=36972043724'
             echo 'k4_module_dependency_run=36976006891'
+            echo 'docs_snapshot_commit='${GITHUB_SHA}
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
             echo
