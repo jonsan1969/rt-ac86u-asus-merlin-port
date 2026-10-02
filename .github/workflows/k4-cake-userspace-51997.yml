@@ -75,8 +75,7 @@ jobs:
           rm -f config.mk
           PKG_CONFIG=/bin/false CC="${PFX}gcc" AR="${PFX}ar" YACC=bison ./configure
           grep -Fq 'TC_CONFIG_NO_XT:=y' config.mk
-          make -C lib -j2 CC="${PFX}gcc" AR="${PFX}ar" HOSTCC=gcc SHARED_LIBS=n
-          make -C tc -j2 CC="${PFX}gcc" AR="${PFX}ar" HOSTCC=gcc YACC=bison LEX=flex SHARED_LIBS=n tc
+          make -j2 CC="${PFX}gcc" AR="${PFX}ar" HOSTCC=gcc YACC=bison LEX=flex PKG_CONFIG=/bin/false SHARED_LIBS=n
           test -x tc/tc
           test -f tc/q_cake.o
           "${PFX}nm" tc/tc | grep -Fq 'cake_qdisc_util'
