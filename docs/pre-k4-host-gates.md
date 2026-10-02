@@ -25,3 +25,19 @@ python3 scripts/prepare-k4-host-gates.py \
 Add `--candidate-mode` only for candidate-runtime evidence requiring the immutable canaries.
 
 A PASS ends at the host staging boundary. The resulting selected-family directory may then be copied manually to a fresh router `/tmp/k4-<family>` path under `docs/k4-controlled-module-validation.md`. The wrapper contains no module-load, NVRAM/JFFS, service restart, reboot or flash operations.
+
+
+## CI evidence
+
+Run `36997859437` — **SUCCESS**.
+
+CI proves the wrapper can chain the exact current preserved bundle through:
+
+- bundle integrity/provenance verification;
+- stock-baseline hardware-evidence verification;
+- candidate-canary hardware-evidence verification;
+- full-set K4 symbol-name preflight;
+- exact one-family staging for both ipset and WireGuard test paths;
+- fail-closed rejection of a non-empty workspace.
+
+The wrapper is intentionally kept outside the preserved hardware bundle. It depends on `verify-hardware-validation-bundle.py`, whose pinned manifest hash is the external trust anchor for that bundle; embedding the orchestration stack back into the same bundle would reintroduce a self-reference update loop without adding runtime evidence.
