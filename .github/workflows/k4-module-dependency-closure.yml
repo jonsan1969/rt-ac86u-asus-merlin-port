@@ -72,7 +72,7 @@ jobs:
           if len(roots) != 2:
               raise SystemExit(f"expected one k2 and one k3 module dir, got {roots}")
 
-          files = sorted(p for root in roots for p in root.glob("*.ko"))
+          files = sorted(p for root in roots for p in root.rglob("*.ko"))
           if len(files) != 27:
               raise SystemExit(f"expected 27 exact K2/K3 modules, got {len(files)}")
 
