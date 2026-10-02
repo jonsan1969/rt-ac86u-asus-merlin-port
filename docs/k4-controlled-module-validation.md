@@ -25,6 +25,21 @@ Test one family at a time; do not mix failures.
 
 Dependencies must be loaded before dependants. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
 
+### Exact artifact-internal dependency order
+
+Run `36976006891` derives the dependency graph from the exact preserved K2/K3 ELF files by matching undefined symbols to other modules' `__ksymtab_*` exports. Artifact: `k4-module-dependency-closure`, id `11212893202`, ZIP digest `sha256:55df58d1682d82e8de79030f0c1e425beced4d17632013ba405271e1b65553b7`.
+
+Use these artifact-internal orders during K4:
+
+- ipset/xt_set: `ip_set` first, then only the subtype modules needed for the smoke test, with `xt_set` after `ip_set`; unload dependants before `ip_set`;
+- Cake: `sch_cake` only;
+- CIFS: `cifs` only;
+- NFS/SUNRPC/LOCKD load: `sunrpc -> lockd -> nfs -> nfsd -> nfsv2 -> nfsv3`;
+- NFS/SUNRPC/LOCKD unload: `nfsv3 -> nfsv2 -> nfsd -> nfs -> lockd -> sunrpc`;
+- WireGuard: `wireguard` only.
+
+The ELF gate found no dependency from one optional family into another and no declared external module dependency. This does **not** prove that all non-artifact kernel symbols exist on ASUS 386_52334. Before any load attempt, K4a evidence must still show that every required non-artifact symbol is present in the real target runtime. Any missing symbol is STOP/FAIL.
+
 ## Per-family gate
 
 For each family:
