@@ -25,6 +25,7 @@ Do not promote this candidate until evidence for this exact SHA-256 includes:
 - K4 ASUS-52334 read-only preflight archive
 - general runtime feature preflight archive
 - host-side hardware evidence verifier PASS for the K4a/runtime archive pair
+- host-side K4 symbol-name preflight PASS for the exact K4a/module/closure set
 - K4 module compatibility/load-unload evidence for any optional modules intended for activation
 - feature-specific runtime evidence (including M49 EJ dispatch if M49 is advertised)
 - configuration/JFFS backup and recovery preparation
