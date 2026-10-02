@@ -1,0 +1,175 @@
+name: Analyze K4 module dependency closure
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/k4-module-dependency-closure.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install module inspection tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends kmod binutils
+
+      - name: Download preserved exact hardware-validation inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: hardware-validation-bundle-eac8a777
+          path: work/hw
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36972221014
+
+      - name: Verify exact module inventory and identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          k2="$(find work/hw -type d -path '*/modules/k2' -print -quit)"
+          k3="$(find work/hw -type d -path '*/modules/k3' -print -quit)"
+          test -n "$k2"
+          test -n "$k3"
+          test "$(find "$k2" -type f -name '*.ko' | wc -l)" -eq 18
+          test "$(find "$k3" -type f -name '*.ko' | wc -l)" -eq 9
+
+          for name in sunrpc lockd nfs nfsv2 nfsv3 nfsd cifs sch_cake wireguard; do
+            test "$(find "$k3" -type f -name "$name.ko" | wc -l)" -eq 1
+          done
+
+          check_hash() {
+            root="$1"; name="$2"; want="$3"
+            p="$(find "$root" -type f -name "$name" -print -quit)"
+            test -n "$p"
+            test "$(sha256sum "$p" | awk '{print $1}')" = "$want"
+          }
+          check_hash "$k3" sunrpc.ko b547166600f2e2c0b6ff7356010b7eeec509139b928cc01236e8cba2820b1241
+          check_hash "$k3" nfs.ko 82f8a84767334ab49a032f5b96f59960cd4e207336b9b8995c9442947631bf5d
+          check_hash "$k3" nfsd.ko 953d838733e9ab740980ecd5f0a5c76ddbcfafef8c0af1621171551406a8a293
+          check_hash "$k3" cifs.ko eb545f7ce5429477f081ef0c4d1c5d1b8eca519d9025afdc2a225417417567b8
+          check_hash "$k3" sch_cake.ko 159256eb407a76d0ac38b53c3eea36ef74d054b1afe60329a61aad0e5024f24c
+          check_hash "$k3" wireguard.ko 418f6e212f4d8f3f83142352f462fd870b591602f45b8af0564ecd72c7e5161c
+
+      - name: Derive exact modinfo dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess
+
+          roots = list(Path("work/hw").glob("**/modules/k2")) + list(Path("work/hw").glob("**/modules/k3"))
+          if len(roots) != 2:
+              raise SystemExit(f"expected one k2 and one k3 module dir, got {roots}")
+
+          files = sorted(p for root in roots for p in root.glob("*.ko"))
+          if len(files) != 27:
+              raise SystemExit(f"expected 27 exact K2/K3 modules, got {len(files)}")
+
+          def field(path, name):
+              cp = subprocess.run(["modinfo", "-F", name, str(path)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              if cp.returncode:
+                  raise SystemExit(f"modinfo failed for {path} field={name}: {cp.stderr.strip()}")
+              return cp.stdout.strip()
+
+          rows = {}
+          for p in files:
+              name = field(p, "name").replace("-", "_") or p.stem.replace("-", "_")
+              deps = [x.strip().replace("-", "_") for x in field(p, "depends").split(",") if x.strip()]
+              rows[name] = {
+                  "file": p.name,
+                  "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                  "vermagic": field(p, "vermagic"),
+                  "depends": deps,
+                  "source_set": "k2" if "/k2/" in str(p) else "k3",
+              }
+
+          providers = set(rows)
+          for name, row in rows.items():
+              row["internal_depends"] = [d for d in row["depends"] if d in providers]
+              row["external_depends"] = [d for d in row["depends"] if d not in providers]
+
+          expected_k3 = {"sunrpc","lockd","nfs","nfsv2","nfsv3","nfsd","cifs","sch_cake","wireguard"}
+          got_k3 = {n for n,r in rows.items() if r["source_set"] == "k3"}
+          if got_k3 != expected_k3:
+              raise SystemExit(f"K3 module-name mismatch: got={sorted(got_k3)}")
+
+          # Topological sort using only dependencies supplied by this exact artifact set.
+          pending = {n:set(r["internal_depends"]) for n,r in rows.items()}
+          order=[]
+          while pending:
+              ready=sorted(n for n,deps in pending.items() if not deps)
+              if not ready:
+                  raise SystemExit("dependency cycle inside exact K2/K3 artifact set: "+repr(pending))
+              order.extend(ready)
+              for n in ready:
+                  pending.pop(n)
+              for deps in pending.values():
+                  deps.difference_update(ready)
+
+          families = {
+              "ipset_xt_set": sorted(n for n,r in rows.items() if r["source_set"]=="k2"),
+              "cake": ["sch_cake"],
+              "cifs": ["cifs"],
+              "nfs_sunrpc_lockd": ["sunrpc","lockd","nfs","nfsv2","nfsv3","nfsd"],
+              "wireguard": ["wireguard"],
+          }
+          family_report={}
+          for fam,names in families.items():
+              name_set=set(names)
+              family_report[fam]={
+                  "load_order":[n for n in order if n in name_set],
+                  "unload_order":[n for n in reversed(order) if n in name_set],
+                  "external_depends":{n:rows[n]["external_depends"] for n in names if rows[n]["external_depends"]},
+                  "internal_depends":{n:rows[n]["internal_depends"] for n in names if rows[n]["internal_depends"]},
+              }
+
+          report={"schema":1,"source_preservation_run":36972221014,"modules":rows,"families":family_report}
+          Path("reports").mkdir()
+          Path("reports/k4-module-dependency-closure.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+
+          print("K4_MODULE_DEPENDENCY_CLOSURE")
+          for fam,data in family_report.items():
+              print(f"FAMILY {fam}")
+              print("  load_order=" + ",".join(data["load_order"]))
+              print("  unload_order=" + ",".join(data["unload_order"]))
+              if data["external_depends"]:
+                  for n,deps in data["external_depends"].items():
+                      print(f"  external {n}=" + ",".join(deps))
+              else:
+                  print("  external=NONE")
+          print("K4_MODULE_DEPENDENCY_ANALYSIS=PASS")
+          PY
+
+      - name: Fail closed on unexpected NFS/CIFS artifact dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          r=json.load(open("reports/k4-module-dependency-closure.json"))
+          for fam in ("cifs","nfs_sunrpc_lockd"):
+              data=r["families"][fam]
+              print(f"{fam}_external={data['external_depends']}")
+          # This gate intentionally does not assume external dependencies are bad:
+          # they may be built into stock ASUS or provided by its stock module tree.
+          # They must be carried into the physical K4 preflight checklist instead.
+          PY
+
+      - name: Publish dependency closure report
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4-module-dependency-closure
+          path: reports/k4-module-dependency-closure.json
+          if-no-files-found: error
+          retention-days: 90
