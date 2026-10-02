@@ -64,7 +64,7 @@ Do not use rollback restoration as a way to continue a failed K4 family. A K4 ST
 
 The candidate evidence directory prepared by `scripts/prepare-candidate-evidence.sh` should record that backup/recovery preparation is complete, but the backup files themselves should remain outside the repository and outside public CI artifacts.
 
-The hardware-validation bundle from run `36971723461` preserves the verified official ASUS 386_52334 stock image, the exact UNVALIDATED candidate, K2/K3 inputs, ipset/WireGuard temporary K4 companions and current validation runbooks. It does not replace the private rollback backups described here.
+The current hardware-validation bundle from run `36998454435` (artifact `11222508393`, ZIP SHA-256 `25309515170b32d2c85829977e24f27c44ec4934b89c641fc00d90dbe4dfed50`) preserves the verified official ASUS 386_52334 stock image, exact UNVALIDATED candidate, K2/K3 inputs, temporary K4 companions, isolated family staging packages and current validation runbooks. Its internal manifest SHA-256 is `2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec`. It does not replace the private rollback backups described here.
 
 ## Promotion implication
 

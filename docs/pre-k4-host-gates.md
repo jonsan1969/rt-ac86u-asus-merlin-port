@@ -41,3 +41,8 @@ CI proves the wrapper can chain the exact current preserved bundle through:
 - fail-closed rejection of a non-empty workspace.
 
 The wrapper is intentionally kept outside the preserved hardware bundle. It depends on `verify-hardware-validation-bundle.py`, whose pinned manifest hash is the external trust anchor for that bundle; embedding the orchestration stack back into the same bundle would reintroduce a self-reference update loop without adding runtime evidence.
+
+
+## Current preservation compatibility
+
+The first orchestration CI run, `36997859437`, validated the logic against the preceding preservation bundle. The validation workflow is now pinned to current preservation run `36998454435` / artifact `11222508393`, whose external integrity verifier is CI-green in run `37003596484`. A fresh orchestration CI result is required before physical use of this exact current kit.

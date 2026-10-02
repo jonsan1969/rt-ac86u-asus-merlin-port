@@ -20,9 +20,9 @@ A PASS is transport/inventory evidence only. It does not prove flashability, rou
 
 ## CI evidence
 
-Run `36996895881` — **SUCCESS**.
+Run `37003596484` — **SUCCESS**.
 
-Run `36996895881` validated the previous preservation artifact (`36995684511`) with `103` manifest-bound files. The verifier pin is now refreshed for current preservation run `36998454435`, whose manifest contains `104` files and records pre-K4 orchestrator CI `36997859437` plus candidate-evidence CI `36998249913`; a new verifier CI run is required before this current pin is called CI-validated. CI also proves fail-closed rejection of:
+Run `37003596484` validates current preservation run `36998454435` with `104` manifest-bound files and provenance fields for pre-K4 orchestrator CI `36997859437` plus candidate-evidence CI `36998249913`. CI also proves fail-closed rejection of:
 
 - a changed manifest-bound payload file;
 - changed manifest metadata/content;
@@ -32,4 +32,4 @@ Run `36996895881` validated the previous preservation artifact (`36995684511`) w
 The verifier is deliberately not embedded in the same preserved bundle whose manifest hash it pins. Its expected manifest SHA-256 is the external trust anchor; embedding that verifier in the manifest would make the verifier content depend on the manifest hash while the manifest hash simultaneously depends on the verifier content.
 
 
-The current-pin validation workflow is triggered by the verifier refresh commit. Until that run is green, the new `36998454435` artifact is preserved and internally hash-bound but the external pinned verifier is **CI pending** for this exact manifest.
+The current pin is CI-validated for exact manifest SHA-256 `2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec`. Historical verifier run `36996895881` applies only to the preceding 103-file preservation bundle.
