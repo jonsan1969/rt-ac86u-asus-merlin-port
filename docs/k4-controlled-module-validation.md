@@ -75,3 +75,19 @@ Build lineage:
 The bundle contains an `ipset` wrapper, real ARM32/EABI5 `ipset.real`, `libipset.so.13` and `libmnl.so.0`. CI records the ELF NEEDED closure and reaches `ipset v7.6, protocol version: 7` under QEMU. The host QEMU environment has no real ipset kernel netlink session, so the build gate accepts rc=1 only when the exact `Cannot open session to kernel.` marker is present and no loader/ABI failure appears.
 
 During physical K4, stage this companion together with the exact K2 modules only after the read-only preflight and host evidence verification have passed. The userspace artifact is a smoke-test dependency, not firmware payload and not runtime compatibility evidence.
+
+
+### WireGuard
+
+Run `36971511361` produces artifact `k4-wireguard-userspace-51997` (artifact id `11211229289`, ZIP digest `sha256:2a5d5ab85615a7cd069f58812986322f9b875b08b8a6410b268498c6773038f4`).
+
+Build lineage:
+
+- source: `c553d8e4b0bf3289683368b0d57172649b030039`;
+- userspace: `wireguard-tools` / `wg` version `1.0.20200827`;
+- toolchain: pinned ARM32 HND GCC 5.3 / glibc 2.22;
+- kernel family: K3 run `36561957525`.
+
+The bundle contains only the temporary `wg` userspace tool plus provenance reports. CI requires ARM32/EABI5, the stock ARM loader `/lib/ld-linux.so.3`, successful QEMU execution of `wg --version`, and a Unix-preserving tar.gz whose extracted executable and manifest hashes verify.
+
+During physical K4, `wg` is staged only below `/tmp` after the WireGuard kernel module has passed the preceding K4 load gate. It is not firmware payload, does not create an interface by itself, and does not make the kernel module compatible merely because the userspace binary runs.
