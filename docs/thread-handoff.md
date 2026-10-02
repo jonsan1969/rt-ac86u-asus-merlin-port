@@ -100,6 +100,18 @@ Hash-bound CI: `36924632712` — SUCCESS.
 
 Both collectors remain read-only and are bound to the current candidate hash.
 
+## Hardware evidence intake gate
+
+Host-side verifier:
+
+`scripts/verify-hardware-evidence.py`
+
+CI run: `36968652355` — SUCCESS.
+
+It fail-closed cross-checks the K4a and general runtime archives for the current candidate binding, RT-AC86U identity, ASUS 386_52334 identity, AArch64/kernel consistency, required read-only safety markers and required evidence files. CI also proves rejection of wrong candidate SHA, Merlin runtime identity, unavailable kallsyms and unsafe tar traversal.
+
+A PASS is only a baseline evidence-intake PASS. It does not authorize module loading, prove M49 EJ dispatch or make the candidate flashable.
+
 ## Kernel/module track
 
 K1 config/toolchain lineage: **SUCCESS**, run `36531249746`.
