@@ -113,7 +113,7 @@ jobs:
           CFLAGS="-Os -Wall -ffunction-sections -fdata-sections" \
           LDFLAGS="-Wl,--gc-sections -Wl,-rpath-link,$STAGE/usr/lib" \
           ./configure --host=arm-buildroot-linux-gnueabi --prefix=/usr \
-            --disable-rpath --with-kmod=no --with-kbuild="$K"
+            --disable-static --disable-rpath --with-kmod=no --with-kbuild="$K"
           make -j2
           test -x src/ipset
           test -f lib/.libs/libipset.so.13.1.0
