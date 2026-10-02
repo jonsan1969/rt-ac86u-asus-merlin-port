@@ -33,6 +33,9 @@ jobs:
           sh scripts/prepare-candidate-evidence.sh work/test-UNVALIDATED.w work/evidence
           test -s work/evidence/candidate-sha256.txt
           grep -Fq 'K4 ASUS-52334' work/evidence/REQUIRED-EVIDENCE.txt
+          grep -Fq 'preserved hardware-validation bundle verifier PASS' work/evidence/REQUIRED-EVIDENCE.txt
+          grep -Fq 'pre-K4 host gate orchestration PASS' work/evidence/REQUIRED-EVIDENCE.txt
+          grep -Fq 'exact one-family staging PASS' work/evidence/REQUIRED-EVIDENCE.txt
           printf 'dummy' > work/test.w
           if sh scripts/prepare-candidate-evidence.sh work/test.w work/bad; then
             echo "accepted unmarked candidate" >&2
