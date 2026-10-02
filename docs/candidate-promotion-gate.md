@@ -56,6 +56,8 @@ Before any mutating K4 family test, run the host-side verifier described in `doc
 
 Then run the read-only symbol-name gate in `docs/k4-symbol-preflight.md` against the same K4a archive plus the exact preserved K2/K3 modules and dependency-closure report. Require `K4_SYMBOL_PREFLIGHT_PASS` before any module load. CI run `36977341893` validates both fail-closed fixtures and the default project profile against the exact preserved 27-module set.
 
+Before copying a family to the router, run `scripts/verify-k4-family-staging.py` against the preserved `k4-family-staging` directory and require `K4_FAMILY_STAGING_PASS family=<family>`. CI run `36994228096` validates all five exact families and fail-closed corruption/output cases. This staging PASS is transport/inventory evidence only and does not replace K4 symbol or load/runtime gates.
+
 Latest evidence-verifier CI run `36968903989` validates both stock/baseline and candidate-canary modes. The gate intentionally rejects:
 
 - a different embedded candidate SHA-256;

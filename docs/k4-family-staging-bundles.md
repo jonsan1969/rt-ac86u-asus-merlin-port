@@ -122,3 +122,19 @@ python3 scripts/verify-k4-family-staging.py \
 ```
 
 Require `K4_FAMILY_STAGING_PASS family=<family>` before copying the resulting single family directory to router `/tmp`. This verifier does not run K4 symbol-preflight and does not load a module.
+
+
+## Verifier CI evidence
+
+Run `36994228096` — **SUCCESS**.
+
+The validation workflow uses the exact family packages preserved by run `36992428232` and proves:
+
+- all five families pass the pinned outer archive hashes and selected-family manifest/file inventory;
+- each selected family extracts to a clean host staging directory;
+- an altered family archive is rejected;
+- a changed outer checksum pin is rejected;
+- an unexpected package-root file is rejected;
+- a non-empty output directory is rejected.
+
+Superseded run `36993934701` failed only because the verifier's raw outer filename regex over-escaped the literal dots in `.tar.gz`; its job log was fetched exactly once. No family-content or runtime conclusion was taken from that failed run.

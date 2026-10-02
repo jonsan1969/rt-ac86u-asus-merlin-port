@@ -49,7 +49,7 @@ After the router is confirmed stable:
 4. run the host evidence verifier **without** candidate-canary mode;
 5. run the host-side K4 symbol-name preflight against this K4a archive, the exact preserved modules and dependency-closure report; require `K4_SYMBOL_PREFLIGHT_PASS`;
 6. inspect baseline dmesg, loaded modules, symbol-preflight report and stock module metadata;
-7. verify `bundle/k4-family-staging/package-sha256.txt` from preservation run `36992428232`, select and extract only one matching `k4-family-<family>.tar.gz`, verify that family's internal `MANIFEST.txt`, and copy only that family to `/tmp` on the router;
+7. run `scripts/verify-k4-family-staging.py` against `bundle/k4-family-staging` from the preserved hardware bundle, select exactly one family, require `K4_FAMILY_STAGING_PASS family=<family>`, and copy only the resulting verified family directory to `/tmp` on the router;
 8. only then begin controlled K4, one family at a time:
    - ipset / xt_set;
    - Cake;
@@ -94,7 +94,7 @@ A PASS establishes the intended guarded overlay/runtime fingerprint and the 5233
 For any optional kernel family intended to become active:
 
 - require the corresponding Phase A stock K4 PASS first;
-- stage only that family's verified tarball from run `36978077020` (as preserved by `36992428232`) outside autoload/boot paths; never copy the full 27-module host analysis set to the router;
+- re-run `scripts/verify-k4-family-staging.py` for that family and stage only its verified output outside autoload/boot paths; never copy the full 27-module host analysis set to the router;
 - repeat the minimum load/function/unload test under the candidate runtime;
 - record module hashes, command statuses and new dmesg lines;
 - STOP on any discrepancy, WARN/Oops, symbol/format error, HND/network instability or unexpected dependency.
