@@ -132,7 +132,7 @@ jobs:
           for fam in ipset cake cifs nfs wireguard; do
             tar -C stage -czf "packages/k4-family-$fam.tar.gz" "$fam"
           done
-          sha256sum packages/k4-family-*.tar.gz | sort -k2 > packages/package-sha256.txt
+          (cd packages && sha256sum k4-family-*.tar.gz | sort -k2 > package-sha256.txt)
 
       - name: Re-extract and verify transport
         shell: bash
