@@ -6,9 +6,9 @@ The external preserved-bundle verifier is normalized-pin CI-complete: run `37017
 
 Historical pre-K4 orchestration run `37006423674` validated the preceding 104-file preservation kit. It is superseded for physical-use readiness by normalized-bundle run `37020619484`.
 
-Hardware-validation refresh run `36998454435` is SUCCESS. Current artifact `11222508393`, ZIP digest `sha256:25309515170b32d2c85829977e24f27c44ec4934b89c641fc00d90dbe4dfed50`, expires `2026-12-31T10:58:45Z`. Internal `BUNDLE-MANIFEST.txt` SHA-256 is `2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec`, with 104 manifest-bound files and docs/source snapshot commit `b1d943223702578719670ca84825cbc9f1da2a37`. It records pre-K4 orchestrator CI `36997859437` and candidate-evidence CI `36998249913`. Firmware identity remains the internal candidate .w SHA-256.
+Historical hardware-validation refresh run `36998454435` is SUCCESS but superseded by normalized preservation run `37011499307`. Its artifact `11222508393` / 104-file manifest remains historical evidence only.
 
-The external preserved-bundle verifier is current-pin CI-complete: run `37003596484` is SUCCESS against preservation run `36998454435`, exact manifest SHA-256 `2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec` and all 104 manifest-bound files. Changed payload, changed manifest, extra-file and symlink-injection cases all fail closed. Historical run `36996895881` belongs only to the superseded 103-file bundle.
+Historical verifier run `37003596484` is SUCCESS for superseded preservation run `36998454435` / its 104-file manifest. Current normalized verifier authority is run `37017852039`.
 
 Candidate evidence skeleton revalidation is complete: run `36998249913` is SUCCESS. REQUIRED-EVIDENCE now names the full current host trust chain—preserved-bundle verifier PASS, hardware-evidence PASS, K4 symbol-preflight PASS, pre-K4 host orchestration PASS and exact one-family staging PASS—before any mutating K4. The preparation script remains non-mutating and rejects candidates without the UNVALIDATED marker.
 
