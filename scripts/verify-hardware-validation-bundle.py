@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, re, sys
 from pathlib import Path, PurePosixPath
 from typing import Dict
 
-EXPECTED_MANIFEST_SHA256="2f2e16e182ba111e660fda5269546c798460918808fe7a8c641fd3f21ed700ec"
+EXPECTED_MANIFEST_SHA256="fc6825056f8270db4f8d876c208b0447a419744f526d0bece0f3f24f9b9f9e33"
 EXPECTED_METADATA={
 "official_stock_sha256":"1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f",
 "official_stock_size":"78250004","candidate_run":"36924014278",
@@ -14,9 +14,10 @@ EXPECTED_METADATA={
 "k4_cake_userspace_run":"36972043724","k4_module_dependency_run":"36976006891",
 "k4_family_staging_run":"36978077020","k4_symbol_preflight_ci_run":"36977341893",
 "k4_family_staging_verifier_ci_run":"36994228096",
-"pre_k4_host_orchestrator_ci_run":"36997859437","candidate_evidence_ci_run":"36998249913",
-"docs_snapshot_commit":"b1d943223702578719670ca84825cbc9f1da2a37",
-"source_commit":"b1d943223702578719670ca84825cbc9f1da2a37",
+"pre_k4_host_orchestrator_ci_run":"37006423674","candidate_evidence_ci_run":"36998249913",
+"preservation_run":"37011499307",
+"docs_snapshot_commit":"0b42a3b59e96b5c8601a41316a717eae8eabe71b",
+"source_commit":"0b42a3b59e96b5c8601a41316a717eae8eabe71b",
 "classification":"UNVALIDATED_HARDWARE_VALIDATION_INPUT"}
 CANDIDATE_REL="candidate/RT-AC86U_386_52334_merlin-port-UNVALIDATED.w"
 STOCK_REL="official-stock/RT-AC86U_386_52334_OFFICIAL.w"
@@ -84,7 +85,7 @@ def discover_actual_files(root:Path):
 def require_semantics(root:Path, rows:Dict[str,str]):
  required={CANDIDATE_REL,STOCK_REL,"scripts/verify-hardware-evidence.py","scripts/verify-k4-symbol-preflight.py",
  "scripts/verify-k4-family-staging.py","scripts/prepare-candidate-evidence.sh","reports/k4-module-dependency-closure.json","k4-family-staging/package-sha256.txt",
- "docs/candidate-promotion-gate.md","docs/pre-k4-host-gates.md","docs/physical-validation-sequence.md","docs/thread-handoff.md","docs/STATUS.md"}
+ "BUNDLE-README.txt","docs/candidate-promotion-gate.md","docs/pre-k4-host-gates.md","docs/physical-validation-sequence.md","docs/thread-handoff.md","docs/STATUS.md"}
  missing=sorted(required-set(rows))
  if missing: raise GateError(f"required bundle files absent from manifest: {missing}")
  candidate=root/CANDIDATE_REL; stock=root/STOCK_REL
@@ -94,6 +95,15 @@ def require_semantics(root:Path, rows:Dict[str,str]):
  if sha256_path(stock)!=EXPECTED_METADATA["official_stock_sha256"]: raise GateError("official stock SHA-256 mismatch")
  sums=(root/"candidate/SHA256SUMS").read_text(encoding="utf-8")
  if EXPECTED_METADATA["candidate_sha256"] not in sums or "UNVALIDATED.w" not in sums: raise GateError("candidate/SHA256SUMS does not bind expected candidate")
+ readme=(root/"BUNDLE-README.txt").read_text(encoding="utf-8")
+ required_readme={
+  f"preservation_run={EXPECTED_METADATA['preservation_run']}",
+  f"snapshot_commit={EXPECTED_METADATA['docs_snapshot_commit']}",
+  f"candidate_sha256={EXPECTED_METADATA['candidate_sha256']}",
+  "classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT",
+ }
+ missing_readme=sorted(x for x in required_readme if x not in readme.splitlines())
+ if missing_readme: raise GateError(f"BUNDLE-README.txt identity mismatch: missing={missing_readme}")
  famroot=root/"k4-family-staging"; outer=famroot/"package-sha256.txt"; seen={}
  pat=re.compile(r"^([0-9a-f]{64})  (k4-family-([a-z0-9_-]+)\.tar\.gz)$")
  for raw in outer.read_text(encoding="utf-8").splitlines():
@@ -127,6 +137,7 @@ def main()->int:
   "file_count":len(rows),"k4_family_staging_verifier_ci_run":int(meta["k4_family_staging_verifier_ci_run"]),
   "pre_k4_host_orchestrator_ci_run":int(meta["pre_k4_host_orchestrator_ci_run"]),
   "candidate_evidence_ci_run":int(meta["candidate_evidence_ci_run"]),
+  "preservation_run":int(meta["preservation_run"]),
   "limitations":["PASS verifies exact preserved bundle inventory/provenance and file hashes only.",
   "PASS does not prove flashability, router runtime identity, module loadability, K4 behavior, or M49 EJ dispatch.",
   "The candidate remains UNVALIDATED until the physical promotion gates pass."]}
