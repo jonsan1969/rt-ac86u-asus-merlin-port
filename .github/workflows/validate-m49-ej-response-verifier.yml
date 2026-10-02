@@ -1,0 +1,136 @@
+name: Validate M49 EJ response verifier
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/verify-m49-ej-response.py
+      - .github/workflows/validate-m49-ej-response-verifier.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static validation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-m49-ej-response.py
+          python3 scripts/verify-m49-ej-response.py --help >/dev/null
+
+      - name: Build fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p fixtures
+          cat > fixtures/pass-data.html <<'EOF'
+          <!doctype html>
+          <html>
+          <!-- RTAC86U_M49_USER_SLOT_TEMPLATE: runtime EJ dispatch remains a hardware gate -->
+          <script>
+          try {
+
+          monthly_history = [
+          [0x7e0900,0x123,0x456],[0x7e0800,0x111,0x222)];
+          }
+          catch (ex) {
+            monthly_history = [];
+          }
+          if (typeof(monthly_history) == 'undefined') {
+            monthly_history = [];
+          }
+          </script>
+          </html>
+          EOF
+          cat > fixtures/pass-empty.html <<'EOF'
+          <!doctype html>
+          <!-- RTAC86U_M49_USER_SLOT_TEMPLATE: runtime EJ dispatch remains a hardware gate -->
+          <script>
+          try {
+
+          monthly_history = [
+          ];
+          }
+          catch (ex) { monthly_history = []; }
+          if (typeof(monthly_history) == 'undefined') { monthly_history = []; }
+          </script>
+          EOF
+          cat > fixtures/raw-token.html <<'EOF'
+          <!-- RTAC86U_M49_USER_SLOT_TEMPLATE: runtime EJ dispatch remains a hardware gate -->
+          <script>
+          try {
+            <% bandwidth("monthly"); %>
+          }
+          catch (ex) { monthly_history = []; }
+          </script>
+          EOF
+          cat > fixtures/fallback-only.html <<'EOF'
+          <!-- RTAC86U_M49_USER_SLOT_TEMPLATE: runtime EJ dispatch remains a hardware gate -->
+          <script>
+          try {
+          }
+          catch (ex) { monthly_history = []; }
+          if (typeof(monthly_history) == 'undefined') { monthly_history = []; }
+          </script>
+          EOF
+          cat > fixtures/login.html <<'EOF'
+          <!doctype html><html><title>Login</title><form>login</form></html>
+          EOF
+          cat > fixtures/malformed.html <<'EOF'
+          <!-- RTAC86U_M49_USER_SLOT_TEMPLATE: runtime EJ dispatch remains a hardware gate -->
+          <script>
+          monthly_history = [
+          definitely_not_rstats_history];
+          </script>
+          EOF
+
+      - name: PASS populated handler output
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-m49-ej-response.py fixtures/pass-data.html --report fixtures/pass.json | tee fixtures/pass.txt
+          grep -Fq M49_EJ_RESPONSE_PASS fixtures/pass.txt
+          grep -Fq '"history_entry_count": 2' fixtures/pass.json
+          grep -Fq '"raw_ej_token_absent": true' fixtures/pass.json
+
+      - name: PASS empty but executed handler output
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-m49-ej-response.py fixtures/pass-empty.html --report fixtures/empty.json
+          grep -Fq '"history_entry_count": 0' fixtures/empty.json
+          grep -Fq '"handler_assignment_count": 1' fixtures/empty.json
+
+      - name: FAIL raw EJ token
+        run: |
+          set -euo pipefail
+          if python3 scripts/verify-m49-ej-response.py fixtures/raw-token.html; then
+            echo "raw EJ token incorrectly accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL fallback-only page
+        run: |
+          set -euo pipefail
+          if python3 scripts/verify-m49-ej-response.py fixtures/fallback-only.html; then
+            echo "fallback-only response incorrectly accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL login or wrong page
+        run: |
+          set -euo pipefail
+          if python3 scripts/verify-m49-ej-response.py fixtures/login.html; then
+            echo "login/wrong response incorrectly accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL malformed handler payload
+        run: |
+          set -euo pipefail
+          if python3 scripts/verify-m49-ej-response.py fixtures/malformed.html; then
+            echo "malformed handler payload incorrectly accepted" >&2
+            exit 1
+          fi
