@@ -1,0 +1,191 @@
+name: Build K4 ipset userspace bundle
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/k4-ipset-userspace-51997.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool pkg-config make file qemu-user
+
+      - name: Fetch exact 51997 userspace sources
+        run: |
+          set -euo pipefail
+          SRC_SHA=c553d8e4b0bf3289683368b0d57172649b030039
+          mkdir -p work/source
+          git -C work/source init
+          git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/source sparse-checkout init --cone
+          git -C work/source sparse-checkout set \
+            release/src/router/ipset-7.6 \
+            release/src/router/libmnl-1.0.4 \
+            release/src-rt-5.02hnd/kernel/linux-4.1
+          git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
+          git -C work/source checkout --detach FETCH_HEAD
+          test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
+          test "$(git -C work/source rev-parse HEAD:release/src/router/ipset-7.6/configure.ac)" = 0167374554e5d580abdfa5cc1de0ffca9e3e3644
+          test "$(git -C work/source rev-parse HEAD:release/src/router/libmnl-1.0.4/configure.ac)" = 35b25316b91abe26920d26a73da4609a84992612
+          test -f work/source/release/src-rt-5.02hnd/kernel/linux-4.1/include/uapi/linux/netfilter/ipset/ip_set.h
+
+      - name: Fetch pinned ARM32 HND userspace toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains
+          git -C work/toolchains init
+          git -C work/toolchains remote add origin https://github.com/SWRT-dev/bcmhnd-toolchains.git
+          git -C work/toolchains sparse-checkout init --cone
+          git -C work/toolchains sparse-checkout set crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          git -C work/toolchains fetch --depth=1 --filter=blob:none origin 7710a1e09d994598ac6c2db8ab16dc54ca5aed3d
+          git -C work/toolchains checkout --detach FETCH_HEAD
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR)" = 7db024edfe5b45d9b320828845d9fd8dc539d0e8
+          TC="$PWD/work/toolchains/$DIR/usr"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          "$TC/bin/arm-buildroot-linux-gnueabi-gcc" --version | head -1
+          printf 'int main(void){return 0;}\n' > work/arm-smoke.c
+          "$TC/bin/arm-buildroot-linux-gnueabi-gcc" -c work/arm-smoke.c -o work/arm-smoke.o
+          file work/arm-smoke.o | grep -Eq 'ARM|32-bit'
+
+      - name: Build matching libmnl
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          export PATH="$TC/bin:$PATH"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          export CC="${PFX}gcc"
+          export AR="${PFX}ar"
+          export RANLIB="${PFX}ranlib"
+          export STRIP="${PFX}strip"
+          export LD="${PFX}ld"
+          SRC="$PWD/work/source/release/src/router/libmnl-1.0.4"
+          STAGE="$PWD/work/stage"
+          cd "$SRC"
+          autoreconf -i -f
+          ./configure --host=arm-buildroot-linux-gnueabi --prefix=/usr \
+            CFLAGS='-Os -ffunction-sections -fdata-sections' \
+            LDFLAGS='-Wl,--gc-sections'
+          make -j2
+          make DESTDIR="$STAGE" install
+          test -f "$STAGE/usr/include/libmnl/libmnl.h"
+          find "$STAGE/usr/lib" -maxdepth 1 -name 'libmnl.so*' -print
+
+      - name: Build exact ipset 7.6 userspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          export PATH="$TC/bin:$PATH"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          export CC="${PFX}gcc"
+          export AR="${PFX}ar"
+          export RANLIB="${PFX}ranlib"
+          export STRIP="${PFX}strip"
+          export LD="${PFX}ld"
+          ROOT="$PWD"
+          SRC="$ROOT/work/source/release/src/router/ipset-7.6"
+          K="$ROOT/work/source/release/src-rt-5.02hnd/kernel/linux-4.1"
+          STAGE="$ROOT/work/stage"
+          cd "$SRC"
+          ./autogen.sh
+          libmnl_CFLAGS="-I$STAGE/usr/include" \
+          libmnl_LIBS="-L$STAGE/usr/lib -lmnl" \
+          CFLAGS="-Os -Wall -ffunction-sections -fdata-sections" \
+          LDFLAGS="-Wl,--gc-sections -Wl,-rpath-link,$STAGE/usr/lib" \
+          ./configure --host=arm-buildroot-linux-gnueabi --prefix=/usr \
+            --disable-rpath --with-kmod=no --with-kbuild="$K"
+          make -j2
+          test -x src/ipset
+          test -f lib/.libs/libipset.so.13.1.0
+
+      - name: Assemble isolated K4 userspace bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/bin bundle/lib reports
+          install -m 0755 work/source/release/src/router/ipset-7.6/src/ipset bundle/bin/ipset.real
+          install -m 0644 work/source/release/src/router/ipset-7.6/lib/.libs/libipset.so.13.1.0 bundle/lib/
+          ln -s libipset.so.13.1.0 bundle/lib/libipset.so.13
+          mnl="$(find work/stage/usr/lib -maxdepth 1 -type f -name 'libmnl.so.*.*.*' | head -1)"
+          test -n "$mnl"
+          install -m 0644 "$mnl" bundle/lib/
+          mnlbase="$(basename "$mnl")"
+          mnlsoname="$(readelf -d "$mnl" | awk -F'[][]' '/SONAME/{print $2; exit}')"
+          test -n "$mnlsoname"
+          ln -s "$mnlbase" "bundle/lib/$mnlsoname"
+          cat > bundle/bin/ipset <<'EOF'
+          #!/bin/sh
+          SELF="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+          ROOT="$(CDPATH= cd -- "$SELF/.." && pwd)"
+          export LD_LIBRARY_PATH="$ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          exec "$SELF/ipset.real" "$@"
+          EOF
+          chmod 0755 bundle/bin/ipset
+          cat > bundle/README <<'EOF'
+          K4 temporary userspace companion for the exact 51997-built ipset kernel family.
+          Stage outside boot/autoload paths (for example below /tmp) only.
+          This bundle does not load modules and is not firmware payload.
+          EOF
+
+      - name: Verify ABI and QEMU option surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          SYSROOT="$TC/arm-buildroot-linux-gnueabi/sysroot"
+          for f in bundle/bin/ipset.real bundle/lib/libipset.so.13.1.0 bundle/lib/libmnl.so.*.*.*; do
+            file "$f" | tee -a reports/file.txt
+          done
+          file bundle/bin/ipset.real | grep -Eq 'ELF 32-bit.*ARM|ELF 32-bit.*EABI5'
+          "${PFX}readelf" -d bundle/bin/ipset.real > reports/ipset.dynamic.txt
+          "${PFX}readelf" -d bundle/lib/libipset.so.13.1.0 > reports/libipset.dynamic.txt
+          "${PFX}readelf" -d "$(find bundle/lib -type f -name 'libmnl.so.*.*.*' | head -1)" > reports/libmnl.dynamic.txt
+          grep -q 'libipset.so.13' reports/ipset.dynamic.txt
+          grep -q 'libmnl.so.0' reports/libipset.dynamic.txt
+          qemu-arm -L "$SYSROOT" -E LD_LIBRARY_PATH="$PWD/bundle/lib" bundle/bin/ipset.real --version | tee reports/ipset-version.txt
+          grep -Eiq 'ipset v7\.6|v7\.6' reports/ipset-version.txt
+
+      - name: Record exact bundle hashes
+        run: |
+          set -euo pipefail
+          {
+            echo 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039'
+            echo 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d'
+            echo 'arm_toolchain_tree=7db024edfe5b45d9b320828845d9fd8dc539d0e8'
+            echo 'kernel_family_run=36556899650'
+            echo 'classification=K4_TEMPORARY_IPSET_USERSPACE_ONLY'
+            echo
+            find bundle -type f -print0 | sort -z | xargs -0 sha256sum
+          } | tee reports/K4-IPSET-USERSPACE-MANIFEST.txt
+
+      - name: Publish K4 ipset userspace bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4-ipset-userspace-51997
+          path: |
+            bundle/
+            reports/
+          if-no-files-found: error
+          retention-days: 90
