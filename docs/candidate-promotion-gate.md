@@ -24,7 +24,7 @@ Passing CI alone is never sufficient for flashability.
 
 ## Evidence preparation
 
-Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. Latest CI run `36968749755` validates the host-verifier prerequisite, non-mutating behavior and rejection of candidates not explicitly marked UNVALIDATED.
+Run `scripts/prepare-candidate-evidence.sh <candidate-UNVALIDATED.w> <evidence-dir>` before collecting hardware evidence. Latest CI run `36977544208` validates both host-verifier prerequisites (hardware evidence + K4 symbol-name preflight), non-mutating behavior and rejection of candidates not explicitly marked UNVALIDATED.
 
 ## Current quarantined candidate
 
@@ -33,21 +33,21 @@ Run `36924014278` produced the first end-to-end software-gated candidate. Exact 
 
 ## Preserved hardware-validation bundle
 
-Run `36976555090` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
+Run `36977559328` re-downloaded and re-verified the exact current validation inputs and republished them as one 90-day artifact:
 
 - artifact: `hardware-validation-bundle-eac8a777`;
-- artifact id: `11213716874`;
-- artifact ZIP digest: `sha256:627902aab2ceba7b3f301febb44ed820291eb8f6ca1ff1316f2256c0feddf4ca`;
-- expires: `2026-12-31T07:03:11Z`;
+- artifact id: `11214106455`;
+- artifact ZIP digest: `sha256:399ad74f1456f63109301e16201fec32371753fc7500896515b9031b3b92fa66`;
+- expires: `2026-12-31T07:14:50Z`;
 - candidate inside: exact `.w` SHA-256 `eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3`, size `78,250,004` bytes;
 - K2 source run: `36556899650`;
 - K3 source run: `36561957525`.
 
-The workflow first downloads and verifies the official ASUS 386_52334 stock image (`1b4fe984...7483f`, 78,250,004 bytes), then verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle. It also verifies and carries the Unix-preserving ipset, WireGuard and Cake K4 userspace companions plus exact ELF dependency-closure report run `36976006891`; that report freezes artifact-internal load/unload ordering but does not replace real ASUS-52334 symbol/runtime validation. The bundle also carries the current K4/runtime collectors, host-side evidence verifier, M49 EJ response verifier, physical-validation sequence, recovery material instructions and current handoff/status documents.
+The workflow first downloads and verifies the official ASUS 386_52334 stock image (`1b4fe984...7483f`, 78,250,004 bytes), then verifies the candidate hash/size, K2 module count and representative hashes, and the full expected K3 family plus representative hashes before publishing the bundle. It also verifies and carries the Unix-preserving ipset, WireGuard and Cake K4 userspace companions plus exact ELF dependency-closure report run `36976006891` and the K4 symbol-preflight verifier/docs validated by run `36977341893`; that report freezes artifact-internal load/unload ordering but does not replace real ASUS-52334 symbol/runtime validation. The bundle also carries the current K4/runtime collectors, host-side evidence verifier, M49 EJ response verifier, physical-validation sequence, recovery material instructions and current handoff/status documents.
 
 The artifact ZIP digest is only the GitHub archive digest. It must never be substituted for the firmware `.w` hash when binding hardware evidence.
 
-The bundle manifest records docs snapshot commit `f5ff75ba81a6b635e1415059dce184972c6332ec`. Later documentation-only updates that merely point back to the newly created artifact are expected self-reference deltas and do not change the candidate/module inputs.
+The bundle manifest records docs snapshot commit `40f5a4ece1b05b5b39f45e0504cde60226165a4c`. Later documentation-only updates that merely point back to the newly created artifact are expected self-reference deltas and do not change the candidate/module inputs.
 
 
 ## Evidence intake gate
