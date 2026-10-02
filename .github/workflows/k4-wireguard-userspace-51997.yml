@@ -1,0 +1,137 @@
+name: Build K4 WireGuard userspace bundle
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - .github/workflows/k4-wireguard-userspace-51997.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make file qemu-user
+
+      - name: Fetch exact 51997 WireGuard userspace source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC_SHA=c553d8e4b0bf3289683368b0d57172649b030039
+          mkdir -p work/source
+          git -C work/source init
+          git -C work/source remote add origin https://github.com/RMerl/asuswrt-merlin.ng.git
+          git -C work/source sparse-checkout init --cone
+          git -C work/source sparse-checkout set release/src/router/wireguard-tools
+          git -C work/source fetch --depth=1 --filter=blob:none origin "$SRC_SHA"
+          git -C work/source checkout --detach FETCH_HEAD
+          test "$(git -C work/source rev-parse HEAD)" = "$SRC_SHA"
+          test "$(git -C work/source rev-parse HEAD:release/src/router/wireguard-tools/src/Makefile)" = 84441ec86b8ee67555183767eceffd4e00bd5cb4
+          test "$(git -C work/source rev-parse HEAD:release/src/router/wireguard-tools/src/version.h)" = 8512c2120502003dca06a913e73e88e1632ad20d
+          test "$(git -C work/source rev-parse HEAD:release/src/router/wireguard-tools/src/wg.c)" = b9952ebda843f8f0d2baecaac512b218c331406e
+
+      - name: Fetch pinned ARM32 HND userspace toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains
+          git -C work/toolchains init
+          git -C work/toolchains remote add origin https://github.com/SWRT-dev/bcmhnd-toolchains.git
+          git -C work/toolchains sparse-checkout init --cone
+          git -C work/toolchains sparse-checkout set crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          git -C work/toolchains fetch --depth=1 --filter=blob:none origin 7710a1e09d994598ac6c2db8ab16dc54ca5aed3d
+          git -C work/toolchains checkout --detach FETCH_HEAD
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          test "$(git -C work/toolchains rev-parse HEAD:$DIR)" = 7db024edfe5b45d9b320828845d9fd8dc539d0e8
+          TC="$PWD/work/toolchains/$DIR/usr"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          "$TC/bin/arm-buildroot-linux-gnueabi-gcc" --version | head -1
+
+      - name: Build exact WireGuard wg
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          export PATH="$TC/bin:$PATH"
+          export LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}"
+          SRC="$PWD/work/source/release/src/router/wireguard-tools/src"
+          make -C "$SRC" clean
+          make -C "$SRC" -j2             CC="$TC/bin/arm-buildroot-linux-gnueabi-gcc"             PLATFORM=linux             WITH_WGQUICK=no             WITH_SYSTEMDUNITS=no             WITH_BASHCOMPLETION=no             wg
+          test -x "$SRC/wg"
+
+      - name: Assemble and verify temporary K4 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=crosstools-arm-gcc-5.3-linux-4.1-glibc-2.22-binutils-2.25
+          TC="$PWD/work/toolchains/$DIR/usr"
+          PFX="$TC/bin/arm-buildroot-linux-gnueabi-"
+          SYSROOT="$TC/arm-buildroot-linux-gnueabi/sysroot"
+          mkdir -p bundle/bin reports
+          install -m 0755 work/source/release/src/router/wireguard-tools/src/wg bundle/bin/wg
+          file bundle/bin/wg | tee reports/file.txt
+          file bundle/bin/wg | grep -Eq 'ELF 32-bit.*ARM|ELF 32-bit.*EABI5'
+          "${PFX}readelf" -l bundle/bin/wg > reports/wg.program.txt
+          "${PFX}readelf" -d bundle/bin/wg > reports/wg.dynamic.txt
+          grep -Fq '/lib/ld-linux.so.3' reports/wg.program.txt
+          {
+            echo '=== wg NEEDED ==='
+            awk -F'[][]' '/NEEDED/{print $2}' reports/wg.dynamic.txt
+          } | tee reports/needed-closure.txt
+          qemu-arm -L "$SYSROOT" bundle/bin/wg --version | tee reports/wg-version.txt
+          grep -Fq 'wireguard-tools v1.0.20200827' reports/wg-version.txt
+          cat > bundle/README <<'EOF'
+          K4 temporary userspace companion for the exact 51997-built WireGuard kernel module.
+          Stage outside boot/autoload paths (for example below /tmp) only.
+          This bundle does not load modules and is not firmware payload.
+          EOF
+
+      - name: Record exact bundle hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'source_sha=c553d8e4b0bf3289683368b0d57172649b030039'
+            echo 'toolchain_sha=7710a1e09d994598ac6c2db8ab16dc54ca5aed3d'
+            echo 'arm_toolchain_tree=7db024edfe5b45d9b320828845d9fd8dc539d0e8'
+            echo 'kernel_family_run=36561957525'
+            echo 'wireguard_tools_version=1.0.20200827'
+            echo 'classification=K4_TEMPORARY_WIREGUARD_USERSPACE_ONLY'
+            echo
+            find bundle -type f -print0 | sort -z | xargs -0 sha256sum
+          } | tee reports/K4-WIREGUARD-USERSPACE-MANIFEST.txt
+
+      - name: Pack and verify Unix-preserving K4 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf k4-wireguard-userspace-51997.tar.gz bundle reports
+          mkdir -p work/archive-check
+          tar -xzf k4-wireguard-userspace-51997.tar.gz -C work/archive-check
+          test -x work/archive-check/bundle/bin/wg
+          (
+            cd work/archive-check
+            grep -E '^[0-9a-f]{64}  ' reports/K4-WIREGUARD-USERSPACE-MANIFEST.txt | sha256sum -c -
+          )
+          sha256sum k4-wireguard-userspace-51997.tar.gz | tee reports/archive-sha256.txt
+
+      - name: Publish K4 WireGuard userspace bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: k4-wireguard-userspace-51997
+          path: |
+            k4-wireguard-userspace-51997.tar.gz
+            reports/archive-sha256.txt
+          if-no-files-found: error
+          retention-days: 90
