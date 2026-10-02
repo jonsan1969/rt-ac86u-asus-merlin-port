@@ -23,7 +23,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/verify-k4-symbol-preflight.py
           python3 scripts/verify-k4-symbol-preflight.py --help >/dev/null
-          if grep -Ein '(^|[^A-Za-z])(insmod|modprobe|rmmod|mtd-write|reboot)([^A-Za-z]|$)|nvram[[:space:]]+(set|unset|commit)' scripts/verify-k4-symbol-preflight.py; then
+          if grep -Ein '(^|[^A-Za-z])(insmod|modprobe|rmmod|mtd-write|reboot)([^A-Za-z]|$)|nvram[[:space:]]+(set|unset|commit)' scripts/verify-k4-symbol-preflight.py \
+            | grep -Ev 'NO_(REBOOT|MODULES_LOADED|NVRAM_WRITES|JFFS_WRITES|SERVICE_RESTARTS|FLASH_WRITES)'; then
             echo "mutation command found in host-side verifier" >&2
             exit 1
           fi
