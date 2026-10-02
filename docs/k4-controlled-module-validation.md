@@ -24,7 +24,7 @@ Test one family at a time; do not mix failures.
 4. NFS/SUNRPC/LOCKD;
 5. WireGuard.
 
-Dependencies must be loaded before dependants. For physical staging, use only the isolated family tarballs produced by run `36978077020` and preserved inside hardware bundle run `36995684511`; verify `package-sha256.txt` before selecting a family and the selected family's `MANIFEST.txt` after extraction. Record SHA-256 and vermagic for every staged `.ko` before any load attempt.
+Dependencies must be loaded before dependants. For physical staging, use only the isolated family tarballs produced by run `36978077020` from an extracted hardware-validation bundle that has first passed `HARDWARE_VALIDATION_BUNDLE_PASS`. Use the bundle-local `BUNDLE-README.txt` / `BUNDLE-MANIFEST.txt` as the identity and inventory authority for that extracted kit; do not depend on a preservation run number copied into a snapshot document. Before router transfer, require `PRE_K4_HOST_GATES_PASS family=<family>` and record SHA-256 and vermagic for every staged `.ko`.
 
 ### Exact artifact-internal dependency order
 
@@ -45,7 +45,7 @@ The ELF gate found no dependency from one optional family into another and no de
 
 For each family:
 
-1. on the host, select exactly one `k4-family-<family>.tar.gz`, verify it against `package-sha256.txt`, extract it to a clean staging directory, and verify every SHA-256 line in its `MANIFEST.txt`; copy only that verified family directory to a fresh `/tmp/k4-<family>` path on the router;
+1. on the host, run `scripts/prepare-k4-host-gates.py` for exactly one family against the verified extracted bundle and the fresh read-only K4a/runtime archives; require `PRE_K4_HOST_GATES_PASS family=<family>`, then copy only its `selected-family/<family>` directory to a fresh `/tmp/k4-<family>` path on the router;
 2. capture `/proc/modules` and a fresh dmesg boundary;
 3. require the saved K4 symbol-preflight PASS report for this exact K4a archive/full 27-module set, then re-check any family-specific dependency assumptions;
 4. load only the minimum family needed for the test;

@@ -45,4 +45,4 @@ The wrapper is intentionally kept outside the preserved hardware bundle. It depe
 
 ## Current preservation compatibility
 
-Current orchestration CI run `37006423674` validates preservation run `36998454435` / artifact `11222508393`, whose external integrity verifier is CI-green in run `37003596484`. This closes host-side compatibility for the exact current kit. No preservation refresh is needed merely to record this external CI result: doing so would create a documentation/self-reference churn loop without changing candidate/module inputs.
+Current orchestration CI run `37006423674` validates the then-current preservation kit end-to-end and closes the orchestration logic/current-bundle compatibility gate. For any later preservation refresh, use that extracted kit's `BUNDLE-README.txt` and `BUNDLE-MANIFEST.txt` for identity, re-pin/run the external bundle verifier, and re-run this orchestration workflow before physical use. The bundle-local identity files avoid making copied snapshot docs depend on the artifact that contains them.

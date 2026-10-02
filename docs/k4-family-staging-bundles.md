@@ -98,13 +98,11 @@ The five family tarballs remain temporary K4 staging material only. They do not 
 
 ## Preserved with the complete hardware bundle
 
-Preservation run `36995684511` — **SUCCESS** — downloads artifact `11213839004`, verifies `package-sha256.txt`, re-extracts all five family tarballs, rechecks each internal manifest, and then embeds them in the 90-day `hardware-validation-bundle-eac8a777`.
+The preservation workflow downloads exact staging artifact `11213839004`, verifies `package-sha256.txt`, re-extracts all five family tarballs, rechecks each internal manifest, and embeds them in `hardware-validation-bundle-eac8a777`.
 
-Preserved artifact id: `11221372631`.  
-Preserved artifact ZIP digest: `sha256:7bf47721147dbd49c52ec0af2e065499b3b35efada44057771588b163b2a37a1`.  
-Expiry: `2026-12-31T10:28:43Z`.
+For an extracted preservation kit, `BUNDLE-README.txt` identifies the preservation run/snapshot and `BUNDLE-MANIFEST.txt` is authoritative for the complete file inventory and hashes. Do not use a preservation run number copied into this snapshot document as the identity of the bundle that contains it. Current external artifact coordinates are maintained in repo-side `STATUS.md` / promotion documentation.
 
-This preservation step changes transport/readiness only. It does not add runtime evidence or authorize loading any module.
+Preservation changes transport/readiness only. It does not add runtime evidence or authorize loading any module.
 
 
 ## Host-side family staging verifier
@@ -128,7 +126,7 @@ Require `K4_FAMILY_STAGING_PASS family=<family>` before copying the resulting si
 
 Run `36994228096` — **SUCCESS**.
 
-The validation workflow uses the exact family packages preserved by run `36995684511` and proves:
+The validation workflow uses the exact run-`36978077020` family packages as carried by the verified preservation kit and proves:
 
 - all five families pass the pinned outer archive hashes and selected-family manifest/file inventory;
 - each selected family extracts to a clean host staging directory;

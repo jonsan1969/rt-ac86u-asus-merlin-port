@@ -298,6 +298,20 @@ jobs:
           cp STATUS.md bundle/docs/
           cp -a optional/monthly-traffic bundle/optional/
 
+          cat > bundle/BUNDLE-README.txt <<EOF
+          RT-AC86U ASUS 386_52334 hardware-validation bundle
+          preservation_run=${GITHUB_RUN_ID}
+          snapshot_commit=${GITHUB_SHA}
+          candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT
+
+          Authority rules:
+          - BUNDLE-MANIFEST.txt is authoritative for this extracted bundle's file inventory and hashes.
+          - This README identifies the preservation run and source snapshot without requiring copied docs to self-reference the artifact that contains them.
+          - Artifact id/ZIP digest are transport metadata; never use them as firmware identity.
+          - Copied docs may describe historical preservation checkpoints. For physical use, verify this bundle first with the current repo-side preserved-bundle verifier, then follow the current repo-side promotion/physical-validation docs.
+          EOF
+
           {
             echo 'official_stock_sha256=1b4fe984e13afdf0a69c11bda759f3222822e12f5b8c929da33f334f2cc7483f'
             echo 'official_stock_size=78250004'
@@ -313,8 +327,9 @@ jobs:
             echo 'k4_family_staging_run=36978077020'
             echo 'k4_symbol_preflight_ci_run=36977341893'
             echo 'k4_family_staging_verifier_ci_run=36994228096'
-            echo 'pre_k4_host_orchestrator_ci_run=36997859437'
+            echo 'pre_k4_host_orchestrator_ci_run=37006423674'
             echo 'candidate_evidence_ci_run=36998249913'
+            echo 'preservation_run='${GITHUB_RUN_ID}
             echo 'docs_snapshot_commit='${GITHUB_SHA}
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
