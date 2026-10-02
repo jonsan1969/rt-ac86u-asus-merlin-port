@@ -78,3 +78,19 @@ Copy and extract only the family being tested below a temporary path such as `/t
 Do not extract multiple family packages into one directory.
 
 Follow `docs/k4-controlled-module-validation.md` for the actual operator-controlled load/function/unload sequence and STOP conditions.
+
+
+## CI evidence
+
+Run `36978077020` — **SUCCESS**.
+
+Published artifact:
+
+- name: `k4-family-staging-bundles`;
+- artifact id: `11213839004`;
+- ZIP digest: `sha256:728f00b384a851dbca4c7c04419009a4b8253be30baa6736a8abd90d34b6db93`;
+- expires: `2026-12-31T07:20:53Z`.
+
+CI validates source inventory, exact family isolation, per-family manifests, re-extraction, executable userspace transport where applicable, and the outer package checksum file. The preceding run `36977943467` is a superseded checksum-path harness failure only; its log is already consumed and must not be fetched again.
+
+The five family tarballs remain temporary K4 staging material only. They do not authorize module loading and do not change the candidate's UNVALIDATED status.

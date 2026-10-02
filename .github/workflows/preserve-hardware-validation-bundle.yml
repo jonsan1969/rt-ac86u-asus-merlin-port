@@ -106,6 +106,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 36976006891
 
+      - name: Download exact K4 family staging bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: k4-family-staging-bundles
+          path: work/k4-family-staging
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 36978077020
+
       - name: Verify candidate and module identities
         shell: bash
         run: |
@@ -225,11 +234,35 @@ jobs:
           assert not r['families']['nfs_sunrpc_lockd']['declared_external_depends']
           PY
 
+          test -f work/k4-family-staging/package-sha256.txt
+          for fam in ipset cake cifs nfs wireguard; do
+            test -f "work/k4-family-staging/k4-family-$fam.tar.gz"
+          done
+          (
+            cd work/k4-family-staging
+            sha256sum -c package-sha256.txt
+          )
+          rm -rf work/k4-family-staging-verify
+          mkdir -p work/k4-family-staging-verify
+          for archive in work/k4-family-staging/k4-family-*.tar.gz; do
+            fam="$(basename "$archive" .tar.gz)"
+            fam="${fam#k4-family-}"
+            mkdir -p "work/k4-family-staging-verify/$fam"
+            tar -xzf "$archive" -C "work/k4-family-staging-verify/$fam"
+            test -f "work/k4-family-staging-verify/$fam/$fam/MANIFEST.txt"
+            grep -Fq 'classification=K4_TEMPORARY_FAMILY_STAGING_ONLY' "work/k4-family-staging-verify/$fam/$fam/MANIFEST.txt"
+            grep -Fq 'candidate_sha256=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3' "work/k4-family-staging-verify/$fam/$fam/MANIFEST.txt"
+            (
+              cd "work/k4-family-staging-verify/$fam/$fam"
+              grep -E '^[0-9a-f]{64}  ' MANIFEST.txt | sha256sum -c -
+            )
+          done
+
       - name: Assemble hash-bound hardware validation bundle
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p bundle/official-stock bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/userspace/ipset bundle/userspace/wireguard bundle/userspace/cake bundle/reports bundle/scripts bundle/docs bundle/optional
+          mkdir -p bundle/official-stock bundle/candidate bundle/modules/k2 bundle/modules/k3 bundle/userspace/ipset bundle/userspace/wireguard bundle/userspace/cake bundle/k4-family-staging bundle/reports bundle/scripts bundle/docs bundle/optional
           cp work/official-stock/RT-AC86U_386_52334_OFFICIAL.w bundle/official-stock/
           cp work/candidate/* bundle/candidate/
           cp -a work/k2/. bundle/modules/k2/
@@ -241,6 +274,8 @@ jobs:
           cp work/k4-cake-userspace/k4-cake-userspace-51997.tar.gz bundle/userspace/cake/
           cp work/k4-cake-userspace/reports/archive-sha256.txt bundle/userspace/cake/
           cp work/k4-module-dependency-closure/k4-module-dependency-closure.json bundle/reports/
+          cp work/k4-family-staging/k4-family-*.tar.gz bundle/k4-family-staging/
+          cp work/k4-family-staging/package-sha256.txt bundle/k4-family-staging/
           cp scripts/prepare-candidate-evidence.sh bundle/scripts/
           cp scripts/k4-router-preflight.sh bundle/scripts/
           cp scripts/runtime-feature-preflight.sh bundle/scripts/
@@ -272,6 +307,7 @@ jobs:
             echo 'k4_wireguard_userspace_run=36971511361'
             echo 'k4_cake_userspace_run=36972043724'
             echo 'k4_module_dependency_run=36976006891'
+            echo 'k4_family_staging_run=36978077020'
             echo 'k4_symbol_preflight_ci_run=36977341893'
             echo 'docs_snapshot_commit='${GITHUB_SHA}
             echo 'source_commit='${GITHUB_SHA}
