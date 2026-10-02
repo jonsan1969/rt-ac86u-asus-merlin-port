@@ -1,3 +1,5 @@
+M49 response-verifier run `36969220600` is FAILURE because the supposed PASS fixture itself contained malformed rstats syntax: its second tuple ended with `)` instead of `]`. The verifier correctly failed closed. Fix only that fixture; do not weaken the verifier. The run log was fetched exactly once and must not be fetched again.
+
 # New-thread handoff
 
 Updated: 2026-10-02
