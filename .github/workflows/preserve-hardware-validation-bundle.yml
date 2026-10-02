@@ -246,12 +246,14 @@ jobs:
           cp scripts/runtime-feature-preflight.sh bundle/scripts/
           cp scripts/verify-hardware-evidence.py bundle/scripts/
           cp scripts/verify-m49-ej-response.py bundle/scripts/
+          cp scripts/verify-k4-symbol-preflight.py bundle/scripts/
           cp docs/candidate-promotion-gate.md bundle/docs/
           cp docs/k4-controlled-module-validation.md bundle/docs/
           cp docs/k4-router-preflight.md bundle/docs/
           cp docs/monthly-traffic-optional-delivery.md bundle/docs/
           cp docs/m49-ej-response-evidence.md bundle/docs/
           cp docs/hardware-evidence-verifier.md bundle/docs/
+          cp docs/k4-symbol-preflight.md bundle/docs/
           cp docs/physical-validation-sequence.md bundle/docs/
           cp docs/preflash-backup-recovery.md bundle/docs/
           cp docs/thread-handoff.md bundle/docs/
@@ -270,6 +272,7 @@ jobs:
             echo 'k4_wireguard_userspace_run=36971511361'
             echo 'k4_cake_userspace_run=36972043724'
             echo 'k4_module_dependency_run=36976006891'
+            echo 'k4_symbol_preflight_ci_run=36977341893'
             echo 'docs_snapshot_commit='${GITHUB_SHA}
             echo 'source_commit='${GITHUB_SHA}
             echo 'classification=UNVALIDATED_HARDWARE_VALIDATION_INPUT'
