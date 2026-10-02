@@ -1,0 +1,155 @@
+name: Validate hardware evidence verifier
+
+on:
+  push:
+    branches: [asus-52334-merlin-port]
+    paths:
+      - scripts/verify-hardware-evidence.py
+      - .github/workflows/validate-hardware-evidence-verifier.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static validation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/verify-hardware-evidence.py
+          python3 scripts/verify-hardware-evidence.py --help >/dev/null
+
+      - name: Build PASS fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3
+          mkdir -p fixtures/k4/rtac86u-k4-preflight fixtures/runtime/rtac86u-merlin-runtime-probe
+          cat > fixtures/k4/rtac86u-k4-preflight/summary.txt <<EOF
+          K4A_RTAC86U_52334_READ_ONLY_PREFLIGHT
+          expected_candidate_sha256=$sha
+          timestamp=test
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          odmpid=
+          uname_r=4.1.27
+          uname_m=aarch64
+          uname_a=Linux rt-ac86u 4.1.27 test aarch64
+          proc_version=Linux version 4.1.27
+          rootfs=test
+          uptime=1
+          EOF
+          cat > fixtures/k4/rtac86u-k4-preflight/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+          : > fixtures/k4/rtac86u-k4-preflight/proc-modules.txt
+          echo 'ffffffff81000000 T start_kernel' > fixtures/k4/rtac86u-k4-preflight/proc-kallsyms.txt
+          echo 'boot clean' > fixtures/k4/rtac86u-k4-preflight/dmesg-before.txt
+          : > fixtures/k4/rtac86u-k4-preflight/module-tree.txt
+          : > fixtures/k4/rtac86u-k4-preflight/stock-module-vermagic.txt
+
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/summary.txt <<EOF
+          RTAC86U_MERLIN_RUNTIME_READ_ONLY_PROBE
+          expected_candidate_sha256=$sha
+          timestamp=test
+          productid=RT-AC86U
+          firmver=3.0.0.4
+          buildno=386
+          extendno=52334-gd500e53
+          uname=Linux rt-ac86u 4.1.27 test aarch64
+          EOF
+          cat > fixtures/runtime/rtac86u-merlin-runtime-probe/safety.txt <<'EOF'
+          NO_MODULES_LOADED=1
+          NO_NVRAM_WRITES=1
+          NO_JFFS_WRITES=1
+          NO_SERVICE_RESTARTS=1
+          NO_HTTP_REQUESTS=1
+          NO_REBOOT=1
+          NO_FLASH_WRITES=1
+          EOF
+          echo 'webui evidence' > fixtures/runtime/rtac86u-merlin-runtime-probe/webui.txt
+          echo 'jffs evidence' > fixtures/runtime/rtac86u-merlin-runtime-probe/jffs.txt
+          echo 'services evidence' > fixtures/runtime/rtac86u-merlin-runtime-probe/services.txt
+
+          tar -C fixtures/k4 -czf fixtures/k4-pass.tar.gz rtac86u-k4-preflight
+          tar -C fixtures/runtime -czf fixtures/runtime-pass.tar.gz rtac86u-merlin-runtime-probe
+
+      - name: PASS matching ASUS 52334 evidence
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-hardware-evidence.py             --k4 fixtures/k4-pass.tar.gz             --runtime fixtures/runtime-pass.tar.gz             --report fixtures/pass-report.json | tee fixtures/pass.txt
+          grep -Fq HARDWARE_EVIDENCE_BASELINE_PASS fixtures/pass.txt
+          grep -Fq '"status": "PASS"' fixtures/pass-report.json
+
+      - name: FAIL wrong candidate hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a fixtures/runtime/rtac86u-merlin-runtime-probe fixtures/runtime-badhash
+          sed -i 's/eac8a7778bbc68686f68f1750c496fe6ddf92d689aa5e5878bacb9f02b9204b3/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' fixtures/runtime-badhash/summary.txt
+          tar -C fixtures -czf fixtures/runtime-badhash.tar.gz runtime-badhash
+          # Rename top-level directory to the required collector root while preserving bad content.
+          mkdir -p fixtures/badhash-wrap/rtac86u-merlin-runtime-probe
+          cp fixtures/runtime-badhash/* fixtures/badhash-wrap/rtac86u-merlin-runtime-probe/
+          tar -C fixtures/badhash-wrap -czf fixtures/runtime-badhash-goodroot.tar.gz rtac86u-merlin-runtime-probe
+          if python3 scripts/verify-hardware-evidence.py --k4 fixtures/k4-pass.tar.gz --runtime fixtures/runtime-badhash-goodroot.tar.gz; then
+            echo "wrong candidate hash was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL Merlin runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixtures/merlin-wrap/rtac86u-merlin-runtime-probe
+          cp fixtures/runtime/rtac86u-merlin-runtime-probe/* fixtures/merlin-wrap/rtac86u-merlin-runtime-probe/
+          sed -i 's/extendno=52334-gd500e53/extendno=386.14_2/' fixtures/merlin-wrap/rtac86u-merlin-runtime-probe/summary.txt
+          tar -C fixtures/merlin-wrap -czf fixtures/runtime-merlin.tar.gz rtac86u-merlin-runtime-probe
+          if python3 scripts/verify-hardware-evidence.py --k4 fixtures/k4-pass.tar.gz --runtime fixtures/runtime-merlin.tar.gz; then
+            echo "Merlin runtime was accepted as ASUS 52334 evidence" >&2
+            exit 1
+          fi
+
+      - name: FAIL missing kernel symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a fixtures/k4/rtac86u-k4-preflight fixtures/k4-nosym
+          echo 'UNAVAILABLE /proc/kallsyms' > fixtures/k4-nosym/proc-kallsyms.txt
+          mkdir -p fixtures/nosym-wrap/rtac86u-k4-preflight
+          cp fixtures/k4-nosym/* fixtures/nosym-wrap/rtac86u-k4-preflight/
+          tar -C fixtures/nosym-wrap -czf fixtures/k4-nosym.tar.gz rtac86u-k4-preflight
+          if python3 scripts/verify-hardware-evidence.py --k4 fixtures/k4-nosym.tar.gz --runtime fixtures/runtime-pass.tar.gz; then
+            echo "missing kallsyms was accepted" >&2
+            exit 1
+          fi
+
+      - name: FAIL unsafe archive traversal
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import io, tarfile
+          with tarfile.open("fixtures/runtime-unsafe.tar.gz", "w:gz") as tf:
+              d = tarfile.TarInfo("rtac86u-merlin-runtime-probe")
+              d.type = tarfile.DIRTYPE
+              tf.addfile(d)
+              data = b"x"
+              f = tarfile.TarInfo("rtac86u-merlin-runtime-probe/../escape")
+              f.size = len(data)
+              tf.addfile(f, io.BytesIO(data))
+          PY
+          if python3 scripts/verify-hardware-evidence.py --k4 fixtures/k4-pass.tar.gz --runtime fixtures/runtime-unsafe.tar.gz; then
+            echo "unsafe archive was accepted" >&2
+            exit 1
+          fi
