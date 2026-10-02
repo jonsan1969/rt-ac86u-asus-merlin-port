@@ -159,12 +159,20 @@ jobs:
             file "$f" | tee -a reports/file.txt
           done
           file bundle/bin/ipset.real | grep -Eq 'ELF 32-bit.*ARM|ELF 32-bit.*EABI5'
+          "${PFX}readelf" -l bundle/bin/ipset.real > reports/ipset.program.txt
           "${PFX}readelf" -d bundle/bin/ipset.real > reports/ipset.dynamic.txt
           "${PFX}readelf" -d bundle/lib/libipset.so.13.1.0 > reports/libipset.dynamic.txt
           "${PFX}readelf" -d "$(find bundle/lib -type f -name 'libmnl.so.*.*.*' | head -1)" > reports/libmnl.dynamic.txt
-          grep -q 'libipset.so.13' reports/ipset.dynamic.txt
-          grep -q 'libmnl.so.0' reports/libipset.dynamic.txt
-          qemu-arm -L "$SYSROOT" -E LD_LIBRARY_PATH="$PWD/bundle/lib" bundle/bin/ipset.real --version | tee reports/ipset-version.txt
+          grep -Fq '/lib/ld-linux.so.3' reports/ipset.program.txt
+          {
+            echo '=== ipset.real NEEDED ==='
+            awk -F'[][]' '/NEEDED/{print $2}' reports/ipset.dynamic.txt
+            echo '=== libipset NEEDED ==='
+            awk -F'[][]' '/NEEDED/{print $2}' reports/libipset.dynamic.txt
+            echo '=== libmnl NEEDED ==='
+            awk -F'[][]' '/NEEDED/{print $2}' reports/libmnl.dynamic.txt
+          } | tee reports/needed-closure.txt
+          qemu-arm -L "$SYSROOT" -E LD_LIBRARY_PATH="$PWD/bundle/lib" bundle/bin/ipset.real --version 2>&1 | tee reports/ipset-version.txt
           grep -Eiq 'ipset v7\.6|v7\.6' reports/ipset-version.txt
 
       - name: Record exact bundle hashes
