@@ -91,3 +91,19 @@ Build lineage:
 The bundle contains only the temporary `wg` userspace tool plus provenance reports. CI requires ARM32/EABI5, the stock ARM loader `/lib/ld-linux.so.3`, successful QEMU execution of `wg --version`, and a Unix-preserving tar.gz whose extracted executable and manifest hashes verify.
 
 During physical K4, `wg` is staged only below `/tmp` after the WireGuard kernel module has passed the preceding K4 load gate. It is not firmware payload, does not create an interface by itself, and does not make the kernel module compatible merely because the userspace binary runs.
+
+
+### Cake
+
+Run `36972043724` produces artifact `k4-cake-userspace-51997` (artifact id `11212107182`, ZIP digest `sha256:4bc49da98adc4a32a0945a96a335aaf7b285471ba514dd330ac1fb5af898687b`).
+
+Build lineage:
+
+- source: `c553d8e4b0bf3289683368b0d57172649b030039`;
+- userspace: CAKE-aware iproute2 / `tc` version `5.11.0`;
+- toolchain: pinned ARM32 HND GCC 5.3 / glibc 2.22;
+- kernel family: K3 run `36561957525`.
+
+The c553 tree explicitly links `q_cake.o` into `tc`. The K4 companion is built through that tree's top-level Makefile with `SHARED_LIBS=n` and xtables disabled so the temporary smoke tool does not depend on ASUS iptables/libxtables. CI requires ARM32/EABI5, `/lib/ld-linux.so.3`, the linked `cake_qdisc_util` symbol, QEMU `tc -V` = iproute2-5.11.0, and a local `tc qdisc add dev lo root cake help` parse that exposes the expected CAKE option surface. The help parse exits before a qdisc request is sent.
+
+During physical K4, stage this `tc` only below `/tmp` after `sch_cake.ko` passes the controlled load gate. A functional test must use a disposable/non-production qdisc context and must still obey the STOP conditions for HND/network instability. The userspace binary itself is not firmware payload or compatibility proof.
