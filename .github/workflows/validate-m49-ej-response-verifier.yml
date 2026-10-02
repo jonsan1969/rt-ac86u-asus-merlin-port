@@ -35,7 +35,7 @@ jobs:
           try {
 
           monthly_history = [
-          [0x7e0900,0x123,0x456],[0x7e0800,0x111,0x222)];
+          [0x7e0900,0x123,0x456],[0x7e0800,0x111,0x222]];
           }
           catch (ex) {
             monthly_history = [];
