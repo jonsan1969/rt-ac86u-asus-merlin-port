@@ -94,3 +94,14 @@ Published artifact:
 CI validates source inventory, exact family isolation, per-family manifests, re-extraction, executable userspace transport where applicable, and the outer package checksum file. The preceding run `36977943467` is a superseded checksum-path harness failure only; its log is already consumed and must not be fetched again.
 
 The five family tarballs remain temporary K4 staging material only. They do not authorize module loading and do not change the candidate's UNVALIDATED status.
+
+
+## Preserved with the complete hardware bundle
+
+Preservation run `36992428232` — **SUCCESS** — downloads artifact `11213839004`, verifies `package-sha256.txt`, re-extracts all five family tarballs, rechecks each internal manifest, and then embeds them in the 90-day `hardware-validation-bundle-eac8a777`.
+
+Preserved artifact id: `11220066757`.  
+Preserved artifact ZIP digest: `sha256:f496c5ea2125b0b7c6ecb6777370f6b71e4075f0ac0f67ef985ad867515b47f8`.  
+Expiry: `2026-12-31T09:54:03Z`.
+
+This preservation step changes transport/readiness only. It does not add runtime evidence or authorize loading any module.
