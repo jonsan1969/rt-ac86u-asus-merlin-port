@@ -9,9 +9,9 @@ All of the following must be recorded against the exact candidate SHA-256:
 1. software repack gate PASS: exact 570-PEB UBI, valid WFI/trailer/CRC and zero unauthorized semantic drift;
 2. protected ASUS 52334 core byte-identity PASS;
 3. no K2/K3 optional kernel module leakage into the immutable image;
-4. K4a read-only preflight collected from an actual ASUS RT-AC86U running the 386_52334 runtime, then accepted by `scripts/verify-hardware-evidence.py` together with the matching runtime archive;
+4. K4a read-only preflight collected from an actual RT-AC86U on official ASUS 386_52334 before module testing, and again on the candidate runtime before final candidate-side activation; evidence pairs must be accepted by `scripts/verify-hardware-evidence.py` in the appropriate mode;
 5. candidate module families that are intended for use pass `docs/k4-controlled-module-validation.md` before activation; K4 is deliberately operator-controlled because it mutates live kernel state;
-6. general runtime feature preflight collected from the intended 52334 validation runtime and accepted by the host-side evidence verifier;
+6. general runtime feature preflight collected on candidate runtime and accepted with `--require-candidate-canaries`; a stock-only runtime archive is baseline evidence but does not satisfy candidate feature validation;
 7. runtime-sensitive WebUI/JFFS features pass their own contracts before they are advertised as available; M49 specifically requires HTTPD EJ-dispatch proof;
 8. configuration/JFFS backup and recovery path are prepared before first candidate flash, following `docs/preflash-backup-recovery.md`; the procedure is documented now, but physical backup completion must be recorded before any firmware change;
 9. project status explicitly promotes the exact candidate hash from UNVALIDATED to hardware-tested.
@@ -60,3 +60,21 @@ CI run `36968652355` validates the verifier itself. The gate intentionally rejec
 - unsafe/traversal archive content.
 
 A verifier PASS is prerequisite evidence hygiene only. It does not replace the controlled K4 protocol or runtime-sensitive feature gates.
+
+
+## Stock baseline versus candidate runtime
+
+Follow `docs/physical-validation-sequence.md`.
+
+The official ASUS 386_52334 phase establishes the clean kernel/module baseline and is the first place controlled K4 may be attempted after read-only evidence passes.
+
+The UNVALIDATED candidate phase must collect fresh read-only K4a/runtime evidence and pass:
+
+```sh
+python3 scripts/verify-hardware-evidence.py \
+  --k4 <candidate-k4a.tar.gz> \
+  --runtime <candidate-runtime.tar.gz> \
+  --require-candidate-canaries
+```
+
+The five immutable file hashes and custom-WebUI aliases in candidate mode strengthen runtime provenance without pretending the runtime can reconstruct the full WFI `.w` hash.

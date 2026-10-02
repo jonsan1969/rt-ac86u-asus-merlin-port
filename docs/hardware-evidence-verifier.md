@@ -71,3 +71,32 @@ The exact candidate binding remains procedural: the operator uses the preserved 
 - unsafe tar path rejection.
 
 This gate is deliberately before any mutating K4 step.
+
+
+## Candidate-runtime mode
+
+The current runtime collector records five immutable candidate overlay canaries:
+
+- `/usr/sbin/helper.sh` — `f4f19dd4...d0bba`;
+- `/www/Tools_OtherSettings.asp` — `16b6d409...9d56`;
+- `/www/Advanced_Wireless_Survey.asp` — `a4d43917...1fe9a`;
+- `/www/js/qrcode.min.js` — `7f5a45e2...f744647b`;
+- `/www/ajax/logFilter.json` — `a6e28e7b...c04f3`.
+
+It also records the custom-WebUI symlinks.
+
+For candidate-runtime evidence, add:
+
+```sh
+--require-candidate-canaries
+```
+
+This requires all five exact hashes plus:
+
+- `/www/user -> /var/wwwext`;
+- `/www/user1.asp -> user/user1.asp`;
+- `/www/user20.asp -> user/user20.asp`.
+
+CI run `36968903989` proves both positive candidate-mode verification and rejection of a changed canary. Runtime collector run `36968903987` proves the additional collection remains read-only.
+
+These canaries identify the intended immutable overlay at runtime much more strongly than the stock firmware version alone, while still not claiming mathematical reconstruction of the complete WFI image hash.

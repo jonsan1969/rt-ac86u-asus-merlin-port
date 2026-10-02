@@ -44,3 +44,14 @@ A PASS applies only to the exact candidate hash, exact K2/K3 module hashes, and 
 ## Promotion rule
 
 No optional kernel feature becomes active merely because its module loads. Functional smoke, clean post-test state, and the project status update are separate required gates. Any ambiguity remains FAIL/DEFERRED.
+
+
+## Stock-first and candidate-repeat rule
+
+Use the execution order in `docs/physical-validation-sequence.md`.
+
+The first controlled family tests are performed only after a clean official ASUS 386_52334 read-only baseline passes host verification.
+
+A stock ASUS K4 PASS materially de-risks the candidate because the software repack gate proves the candidate retains the stock kernel/HND/protected runtime and contains no K2/K3 module leakage. It still does not activate the feature in the candidate.
+
+Before final candidate-side activation, collect fresh candidate K4a/runtime evidence, require candidate canaries, and repeat the minimum controlled family load/function check needed for that family. A discrepancy between stock and candidate phases is STOP/FAIL.

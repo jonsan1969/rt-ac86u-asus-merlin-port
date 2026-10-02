@@ -108,9 +108,9 @@ Host-side verifier:
 
 `scripts/verify-hardware-evidence.py`
 
-CI run: `36968652355` — SUCCESS.
+Latest CI: runtime collector `36968903987` — SUCCESS; evidence verifier `36968903989` — SUCCESS.
 
-It fail-closed cross-checks the K4a and general runtime archives for the current candidate binding, RT-AC86U identity, ASUS 386_52334 identity, AArch64/kernel consistency, required read-only safety markers and required evidence files. CI also proves rejection of wrong candidate SHA, Merlin runtime identity, unavailable kallsyms and unsafe tar traversal.
+It fail-closed cross-checks the K4a and general runtime archives for the current candidate binding, RT-AC86U identity, ASUS 386_52334 identity, AArch64/kernel consistency, required read-only safety markers and required evidence files. Candidate mode additionally requires exact hashes for `/usr/sbin/helper.sh`, `Tools_OtherSettings.asp`, `Advanced_Wireless_Survey.asp`, `qrcode.min.js`, `logFilter.json`, plus the `user1/user20` aliases. CI proves rejection of a changed canary, wrong candidate SHA, Merlin runtime identity, unavailable kallsyms and unsafe tar traversal.
 
 A PASS is only a baseline evidence-intake PASS. It does not authorize module loading, prove M49 EJ dispatch or make the candidate flashable.
 
@@ -241,6 +241,18 @@ Do not reopen their donor/source archaeology unless new source evidence appears.
 - 570-PEB capacity problem: solved.
 - stock repack: solved.
 - K1/K2/K3 build loops: solved.
+
+## Physical validation sequence
+
+The future physical work is now explicitly separated in `docs/physical-validation-sequence.md`.
+
+Key rule:
+
+- official stock ASUS 386_52334 is the first kernel/K4 baseline;
+- candidate runtime must subsequently pass the candidate-canary evidence mode;
+- stock K4 evidence does not prove candidate WebUI/JFFS behavior;
+- candidate WebUI canaries do not authorize optional kernel modules;
+- M49 EJ dispatch remains its own active HTTP/runtime test.
 
 ## What remains now
 
