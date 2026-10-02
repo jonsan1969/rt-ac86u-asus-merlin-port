@@ -67,14 +67,14 @@ Original candidate artifact: `11193520953`.
 
 ## Preserved hardware-validation inputs
 
-Run `36967617052` is SUCCESS.
+Run `36969448115` is SUCCESS.
 
 Artifact: `hardware-validation-bundle-eac8a777`  
-Artifact id: `11209744574`  
-ZIP digest: `sha256:48ea093a26a854955aa61726cdaec26b4feaac7b78fdbfe4ce991991c600db7a`  
+Artifact id: `11211056837`  
+ZIP digest: `sha256:f1dcb90e02070b055c636d1a2787c12f16c8ddd8c2dfabe956843a7d856bb399`  
 Expiry: 2026-12-31.
 
-The workflow verifies the official ASUS 386_52334 stock image, re-verifies the exact candidate hash/size and K2/K3 module identities, and carries the collectors plus current recovery/handoff documents before republishing.
+The workflow verifies the official ASUS 386_52334 stock image, re-verifies the exact candidate hash/size and K2/K3 module identities, and carries the current collectors, hardware-evidence verifier, M49 response verifier, physical sequence and recovery/handoff documents.
 
 **Never use the artifact ZIP digest as the firmware identity.** Hardware evidence is bound to the exact `.w` SHA-256 above.
 
