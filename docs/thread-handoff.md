@@ -100,6 +100,8 @@ Hash-bound CI: `36924632712` — SUCCESS.
 
 Both collectors remain read-only and are bound to the current candidate hash.
 
+Candidate evidence skeleton revalidation: run `36968749755` — SUCCESS after adding the host-side evidence-verifier prerequisite. No mutation capability was introduced.
+
 ## Hardware evidence intake gate
 
 Host-side verifier:
