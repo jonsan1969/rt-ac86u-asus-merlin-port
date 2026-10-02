@@ -183,6 +183,24 @@ jobs:
               for q in /etc/passwd /etc/shadow /etc/group; do if [ -f "$root$q" ]; then echo "[$q]"; cat "$root$q"; fi; done
             done
           } > reports/security-gap-to-52334.txt
+      - name: SoftCenter web attack-surface map
+        shell: bash
+        run: |
+          set -euo pipefail
+          KC="$(sed -n 's/^kc=//p' reports/rootfs-paths.txt)"
+          OUT=reports/softcenter-web-attack-surface.txt
+          {
+            echo '=== SoftCenter/Koolshare web assets and executable scripts ==='
+            find "$KC"/www "$KC"/rom/etc/koolshare "$KC"/usr -type f 2>/dev/null | grep -Ei 'softcenter|softsetting|koolshare|ks_|dbus|httpdb' | sort || true
+            echo '=== web assets: CGI/API/action/dbus/command references ==='
+            grep -RInaE 'cgi|_api|applydb|dbus|action_script|action_mode|SystemCmd|shell|exec|command|upload|download|install|uninstall|tar_url|md5' "$KC"/www "$KC"/rom/etc/koolshare 2>/dev/null | grep -Ei 'soft|kool|dbus|cgi|api|action|command|install|upload' | head -n 12000 || true
+            echo '=== httpd handler strings around KoolCenter endpoints ==='
+            strings -a "$KC/usr/sbin/httpd" 2>/dev/null | grep -Ei 'kool|softcenter|softsetting|dbus|applydb|cgi|upload|install|action_script|login|auth|token|session|cookie' | head -n 5000 || true
+            echo '=== startup/init hooks ==='
+            grep -RInaE 'kscore|koolshare|softcenter|/jffs/scripts|services-start|service-event|nat-start|firewall-start|wan-start|post-mount' "$KC"/etc "$KC"/rom "$KC"/usr "$KC"/sbin 2>/dev/null | head -n 8000 || true
+            echo '=== potentially dangerous shell construction in Koolshare scripts ==='
+            grep -RInaE '(^|[;&|[:space:]])(eval|sh -c|bash -c|system|exec)[[:space:]]|\$\([^)]*dbus|dbus get|nvram get|start-stop-daemon|chmod .*[+]x|tar -|wget |curl ' "$KC"/rom/etc/koolshare 2>/dev/null | head -n 10000 || true
+          } > "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: koolcenter-38614-security-delta
